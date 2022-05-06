@@ -29,10 +29,6 @@ from dm_env import specs as dm_specs
 from jax import jit
 
 from mava import specs as mava_specs
-from mava.systems.jax.mamcts.embedding_net import (
-    EmbeddingGridModel,
-    make_discrete_embedding_networks,
-)
 
 Array = dm_specs.Array
 BoundedArray = dm_specs.BoundedArray
