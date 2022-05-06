@@ -54,10 +54,12 @@ class MCTS:
             observation,
             agent_info,
         )
-
+        action = jnp.squeeze(search_out.action.astype(jnp.int64))
+        search_policy = jnp.squeeze(search_out.action_weights)
+        # log_prob = jnp.log(search_policy[action])
         return (
-            jnp.squeeze(search_out.action.astype(jnp.int64)),
-            {"search_policies": jnp.squeeze(search_out.action_weights)},
+            action,
+            {"search_policies": search_policy},
         )
 
     @functools.partial(jit, static_argnums=(0, 1, 6))

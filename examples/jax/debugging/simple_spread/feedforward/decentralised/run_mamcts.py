@@ -72,7 +72,7 @@ def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 
 
 
 def network_factory(
-    policy_layer_sizes=(128,), critic_layer_sizes=(128,), *args, **kwargs
+    policy_layer_sizes=(64,), critic_layer_sizes=(64,), *args, **kwargs
 ):
     obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), DeepAtariTorso()])(
         x.astype(int)
@@ -127,8 +127,8 @@ def main(_: Any) -> None:
         run_evaluator=True,
         sample_batch_size=256,
         num_minibatches=8,
-        num_epochs=4,
-        num_executors=6,
+        num_epochs=10, 
+        num_executors=8,
         multi_process=True,
         root_fn=generic_root_fn(),
         recurrent_fn=default_action_recurrent_fn(default_action=0,discount_gamma=1.0),

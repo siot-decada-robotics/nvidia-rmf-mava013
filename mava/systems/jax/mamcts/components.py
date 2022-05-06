@@ -16,14 +16,13 @@
 """Custom components for MAMCTS system."""
 from dataclasses import dataclass
 
-import numpy as np
+import jax.numpy as jnp
 from dm_env import specs
 
 from mava.components.jax import Component
 from mava.core_jax import SystemBuilder
 
 
-# TODO remove mcts hardcodedness
 @dataclass
 class ExtraSearchPolicySpecConfig:
     pass
@@ -49,8 +48,8 @@ class ExtraSearchPolicySpec(Component):
 
         for agent, spec in agent_specs.items():
             # Make dummy log_probs
-            builder.store.extras_spec["policy_info"][agent] = np.ones(
-                shape=(spec.actions.num_values,), dtype=np.float32
+            builder.store.extras_spec["policy_info"][agent] = jnp.ones(
+                shape=(spec.actions.num_values,), dtype=jnp.float32
             )
 
         # Add the networks keys to extras.

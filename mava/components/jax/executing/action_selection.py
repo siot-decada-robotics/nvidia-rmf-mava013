@@ -77,7 +77,7 @@ class FeedforwardExecutorSelectAction(Component):
     @staticmethod
     def name() -> str:
         """_summary_"""
-        return "action_selector"
+        return "executor_select_action"
 
 
 @dataclass
