@@ -15,7 +15,6 @@
 
 """Jax MAPPO system networks."""
 import dataclasses
-import functools
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import haiku as hk  # type: ignore
@@ -29,7 +28,6 @@ from dm_env import specs as dm_specs
 from jax import jit
 
 from mava import specs as mava_specs
-from mava.systems.jax.mamcts.embedding_net import make_discrete_embedding_networks
 
 Array = dm_specs.Array
 BoundedArray = dm_specs.BoundedArray
@@ -77,7 +75,6 @@ class PPONetworks:
         self, observations: networks_lib.Observation, key: networks_lib.PRNGKey
     ) -> Tuple[np.ndarray, Dict]:
         """TODO: Add description here."""
-
         actions, log_prob = self.forward_fn(self.params, observations, key)
         actions = np.array(actions, dtype=np.int32)
         log_prob = np.squeeze(np.array(log_prob, dtype=np.float32))
@@ -107,6 +104,7 @@ def make_discrete_networks(
     key: networks_lib.PRNGKey,
     policy_layer_sizes: Sequence[int],
     critic_layer_sizes: Sequence[int],
+    observation_network: Callable = utils.batch_concat,  # default behaviour is to flatten observations
 ) -> PPONetworks:
     """TODO: Add description here."""
 
@@ -119,7 +117,7 @@ def make_discrete_networks(
     def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
         policy_value_network = hk.Sequential(
             [
-                utils.batch_concat,
+                observation_network,
                 hk.nets.MLP(policy_layer_sizes, activation=jax.nn.relu),
                 networks_lib.CategoricalValueHead(num_values=num_actions),
             ]
@@ -130,7 +128,6 @@ def make_discrete_networks(
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
     dummy_obs = utils.zeros_like(environment_spec.observations.observation)
-
     dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
 
     network_key, key = jax.random.split(key)
@@ -149,16 +146,18 @@ def make_networks(
         256,
     ),
     critic_layer_sizes: Sequence[int] = (512, 512, 256),
-    make_net_fn=make_discrete_networks,
+    observation_network: Callable = utils.batch_concat,
 ) -> PPONetworks:
     """TODO: Add description here."""
     if isinstance(spec.actions, specs.DiscreteArray):
-        return make_net_fn(
+        return make_discrete_networks(
             environment_spec=spec,
             key=key,
             policy_layer_sizes=policy_layer_sizes,
             critic_layer_sizes=critic_layer_sizes,
+            observation_network=observation_network,
         )
+
     else:
         raise NotImplementedError(
             "Continuous networks not implemented yet."
@@ -178,6 +177,7 @@ def make_default_networks(
         256,
     ),
     critic_layer_sizes: Sequence[int] = (512, 512, 256),
+    observation_network: Callable = utils.batch_concat,
 ) -> Dict[str, Any]:
     """Description here"""
 
@@ -195,44 +195,7 @@ def make_default_networks(
             key=rng_key,
             policy_layer_sizes=policy_layer_sizes,
             critic_layer_sizes=critic_layer_sizes,
-        )
-
-    return {
-        "networks": networks,
-    }
-
-
-def make_embedding_networks(
-    environment_spec: mava_specs.MAEnvironmentSpec,
-    agent_net_keys: Dict[str, str],
-    rng_key: List[int],
-    net_spec_keys: Dict[str, str] = {},
-    policy_layer_sizes: Sequence[int] = (
-        256,
-        256,
-        256,
-    ),
-    critic_layer_sizes: Sequence[int] = (512, 512, 256),
-):
-    """Description here"""
-
-    # Create agent_type specs.
-    specs = environment_spec.get_agent_specs()
-    if not net_spec_keys:
-        specs = {agent_net_keys[key]: specs[key] for key in specs.keys()}
-    else:
-        specs = {net_key: specs[value] for net_key, value in net_spec_keys.items()}
-
-    networks: Dict[str, Any] = {}
-    for net_key in specs.keys():
-        networks[net_key] = make_networks(
-            specs[net_key],
-            key=rng_key,
-            policy_layer_sizes=policy_layer_sizes,
-            critic_layer_sizes=critic_layer_sizes,
-            make_net_fn=functools.partial(
-                make_discrete_embedding_networks, network_wrapper_fn=make_ppo_network
-            ),
+            observation_network=observation_network,
         )
 
     return {

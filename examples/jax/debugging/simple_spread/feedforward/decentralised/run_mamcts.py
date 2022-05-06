@@ -27,6 +27,8 @@ import optax
 from absl import app, flags
 from acme.jax import utils
 from mctx import RecurrentFnOutput, RootFnOutput
+import haiku as hk
+from acme.jax.networks.atari import DeepAtariTorso
 
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import (
@@ -61,8 +63,7 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 5):
-
+def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 1):
     return DebugEnvWrapper(
         DebugEnv(
             rows,
@@ -75,6 +76,21 @@ def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 
     )
 
 
+def network_factory(
+    policy_layer_sizes=(128,), critic_layer_sizes=(128,), *args, **kwargs
+):
+    obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), DeepAtariTorso()])(
+        x.astype(int)
+    )
+    return mamcts.make_default_networks(
+        policy_layer_sizes=policy_layer_sizes,
+        critic_layer_sizes=critic_layer_sizes,
+        observation_network=obs_net_forward,
+        *args,
+        **kwargs,
+    )
+
+
 def main(_: Any) -> None:
     """Run main script
 
@@ -83,15 +99,6 @@ def main(_: Any) -> None:
     """
     # Environment.
     environment_factory = functools.partial(make_environment)
-
-    # Networks.
-    def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return mamcts.make_embedding_networks(
-            policy_layer_sizes=(254, 254, 254),
-            critic_layer_sizes=(512, 512, 256),
-            *args,
-            **kwargs,
-        )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"

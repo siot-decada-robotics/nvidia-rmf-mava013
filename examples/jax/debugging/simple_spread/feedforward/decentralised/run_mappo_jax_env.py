@@ -19,6 +19,8 @@ from datetime import datetime
 from typing import Any
 
 import jax
+import haiku as hk
+from acme.jax.networks.atari import DeepAtariTorso
 import optax
 from absl import app, flags
 
@@ -62,6 +64,21 @@ def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 
     )
 
 
+def network_factory(
+    policy_layer_sizes=(128,), critic_layer_sizes=(512, 512), *args, **kwargs
+):
+    obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), DeepAtariTorso()])(
+        x.astype(int)
+    )
+    return mappo.make_default_networks(
+        policy_layer_sizes=policy_layer_sizes,
+        critic_layer_sizes=critic_layer_sizes,
+        observation_network=obs_net_forward,
+        *args,
+        **kwargs,
+    )
+
+
 def main(_: Any) -> None:
     """Run main script
 
@@ -72,15 +89,6 @@ def main(_: Any) -> None:
     environment_factory = functools.partial(
         make_environment,
     )
-
-    # Networks.
-    def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return mappo.make_embedding_networks(  # type: ignore
-            policy_layer_sizes=(254, 254, 254),
-            critic_layer_sizes=(512, 512, 256),
-            *args,
-            **kwargs,
-        )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
@@ -109,7 +117,7 @@ def main(_: Any) -> None:
     # Build the system.
     system.build(
         environment_factory=environment_factory,
-        network_factory=network_factory,
+        network_factory=mappo.make_default_networks,
         logger_factory=logger_factory,
         checkpoint_subpath=checkpoint_subpath,
         optimizer=optimizer,
