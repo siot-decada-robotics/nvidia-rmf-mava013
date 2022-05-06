@@ -133,7 +133,6 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             rng_key,
             executor.store.environment_state,
             observation,
-            executor.store.observation.legal_actions,
             agent,
         )
 

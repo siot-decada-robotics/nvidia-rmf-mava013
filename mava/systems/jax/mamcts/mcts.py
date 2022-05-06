@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple, Union
 
 import chex
+import acme.jax.utils as utils
 import jax.numpy as jnp
 import mctx
 import numpy as np
@@ -41,7 +42,6 @@ class MCTS:
         rng_key,
         env_state,
         observation,
-        action_mask,
         agent_info,
     ):
         """TODO: Add description here."""
@@ -52,7 +52,6 @@ class MCTS:
             rng_key,
             env_state,
             observation,
-            action_mask,
             agent_info,
         )
 
@@ -61,7 +60,7 @@ class MCTS:
             {"search_policies": jnp.squeeze(search_out.action_weights)},
         )
 
-    @functools.partial(jit, static_argnums=(0, 1, 7))
+    @functools.partial(jit, static_argnums=(0, 1, 6))
     def search(
         self,
         forward_fn,
@@ -69,7 +68,6 @@ class MCTS:
         rng_key,
         env_state,
         observation,
-        action_mask,
         agent_info,
     ):
         """TODO: Add description here."""
@@ -88,13 +86,15 @@ class MCTS:
                 agent_info,
             )
 
+        root_invalid_actions = utils.add_batch_dim(self.config.environment_model.get_agent_mask(env_state,agent_info))
+
         search_output = self.config.search(
             params=params,
             rng_key=rng_key,
             root=root,
             recurrent_fn=recurrent_fn,
             num_simulations=self.config.num_simulations,
-            invalid_actions=1 - action_mask.reshape(1, -1),
+            invalid_actions=root_invalid_actions,
             max_depth=self.config.max_depth,
         )
 

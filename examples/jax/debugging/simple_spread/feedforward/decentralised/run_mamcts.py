@@ -18,15 +18,9 @@ import functools
 from datetime import datetime
 from typing import Any
 
-import chex
-import jax
-import jax.numpy as jnp
 import mctx
-import numpy as np
 import optax
 from absl import app, flags
-from acme.jax import utils
-from mctx import RecurrentFnOutput, RootFnOutput
 
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import (
@@ -36,15 +30,13 @@ from mava.systems.jax.mamcts.mcts_utils import (
     random_action_recurrent_fn,
 )
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
-from mava.utils.id_utils import EntityId
 from mava.utils.loggers import logger_utils
-from mava.utils.tree_utils import add_batch_dim_tree, remove_batch_dim_tree
 from mava.wrappers.JaxDebugEnvWrapper import DebugEnvWrapper
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "env_name",
-    "simple_spread",
+    "debug_env",
     "Debugging environment name (str).",
 )
 flags.DEFINE_string(
@@ -61,7 +53,7 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 5):
+def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 2):
 
     return DebugEnvWrapper(
         DebugEnv(
@@ -129,7 +121,7 @@ def main(_: Any) -> None:
         num_executors=6,
         multi_process=True,
         root_fn=generic_root_fn(),
-        recurrent_fn=default_action_recurrent_fn(0),
+        recurrent_fn=default_action_recurrent_fn(default_action=0,discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
         environment_model=environment_factory(),
         num_simulations=15,
