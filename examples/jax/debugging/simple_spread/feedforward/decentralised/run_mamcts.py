@@ -36,6 +36,7 @@ from mava.systems.jax.mamcts.mcts_utils import (
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
 from mava.utils.loggers import logger_utils
 from mava.wrappers.JaxDebugEnvWrapper import DebugEnvWrapper
+from mava.wrappers.environment_loop_wrappers import JAXDetailedPerAgentStatistics
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -57,7 +58,7 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 1):
+def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 2):
 
     return DebugEnvWrapper(
         DebugEnv(
@@ -111,7 +112,7 @@ def main(_: Any) -> None:
 
     # Optimizer.
     optimizer = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-3)
     )
 
     # Create the system.
@@ -127,8 +128,8 @@ def main(_: Any) -> None:
         run_evaluator=True,
         sample_batch_size=256,
         num_minibatches=8,
-        num_epochs=10, 
-        num_executors=8,
+        num_epochs=4, 
+        num_executors=6,
         multi_process=True,
         root_fn=generic_root_fn(),
         recurrent_fn=default_action_recurrent_fn(default_action=0,discount_gamma=1.0),
@@ -136,8 +137,8 @@ def main(_: Any) -> None:
         environment_model=environment_factory(),
         num_simulations=15,
         rng_seed=0,
-        learning_rate=0.01,
         n_step=10,
+        executor_stats_wrapper_class=JAXDetailedPerAgentStatistics
     )
 
     # Launch the system.

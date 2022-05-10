@@ -137,18 +137,7 @@ class ParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
             )
         builder.store.system_executor = executor_environment_loop
 
-
-@dataclass
-class JAXParallelExecutorEnvironmentLoopConfig(ExecutorEnvironmentLoopConfig):
-    pass
-
-
 class JAXParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
-    def __init__(
-        self,
-        config: JAXParallelExecutorEnvironmentLoopConfig = JAXParallelExecutorEnvironmentLoopConfig(),
-    ):
-        self.config = config
 
     def on_building_executor_environment_loop(self, builder: SystemBuilder) -> None:
         """_summary_
@@ -164,8 +153,10 @@ class JAXParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
         )
         del builder.store.executor_logger
 
-        builder.store.system_executor = executor_environment_loop
+        
+        if self.config.executor_stats_wrapper_class:
+            executor_environment_loop = self.config.executor_stats_wrapper_class(
+                executor_environment_loop
+            )
 
-    @staticmethod
-    def config_class() -> Callable:
-        return JAXParallelExecutorEnvironmentLoopConfig
+        builder.store.system_executor = executor_environment_loop

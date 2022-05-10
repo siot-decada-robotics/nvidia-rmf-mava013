@@ -656,11 +656,12 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
     def _get_running_stats(self) -> Dict:
         return self._running_statistics
 
-    def _compute_step_statistics(self, rewards: Dict[str, float]) -> None:
+    def _compute_step_statistics(self, environment_state, rewards: Dict[str, float]) -> None:
         pass
 
     def _compute_episode_statistics(
         self,
+        environment_state,
         episode_returns: Dict[str, float],
         episode_steps: int,
         start_time: float,
@@ -781,12 +782,13 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
                 current_step_t = total_steps_before_current_episode + episode_steps
                 self._executor.after_action_selection(current_step_t)
 
-            self._compute_step_statistics(rewards)
+            self._compute_step_statistics(state,rewards)
 
             for agent, reward in rewards.items():
                 episode_returns[agent] = episode_returns[agent] + reward
 
         self._compute_episode_statistics(
+            state,
             episode_returns,
             episode_steps,
             start_time,

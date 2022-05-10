@@ -30,7 +30,7 @@ except ModuleNotFoundError:
     pass
 
 import mava
-from mava.environment_loop import ParallelEnvironmentLoop, SequentialEnvironmentLoop
+from mava.environment_loop import JAXParallelEnvironmentLoop, ParallelEnvironmentLoop, SequentialEnvironmentLoop
 from mava.utils.loggers import Logger
 from mava.utils.wrapper_utils import RunningStatistics
 
@@ -287,6 +287,265 @@ class DetailedPerAgentStatistics(DetailedEpisodeStatistics):
         extra_executor_stats = getattr(self._executor, "get_stats", None)
         if extra_executor_stats:
             self._running_statistics.update(self._executor.get_stats())
+
+
+class JAXEnvironmentLoopStatisticsBase:
+    """
+    A base stats class that acts as a MARL environment loop wrapper.
+    """
+
+    def __init__(
+        self,
+        environment_loop: JAXParallelEnvironmentLoop,
+    ) -> None:
+        self._environment_loop = environment_loop
+        self._override_environment_loop_stats_methods()
+        self._running_statistics: Dict[str, float] = {}
+
+    def _compute_step_statistics(self, environment_state, rewards: Dict[str, float]) -> None:
+        raise NotImplementedError
+
+    def _compute_episode_statistics(
+        self,
+        environment_state,
+        episode_returns: Dict[str, float],
+        episode_steps: int,
+        start_time: float,
+    ) -> None:
+        raise NotImplementedError
+
+    def _get_running_stats(self) -> Dict:
+        return self._running_statistics
+
+    def _override_environment_loop_stats_methods(self) -> None:
+        self._environment_loop._compute_episode_statistics = (  # type: ignore
+            self._compute_episode_statistics
+        )
+        self._environment_loop._compute_step_statistics = (  # type: ignore
+            self._compute_step_statistics
+        )
+        self._environment_loop._get_running_stats = (  # type: ignore
+            self._get_running_stats
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._environment_loop, name)
+
+
+class JAXDetailedEpisodeStatistics(JAXEnvironmentLoopStatisticsBase):
+    """
+    A stats class that acts as a MARL environment loop wrapper
+    and overwrites _compute_episode_statistics.
+    """
+
+    def __init__(
+        self,
+        environment_loop: JAXParallelEnvironmentLoop,
+        summary_stats: List = ["mean", "max", "min", "var", "std", "raw"],
+        metrics: List = ["episode_length", "episode_return", "steps_per_second"],
+    ):
+        super().__init__(environment_loop)
+        self._summary_stats = summary_stats
+        self._metrics = metrics
+        self._running_statistics: Dict[str, float] = {}
+        for metric in self._metrics:
+            self.__setattr__(f"_{metric}_stats", RunningStatistics(metric))
+            for stat in self._summary_stats:
+                self._running_statistics[f"{stat}_{metric}"] = 0.0
+
+    def _compute_step_statistics(self, environment_state, rewards: Dict[str, float]) -> None:
+        pass
+
+    def _compute_episode_statistics(
+        self,
+        environment_state,
+        episode_returns: Dict[str, float],
+        episode_steps: int,
+        start_time: float,
+    ) -> None:
+
+        # Collect the results and combine with counts.
+        steps_per_second = episode_steps / (time.time() - start_time)
+        mean_episode_return = np.mean(np.array(list(episode_returns.values())))
+
+        # Record counts.
+        if hasattr(self._executor, "_counts"):
+            loop_type = "evaluator" if "_" not in self._loop_label else "executor"
+            if hasattr(self._executor, "_variable_client"):
+                self._executor._variable_client.add_async(
+                    [f"{loop_type}_episodes", f"{loop_type}_steps"],
+                    {f"{loop_type}_episodes": 1, f"{loop_type}_steps": episode_steps},
+                )
+            else:
+                self._executor._counts[f"{loop_type}_episodes"] += 1
+                self._executor._counts[f"{loop_type}_steps"] += episode_steps
+
+            counts = self._executor._counts
+        elif hasattr(self._executor, "store"):
+            loop_type = "evaluator" if "_" not in self._loop_label else "executor"
+            self._executor.store.executor_parameter_client.add_async(
+                {f"{loop_type}_episodes": 1, f"{loop_type}_steps": episode_steps}
+            )
+            counts = self._executor.store.executor_counts
+        else:
+            counts = self._counter.increment(episodes=1, steps=episode_steps)
+
+        self._episode_length_stats.push(episode_steps)
+        self._episode_return_stats.push(mean_episode_return)
+        self._steps_per_second_stats.push(steps_per_second)
+
+        for metric in self._metrics:
+            for stat in self._summary_stats:
+                self._running_statistics[f"{stat}_{metric}"] = self.__getattribute__(
+                    f"_{metric}_stats"
+                ).__getattribute__(stat)()
+
+        self._running_statistics.update({"episode_length": episode_steps})
+        self._running_statistics.update(counts)
+
+        # Log extra env stats, e.g. for smac.
+        extra_env_stats = getattr(
+            self._environment_loop._environment, "get_stats", None
+        )
+        if callable(extra_env_stats):
+            self._running_statistics.update(
+                self._environment_loop._environment.get_stats(environment_state)
+            )
+
+        # Log extra executor stats, e.g. epsilon for madqn
+        extra_executor_stats = getattr(self._executor, "get_stats", None)
+        if extra_executor_stats:
+            self._running_statistics.update(self._executor.get_stats(environment_state))
+
+
+class JAXDetailedPerAgentStatistics(JAXDetailedEpisodeStatistics):
+    """
+    A stats class that acts as a MARL environment loop wrapper
+    and overwrites _compute_episode_statistics and _compute_step_statistics.
+    """
+
+    def __init__(
+        self,
+        environment_loop: JAXParallelEnvironmentLoop,
+    ):
+        super().__init__(environment_loop)
+
+        # get loop logger data
+        self._loop_label = self._logger._label
+        base_dir = self._logger._directory
+        (
+            to_terminal,
+            to_csv,
+            to_tensorboard,
+            time_delta,
+            print_fn,
+            time_stamp,
+        ) = self._logger._logger_info
+
+        self._agents_stats: Dict[str, Dict[str, RunningStatistics]] = {
+            agent: {} for agent in self._environment.possible_agents
+        }
+        self._agent_loggers: Dict[str, loggers.Logger] = {}
+
+        # statistics dictionary
+        for agent in self._environment.possible_agents:
+            agent = str(agent)
+            agent_label = self._loop_label + "_" + agent
+            self._agent_loggers[agent] = Logger(
+                label=agent_label,
+                directory=base_dir,
+                to_terminal=to_terminal,
+                to_csv=to_csv,
+                to_tensorboard=to_tensorboard,
+                time_delta=time_delta,
+                print_fn=print_fn,
+                time_stamp=time_stamp,
+            )
+            self._agents_stats[agent]["return"] = RunningStatistics(
+                f"{agent}_episode_return"
+            )
+            self._agents_stats[agent]["reward"] = RunningStatistics(
+                f"{agent}_step_reward"
+            )
+
+    def _compute_step_statistics(self, environment_state, rewards: Dict[str, float]) -> None:
+        for agent, reward in rewards.items():
+            self._agents_stats[agent]["reward"].push(reward)
+
+    def _compute_episode_statistics(
+        self,
+        environment_state,
+        episode_returns: Dict[str, float],
+        episode_steps: int,
+        start_time: float,
+    ) -> None:
+
+        # Collect the results and combine with counts.
+        steps_per_second = episode_steps / (time.time() - start_time)
+        mean_episode_return = np.mean(np.array(list(episode_returns.values())))
+
+        # Record counts.
+        if hasattr(self._executor, "_counts"):
+            loop_type = "evaluator" if "_" not in self._loop_label else "executor"
+            if hasattr(self._executor, "_variable_client"):
+                self._executor._variable_client.add_async(
+                    [f"{loop_type}_episodes", f"{loop_type}_steps"],
+                    {f"{loop_type}_episodes": 1, f"{loop_type}_steps": episode_steps},
+                )
+            else:
+                self._executor._counts[f"{loop_type}_episodes"] += 1
+                self._executor._counts[f"{loop_type}_steps"] += episode_steps
+
+            counts = self._executor._counts
+        elif hasattr(self._executor, "store"):
+            loop_type = "evaluator" if "_" not in self._loop_label else "executor"
+            self._executor.store.executor_parameter_client.add_async(
+                {f"{loop_type}_episodes": 1, f"{loop_type}_steps": episode_steps}
+            )
+            counts = self._executor.store.executor_counts
+        else:
+            counts = self._counter.increment(episodes=1, steps=episode_steps)
+        self._episode_length_stats.push(episode_steps)
+        self._episode_return_stats.push(mean_episode_return)
+        self._steps_per_second_stats.push(steps_per_second)
+
+        for metric in self._metrics:
+            for stat in self._summary_stats:
+                self._running_statistics[f"{stat}_{metric}"] = self.__getattribute__(
+                    f"_{metric}_stats"
+                ).__getattribute__(stat)()
+
+        self._running_statistics.update({"episode_length": episode_steps})
+        self._running_statistics.update(counts)
+
+        # Write per agent statistics
+        for agent, agent_return in episode_returns.items():
+            agent_running_statistics: Dict[str, float] = {}
+            self._agents_stats[agent]["return"].push(agent_return)
+            for stat in self._summary_stats:
+                # Episode return
+                agent_running_statistics[f"{agent}_{stat}_return"] = self._agents_stats[
+                    agent
+                ]["return"].__getattribute__(stat)()
+
+                # Step rewards
+                agent_running_statistics[
+                    f"{agent}_{stat}_step_reward"
+                ] = self._agents_stats[agent]["reward"].__getattribute__(stat)()
+            self._agent_loggers[agent].write(agent_running_statistics)
+
+        # Log extra env stats, e.g. for smac.
+        extra_stats = getattr(self._environment_loop._environment, "get_stats", None)
+        if callable(extra_stats) and self._environment_loop._environment.get_stats(environment_state):
+            self._running_statistics.update(
+                self._environment_loop._environment.get_stats(environment_state)
+            )
+
+        # Log extra executor stats, e.g. epsilon for madqn
+        extra_executor_stats = getattr(self._executor, "get_stats", None)
+        if extra_executor_stats:
+            self._running_statistics.update(self._executor.get_stats(environment_state))
+
 
 
 class MonitorParallelEnvironmentLoop(ParallelEnvironmentLoop):
