@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Jax MAPPO system."""
+"""Jax MAMCTS system."""
 from typing import Any, Tuple
 
 from mava.components.jax import building, executing, training, updating
@@ -21,9 +21,6 @@ from mava.specs import DesignSpec
 from mava.systems.jax import System
 from mava.systems.jax.mamcts.components import ExtraSearchPolicySpec
 from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig
-
-# TODO(Edan)
-
 
 class MAMCTSSystem(System):
     def design(self) -> Tuple[DesignSpec, Any]:
@@ -58,7 +55,7 @@ class MAMCTSSystem(System):
             trainer_init=training.TrainerInit,
             n_step_fn=training.NStepBootStrappedReturns,
             loss=training.MAMCTSLoss,
-            epoch_update=training.MAMCTSEpochUpdate,
+            epoch_update=training.MAPGEpochUpdate,
             minibatch_update=training.MAMCTSMinibatchUpdate,
             sgd_step=training.MAMCTSStep,
             step=training.DefaultStep,
