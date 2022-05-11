@@ -18,13 +18,13 @@ import functools
 from datetime import datetime
 from typing import Any
 
+import haiku as hk
 import mctx
 import optax
 from absl import app, flags
 from acme.jax import utils
-from mctx import RecurrentFnOutput, RootFnOutput
-import haiku as hk
 from acme.jax.networks.atari import DeepAtariTorso
+from mctx import RecurrentFnOutput, RootFnOutput
 
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import (
@@ -35,8 +35,11 @@ from mava.systems.jax.mamcts.mcts_utils import (
 )
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
 from mava.utils.loggers import logger_utils
+from mava.wrappers.environment_loop_wrappers import (
+    JAXDetailedPerAgentStatistics,
+    JAXMonitorEnvironmentLoop,
+)
 from mava.wrappers.JaxDebugEnvWrapper import DebugEnvWrapper
-from mava.wrappers.environment_loop_wrappers import JAXDetailedPerAgentStatistics
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -128,17 +131,17 @@ def main(_: Any) -> None:
         run_evaluator=True,
         sample_batch_size=256,
         num_minibatches=8,
-        num_epochs=4, 
-        num_executors=6,
+        num_epochs=4,
+        num_executors=1,
         multi_process=True,
         root_fn=generic_root_fn(),
-        recurrent_fn=default_action_recurrent_fn(default_action=0,discount_gamma=1.0),
+        recurrent_fn=default_action_recurrent_fn(default_action=0, discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
         environment_model=environment_factory(),
         num_simulations=15,
         rng_seed=0,
         n_step=10,
-        executor_stats_wrapper_class=JAXDetailedPerAgentStatistics
+        executor_stats_wrapper_class=JAXMonitorEnvironmentLoop,
     )
 
     # Launch the system.

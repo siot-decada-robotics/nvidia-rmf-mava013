@@ -30,7 +30,11 @@ except ModuleNotFoundError:
     pass
 
 import mava
-from mava.environment_loop import JAXParallelEnvironmentLoop, ParallelEnvironmentLoop, SequentialEnvironmentLoop
+from mava.environment_loop import (
+    JAXParallelEnvironmentLoop,
+    ParallelEnvironmentLoop,
+    SequentialEnvironmentLoop,
+)
 from mava.utils.loggers import Logger
 from mava.utils.wrapper_utils import RunningStatistics
 
@@ -290,10 +294,6 @@ class DetailedPerAgentStatistics(DetailedEpisodeStatistics):
 
 
 class JAXEnvironmentLoopStatisticsBase:
-    """
-    A base stats class that acts as a MARL environment loop wrapper.
-    """
-
     def __init__(
         self,
         environment_loop: JAXParallelEnvironmentLoop,
@@ -302,7 +302,9 @@ class JAXEnvironmentLoopStatisticsBase:
         self._override_environment_loop_stats_methods()
         self._running_statistics: Dict[str, float] = {}
 
-    def _compute_step_statistics(self, environment_state, rewards: Dict[str, float]) -> None:
+    def _compute_step_statistics(
+        self, environment_state, rewards: Dict[str, float]
+    ) -> None:
         raise NotImplementedError
 
     def _compute_episode_statistics(
@@ -333,11 +335,6 @@ class JAXEnvironmentLoopStatisticsBase:
 
 
 class JAXDetailedEpisodeStatistics(JAXEnvironmentLoopStatisticsBase):
-    """
-    A stats class that acts as a MARL environment loop wrapper
-    and overwrites _compute_episode_statistics.
-    """
-
     def __init__(
         self,
         environment_loop: JAXParallelEnvironmentLoop,
@@ -353,7 +350,9 @@ class JAXDetailedEpisodeStatistics(JAXEnvironmentLoopStatisticsBase):
             for stat in self._summary_stats:
                 self._running_statistics[f"{stat}_{metric}"] = 0.0
 
-    def _compute_step_statistics(self, environment_state, rewards: Dict[str, float]) -> None:
+    def _compute_step_statistics(
+        self, environment_state, rewards: Dict[str, float]
+    ) -> None:
         pass
 
     def _compute_episode_statistics(
@@ -419,11 +418,6 @@ class JAXDetailedEpisodeStatistics(JAXEnvironmentLoopStatisticsBase):
 
 
 class JAXDetailedPerAgentStatistics(JAXDetailedEpisodeStatistics):
-    """
-    A stats class that acts as a MARL environment loop wrapper
-    and overwrites _compute_episode_statistics and _compute_step_statistics.
-    """
-
     def __init__(
         self,
         environment_loop: JAXParallelEnvironmentLoop,
@@ -468,7 +462,9 @@ class JAXDetailedPerAgentStatistics(JAXDetailedEpisodeStatistics):
                 f"{agent}_step_reward"
             )
 
-    def _compute_step_statistics(self, environment_state, rewards: Dict[str, float]) -> None:
+    def _compute_step_statistics(
+        self, environment_state, rewards: Dict[str, float]
+    ) -> None:
         for agent, reward in rewards.items():
             self._agents_stats[agent]["reward"].push(reward)
 
@@ -536,7 +532,9 @@ class JAXDetailedPerAgentStatistics(JAXDetailedEpisodeStatistics):
 
         # Log extra env stats, e.g. for smac.
         extra_stats = getattr(self._environment_loop._environment, "get_stats", None)
-        if callable(extra_stats) and self._environment_loop._environment.get_stats(environment_state):
+        if callable(extra_stats) and self._environment_loop._environment.get_stats(
+            environment_state
+        ):
             self._running_statistics.update(
                 self._environment_loop._environment.get_stats(environment_state)
             )
@@ -546,6 +544,108 @@ class JAXDetailedPerAgentStatistics(JAXDetailedEpisodeStatistics):
         if extra_executor_stats:
             self._running_statistics.update(self._executor.get_stats(environment_state))
 
+
+class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
+    def __init__(
+        self,
+        environment_loop: JAXParallelEnvironmentLoop,
+        filename: str = "agents",
+        record_every: int = 1,
+        path: str = "~/mava",
+        fps: int = 15,
+        format: str = "video",
+        figsize: Union[float, Tuple[int, int]] = (360, 640),
+    ):
+        super().__init__(environment_loop)
+
+        self._filename = filename
+        self._record_every = record_every
+        self._path = paths.process_path(path, "recordings", add_uid=False)
+        self._record_current_episode = False
+        self._fps = fps
+        self._frames: List = []
+        self._format = format
+        self._figsize = figsize
+
+    def _retrieve_render(self, environment_state) -> Optional[np.ndarray]:
+        render = None
+        try:
+            if self._format == "video":
+                render = self._environment_loop._environment.render(
+                    environment_state, mode="rgb_array"
+                )
+            elif self._format == "gif":
+                render = np.transpose(
+                    render=self._environment_loop._environment.render(
+                        environment_state, mode="rgb_array"
+                    ),
+                    axes=(1, 0, 2),
+                )
+        except Exception as ex:
+            print(f"Render frames exception: {ex}")
+        return render
+
+    def _get_conditions(self):
+        append = self._environment_loop._executor._evaluator
+
+        if "evaluator_episodes" in self._get_running_stats():
+            eval_episodes = self._get_running_stats()["evaluator_episodes"]
+        else:
+            eval_episodes = 0
+
+        return append and (eval_episodes + 1 % self._record_every == 0)
+
+    def _append_frame(self, environment_state) -> None:
+        """Appends a frame to the sequence of frames."""
+
+        if self._get_conditions():
+            self._frames.append(self._retrieve_render(environment_state))
+
+    def _write_frames(self) -> None:
+        eval_episodes = self._get_running_stats()["evaluator_episodes"]
+        path = f"{self._path}/{self._filename}_{eval_episodes}_eval_episode"
+        try:
+            if self._format == "video":
+                self._save_video(path)
+            elif self._format == "gif":
+                self._save_gif(path)
+        except Exception as ex:
+            print(f"Write frames exception: {ex}")
+        self._frames = []
+        # Clear matplotlib figures in memory
+        plt.close("all")
+
+    def _save_video(self, path: str) -> None:
+        video = make_animation(self._frames, self._fps, self._figsize).to_html5_video()
+        with open(f"{path}.html", "w") as f:
+            f.write(video)
+
+    def _save_gif(self, path: str) -> None:
+        write_gif(
+            self._frames,
+            f"{path}.gif",
+            fps=self._fps,
+        )
+
+    def _compute_step_statistics(
+        self, environment_state, rewards: Dict[str, float]
+    ) -> None:
+        super()._compute_step_statistics(environment_state, rewards)
+        self._append_frame(environment_state)
+
+    def _compute_episode_statistics(
+        self,
+        environment_state,
+        episode_returns: Dict[str, float],
+        episode_steps: int,
+        start_time: float,
+    ) -> None:
+
+        super()._compute_episode_statistics(
+            environment_state, episode_returns, episode_steps, start_time
+        )
+        if self._frames:
+            self._write_frames()
 
 
 class MonitorParallelEnvironmentLoop(ParallelEnvironmentLoop):

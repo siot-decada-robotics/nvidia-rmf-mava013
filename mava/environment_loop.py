@@ -656,7 +656,9 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
     def _get_running_stats(self) -> Dict:
         return self._running_statistics
 
-    def _compute_step_statistics(self, environment_state, rewards: Dict[str, float]) -> None:
+    def _compute_step_statistics(
+        self, environment_state, rewards: Dict[str, float]
+    ) -> None:
         pass
 
     def _compute_episode_statistics(
@@ -782,7 +784,7 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
                 current_step_t = total_steps_before_current_episode + episode_steps
                 self._executor.after_action_selection(current_step_t)
 
-            self._compute_step_statistics(state,rewards)
+            self._compute_step_statistics(state, rewards)
 
             for agent, reward in rewards.items():
                 episode_returns[agent] = episode_returns[agent] + reward
@@ -794,6 +796,7 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
             start_time,
         )
         if self._get_running_stats():
+
             return self._get_running_stats()
         else:
 
@@ -859,6 +862,7 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
             should_run_loop = False
             eval_interval_key, eval_interval_count = eval_condition
             counts = self.get_counts()
+
             if counts:
                 count = counts.get(eval_interval_key)
                 # We run eval loops around every eval_interval_count (not exactly every
