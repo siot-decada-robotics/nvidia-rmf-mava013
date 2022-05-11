@@ -62,7 +62,7 @@ class MCTS:
             {"search_policies": search_policy},
         )
 
-    @functools.partial(jit, static_argnums=(0, 1, 6))
+    @functools.partial(jit, static_argnames=["self","forward_fn","agent_info"])
     def search(
         self,
         forward_fn,

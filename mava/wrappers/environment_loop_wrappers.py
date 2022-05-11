@@ -350,6 +350,8 @@ class JAXDetailedEpisodeStatistics(JAXEnvironmentLoopStatisticsBase):
             for stat in self._summary_stats:
                 self._running_statistics[f"{stat}_{metric}"] = 0.0
 
+        self._loop_label = self._logger._label
+
     def _compute_step_statistics(
         self, environment_state, rewards: Dict[str, float]
     ) -> None:
@@ -550,8 +552,7 @@ class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
         self,
         environment_loop: JAXParallelEnvironmentLoop,
         filename: str = "agents",
-        record_every: int = 1,
-        path: str = "~/mava",
+        record_every: int = 100,
         fps: int = 15,
         format: str = "video",
         figsize: Union[float, Tuple[int, int]] = (360, 640),
@@ -560,12 +561,15 @@ class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
 
         self._filename = filename
         self._record_every = record_every
-        self._path = paths.process_path(path, "recordings", add_uid=False)
         self._record_current_episode = False
         self._fps = fps
         self._frames: List = []
         self._format = format
         self._figsize = figsize
+        self.eval_episodes = 0
+        self.is_evaluator = self._environment_loop._executor._evaluator
+        if self.is_evaluator:
+            self._path = self._environment_loop._logger._path("recordings")
 
     def _retrieve_render(self, environment_state) -> Optional[np.ndarray]:
         render = None
@@ -586,24 +590,16 @@ class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
         return render
 
     def _get_conditions(self):
-        append = self._environment_loop._executor._evaluator
-
-        if "evaluator_episodes" in self._get_running_stats():
-            eval_episodes = self._get_running_stats()["evaluator_episodes"]
-        else:
-            eval_episodes = 0
-
-        return append and (eval_episodes + 1 % self._record_every == 0)
+        return (self.eval_episodes + 1) % self._record_every == 0
 
     def _append_frame(self, environment_state) -> None:
         """Appends a frame to the sequence of frames."""
-
         if self._get_conditions():
             self._frames.append(self._retrieve_render(environment_state))
 
     def _write_frames(self) -> None:
-        eval_episodes = self._get_running_stats()["evaluator_episodes"]
-        path = f"{self._path}/{self._filename}_{eval_episodes}_eval_episode"
+
+        path = f"{self._path}/{self._filename}_{self.eval_episodes}_eval_episode"
         try:
             if self._format == "video":
                 self._save_video(path)
@@ -631,7 +627,8 @@ class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
         self, environment_state, rewards: Dict[str, float]
     ) -> None:
         super()._compute_step_statistics(environment_state, rewards)
-        self._append_frame(environment_state)
+        if self.is_evaluator:
+            self._append_frame(environment_state)
 
     def _compute_episode_statistics(
         self,
@@ -640,11 +637,11 @@ class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
         episode_steps: int,
         start_time: float,
     ) -> None:
-
+        self.eval_episodes += 1
         super()._compute_episode_statistics(
             environment_state, episode_returns, episode_steps, start_time
         )
-        if self._frames:
+        if self.is_evaluator and self._frames:
             self._write_frames()
 
 
