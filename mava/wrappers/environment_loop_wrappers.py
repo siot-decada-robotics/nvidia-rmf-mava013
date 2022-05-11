@@ -610,6 +610,7 @@ class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
         self._frames = []
         # Clear matplotlib figures in memory
         plt.close("all")
+        return path
 
     def _save_video(self, path: str) -> None:
         video = make_animation(self._frames, self._fps, self._figsize).to_html5_video()
@@ -642,7 +643,9 @@ class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
             environment_state, episode_returns, episode_steps, start_time
         )
         if self.is_evaluator and self._frames:
-            self._write_frames()
+            path = self._write_frames()
+            extension = ".gif" if self._format == "gif" else ".html"
+            self._running_statistics.update({"eval_video_path" : path+extension})
 
 
 class MonitorParallelEnvironmentLoop(ParallelEnvironmentLoop):
