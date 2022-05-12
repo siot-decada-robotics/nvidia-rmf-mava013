@@ -41,6 +41,7 @@ from mava.wrappers.environment_loop_wrappers import (
 )
 from mava.wrappers.JaxDebugEnvWrapper import DebugEnvWrapper
 
+
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "env_name",
@@ -135,13 +136,14 @@ def main(_: Any) -> None:
         num_executors=1,
         multi_process=True,
         root_fn=generic_root_fn(),
-        recurrent_fn=default_action_recurrent_fn(default_action=0, discount_gamma=1.0),
+        recurrent_fn=greedy_policy_recurrent_fn(discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
         environment_model=environment_factory(),
         num_simulations=15,
         rng_seed=0,
         n_step=10,
-        executor_stats_wrapper_class=JAXMonitorEnvironmentLoop,
+        executor_stats_wrapper_class=JAXDetailedPerAgentStatistics,
+        evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop
     )
 
     # Launch the system.

@@ -74,6 +74,9 @@ class ExecutorEnvironmentLoopConfig:
     executor_stats_wrapper_class: Optional[
         Type[EnvironmentLoopStatisticsBase]
     ] = DetailedPerAgentStatistics
+    evaluator_stats_wrapper_class : Optional[
+        Type[EnvironmentLoopStatisticsBase]
+    ] = DetailedPerAgentStatistics
 
 
 class ExecutorEnvironmentLoop(Component):
@@ -154,9 +157,14 @@ class JAXParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
         del builder.store.executor_logger
 
         
-        if self.config.executor_stats_wrapper_class:
-            executor_environment_loop = self.config.executor_stats_wrapper_class(
+        if builder.store.executor_id == "evaluator" and self.config.evaluator_stats_wrapper_class:
+            executor_environment_loop = self.config.evaluator_stats_wrapper_class(
                 executor_environment_loop
             )
+        else:
+            if self.config.executor_stats_wrapper_class:
+                executor_environment_loop = self.config.executor_stats_wrapper_class(
+                    executor_environment_loop
+                )
 
         builder.store.system_executor = executor_environment_loop
