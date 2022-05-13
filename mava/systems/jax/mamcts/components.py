@@ -47,7 +47,7 @@ class ExtraSearchPolicySpec(Component):
         builder.store.extras_spec = {"policy_info": {}}
 
         for agent, spec in agent_specs.items():
-            # Make dummy log_probs
+            # Make dummy specs
             builder.store.extras_spec["policy_info"][agent] = jnp.ones(
                 shape=(spec.actions.num_values,), dtype=jnp.float32
             )

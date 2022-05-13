@@ -24,6 +24,9 @@ import optax
 from absl import app, flags
 from acme.jax import utils
 from acme.jax.networks.atari import DeepAtariTorso
+from marlin.mava_exps.environments.debug_env.debug_grid_env_wrapper import (
+    DebugEnvWrapper,
+)
 from mctx import RecurrentFnOutput, RootFnOutput
 
 from mava.systems.jax import mamcts
@@ -36,11 +39,10 @@ from mava.systems.jax.mamcts.mcts_utils import (
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
+    JAXDetailedEpisodeStatistics,
     JAXDetailedPerAgentStatistics,
     JAXMonitorEnvironmentLoop,
 )
-from mava.wrappers.JaxDebugEnvWrapper import DebugEnvWrapper
-
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -62,7 +64,7 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def make_environment(rows=6, cols=6, evaluation: bool = None, num_agents: int = 2):
+def make_environment(rows=8, cols=8, evaluation: bool = None, num_agents: int = 3):
 
     return DebugEnvWrapper(
         DebugEnv(
@@ -130,10 +132,10 @@ def main(_: Any) -> None:
         checkpoint_subpath=checkpoint_subpath,
         optimizer=optimizer,
         run_evaluator=True,
-        sample_batch_size=256,
+        sample_batch_size=128,
         num_minibatches=8,
         num_epochs=4,
-        num_executors=1,
+        num_executors=6,
         multi_process=True,
         root_fn=generic_root_fn(),
         recurrent_fn=greedy_policy_recurrent_fn(discount_gamma=1.0),
@@ -142,8 +144,8 @@ def main(_: Any) -> None:
         num_simulations=15,
         rng_seed=0,
         n_step=10,
-        executor_stats_wrapper_class=JAXDetailedPerAgentStatistics,
-        evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop
+        executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,
+        evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
     )
 
     # Launch the system.

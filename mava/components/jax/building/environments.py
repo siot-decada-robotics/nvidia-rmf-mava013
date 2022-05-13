@@ -74,9 +74,7 @@ class ExecutorEnvironmentLoopConfig:
     executor_stats_wrapper_class: Optional[
         Type[EnvironmentLoopStatisticsBase]
     ] = DetailedPerAgentStatistics
-    evaluator_stats_wrapper_class : Optional[
-        Type[EnvironmentLoopStatisticsBase]
-    ] = DetailedPerAgentStatistics
+    evaluator_stats_wrapper_class: Optional[Type[EnvironmentLoopStatisticsBase]] = None
 
 
 class ExecutorEnvironmentLoop(Component):
@@ -140,8 +138,8 @@ class ParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
             )
         builder.store.system_executor = executor_environment_loop
 
-class JAXParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
 
+class JAXParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
     def on_building_executor_environment_loop(self, builder: SystemBuilder) -> None:
         """_summary_
 
@@ -156,8 +154,10 @@ class JAXParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
         )
         del builder.store.executor_logger
 
-        
-        if builder.store.executor_id == "evaluator" and self.config.evaluator_stats_wrapper_class:
+        if (
+            builder.store.executor_id == "evaluator"
+            and self.config.evaluator_stats_wrapper_class
+        ):
             executor_environment_loop = self.config.evaluator_stats_wrapper_class(
                 executor_environment_loop
             )

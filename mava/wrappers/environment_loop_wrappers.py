@@ -547,7 +547,7 @@ class JAXDetailedPerAgentStatistics(JAXDetailedEpisodeStatistics):
             self._running_statistics.update(self._executor.get_stats(environment_state))
 
 
-class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
+class JAXMonitorEnvironmentLoop(JAXDetailedEpisodeStatistics):
     def __init__(
         self,
         environment_loop: JAXParallelEnvironmentLoop,
@@ -645,7 +645,7 @@ class JAXMonitorEnvironmentLoop(JAXDetailedPerAgentStatistics):
         if self.is_evaluator and self._frames:
             path = self._write_frames()
             extension = ".gif" if self._format == "gif" else ".html"
-            self._running_statistics.update({"eval_video_path" : path+extension})
+            self._running_statistics.update({"eval_video_path": path + extension})
 
 
 class MonitorParallelEnvironmentLoop(ParallelEnvironmentLoop):

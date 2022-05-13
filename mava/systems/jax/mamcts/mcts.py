@@ -2,8 +2,8 @@ import functools
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple, Union
 
-import chex
 import acme.jax.utils as utils
+import chex
 import jax.numpy as jnp
 import mctx
 import numpy as np
@@ -11,7 +11,11 @@ from haiku import Params
 from jax import jit
 
 from mava.utils.id_utils import EntityId
-from mava.utils.tree_utils import add_batch_dim_tree, remove_batch_dim_tree
+from mava.utils.tree_utils import (
+    add_batch_dim_tree,
+    apply_fun_tree,
+    remove_batch_dim_tree,
+)
 from mava.wrappers.env_wrappers import EnvironmentModelWrapper
 
 RecurrentState = Any
@@ -54,15 +58,12 @@ class MCTS:
             observation,
             agent_info,
         )
-        action = jnp.squeeze(search_out.action.astype(jnp.int64))
+        action = jnp.squeeze(search_out.action.astype(jnp.int32))
         search_policy = jnp.squeeze(search_out.action_weights)
-        # log_prob = jnp.log(search_policy[action])
-        return (
-            action,
-            {"search_policies": search_policy},
-        )
 
-    @functools.partial(jit, static_argnames=["self","forward_fn","agent_info"])
+        return (action, {"search_policies": search_policy})
+
+    @functools.partial(jit, static_argnames=["self", "forward_fn", "agent_info"])
     def search(
         self,
         forward_fn,
@@ -88,7 +89,9 @@ class MCTS:
                 agent_info,
             )
 
-        root_invalid_actions = utils.add_batch_dim(self.config.environment_model.get_agent_mask(env_state,agent_info))
+        root_invalid_actions = utils.add_batch_dim(
+            self.config.environment_model.get_agent_mask(env_state, agent_info)
+        )
 
         search_output = self.config.search(
             params=params,
