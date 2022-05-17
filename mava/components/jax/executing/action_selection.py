@@ -16,7 +16,7 @@
 """Execution components for system builders"""
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Dict
 
 import acme.jax.utils as utils
 import jax
@@ -90,7 +90,10 @@ class MCTSConfig:
     search: TreeSearch = None
     environment_model: Any = None
     num_simulations: int = 10
+    evaluator_num_simulations: int = 50
     max_depth: MaxDepth = None
+    other_search_params: Callable[[None], Dict[str, Any]] = lambda: {}
+    evaluator_other_search_params: Callable[[None], Dict[str, Any]] = lambda: {}
 
 
 class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
@@ -129,7 +132,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
         # TODO (dries): We are currently using jit in the networks per agent.
         # We can also try jit over all the agents in a for loop. This would
         # allow the jit function to save us even more time.
-
+        is_evaluator = executor.store.executor_id == "evaluator"
         executor.store.action_info, executor.store.policy_info = self.mcts.get_action(
             network.forward_fn,
             network.params,
@@ -137,6 +140,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             executor.store.environment_state,
             observation,
             agent,
+            is_evaluator,
         )
 
     @staticmethod
