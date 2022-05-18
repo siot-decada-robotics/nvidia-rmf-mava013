@@ -225,13 +225,9 @@ class MAPGEpochUpdate(Utility):
         return MAPGEpochUpdateConfig
 
 
-# Duplicate config
 @dataclass
-class MAMCTSMinibatchUpdateConfig:
-    learning_rate: float = 1e-3
-    adam_epsilon: float = 1e-5
-    max_gradient_norm: float = 0.5
-    optimizer: Optional[optax_base.GradientTransformation] = (None,)
+class MAMCTSMinibatchUpdateConfig(MAPGMinibatchUpdateConfig):
+    pass
 
 
 class MAMCTSMinibatchUpdate(Utility):
@@ -314,4 +310,3 @@ class MAMCTSMinibatchUpdate(Utility):
     @staticmethod
     def config_class() -> Callable:
         return MAMCTSMinibatchUpdateConfig
-
