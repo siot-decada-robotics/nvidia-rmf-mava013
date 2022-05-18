@@ -178,6 +178,9 @@ class MAPGEpochUpdate(Utility):
             #         lambda x: x.shape[0]==trainer.store.full_batch_size, batch
             #     )
             # assert ...
+            print(list(batch.observations.values())[0].observation.shape[0])
+            print("VS")
+            print(trainer.store.full_batch_size)
             assert (
                 list(batch.observations.values())[0].observation.shape[0]
                 == trainer.store.full_batch_size
