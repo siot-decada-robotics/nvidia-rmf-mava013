@@ -199,7 +199,10 @@ class MAMCTSLoss(Loss):
                     search_policies: jnp.ndarray,
                     target_values: jnp.ndarray,
                 ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
-                    logits, values = network.network.apply(params, observations)
+                    # TODO Change to be generic somehow
+                    logits, values = network.policy_value_network.network.apply(
+                        params["policy"], observations
+                    )
 
                     policy_loss = jnp.mean(
                         jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(

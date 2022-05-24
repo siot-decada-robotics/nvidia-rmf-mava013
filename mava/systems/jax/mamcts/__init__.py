@@ -15,6 +15,7 @@
 
 """Jax MAPPO system."""
 from mava.systems.jax.mamcts.networks import (
+    make_default_learned_model_networks,
     make_default_networks,
 )
 from mava.systems.jax.mamcts.system import MAMCTSSystem

@@ -30,7 +30,7 @@ from marlin.mava_exps.environments.debug_env.debug_grid_env_wrapper import (
 from mctx import RecurrentFnOutput, RootFnOutput
 
 from mava.systems.jax import mamcts
-from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel
+from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel, LearnedModel
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
@@ -59,7 +59,7 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def make_environment(rows=8, cols=8, evaluation: bool = None, num_agents: int = 3):
+def make_environment(rows=8, cols=8, evaluation: bool = None, num_agents: int = 1):
 
     return DebugEnvWrapper(
         DebugEnv(
@@ -73,13 +73,16 @@ def make_environment(rows=8, cols=8, evaluation: bool = None, num_agents: int = 
     )
 
 
-def network_factory(policy_layer_sizes=(64,), *args, **kwargs):
+def network_factory(base_layer_sizes=(64, 64, 64), *args, **kwargs):
     obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), DeepAtariTorso()])(
         x.astype(int)
     )
-    return mamcts.make_default_networks(
-        policy_layer_sizes=policy_layer_sizes,
+    return mamcts.make_default_learned_model_networks(
+        base_layer_sizes=base_layer_sizes,
         observation_network=obs_net_forward,
+        embedding_head_layer_sizes=(100, 64),
+        reward_head_layer_sizes=(100, 1),
+        action_embedding_size=10,
         *args,
         **kwargs,
     )
@@ -129,12 +132,11 @@ def main(_: Any) -> None:
         num_epochs=4,
         num_executors=1,
         multi_process=True,
-        root_fn=EnvironmentModel.environment_root_fn(),
-        recurrent_fn=EnvironmentModel.greedy_policy_recurrent_fn(discount_gamma=1.0),
+        root_fn=LearnedModel.learned_root_fn(),
+        recurrent_fn=LearnedModel.learned_recurrent_fn(discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
-        environment_model=environment_factory(),
-        num_simulations=20,
-        evaluator_num_simulations=50,
+        num_simulations=10,
+        evaluator_num_simulations=10,
         evaluator_other_search_params=lambda: {"gumbel_scale": 0.0},
         rng_seed=0,
         n_step=10,

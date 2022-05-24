@@ -64,7 +64,6 @@ class MCTS:
             else self.config.other_search_params()
         )
 
-        # agent_info = EntityId.from_string(agent_info)
         search_out = self.environment_model_search(
             forward_fn,
             params,
@@ -100,7 +99,7 @@ class MCTS:
         observation,
         agent_info,
         num_simulations,
-        action_mask,
+        root_action_mask,
         **search_kwargs,
     ):
         """TODO: Add description here."""
@@ -119,10 +118,91 @@ class MCTS:
                 agent_info,
             )
 
-        root_invalid_actions = utils.add_batch_dim(1 - action_mask)
+        root_invalid_actions = utils.add_batch_dim(1 - root_action_mask)
 
         search_output = self.config.search(
             params=params,
+            rng_key=rng_key,
+            root=root,
+            recurrent_fn=recurrent_fn,
+            num_simulations=num_simulations,
+            invalid_actions=root_invalid_actions,
+            max_depth=self.config.max_depth,
+            **search_kwargs,
+        )
+
+        return search_output
+
+    def learned_get_action(
+        self,
+        learned_model,
+        rng_key,
+        observation_history,
+        is_evaluator,
+        root_action_mask,
+    ):
+        """TODO: Add description here."""
+
+        num_simulations = (
+            self.config.evaluator_num_simulations
+            if is_evaluator
+            else self.config.num_simulations
+        )
+        search_kwargs = (
+            self.config.evaluator_other_search_params()
+            if is_evaluator
+            else self.config.other_search_params()
+        )
+
+        search_out = self.learned_model_search(
+            learned_model,
+            rng_key,
+            observation_history,
+            num_simulations,
+            root_action_mask,
+            **search_kwargs,
+        )
+        action = jnp.squeeze(search_out.action.astype(jnp.int32))
+        search_policy = jnp.squeeze(search_out.action_weights)
+
+        return (action, {"search_policies": search_policy})
+
+    @functools.partial(
+        jit,
+        static_argnames=[
+            "self",
+            "learned_model",
+            "num_simulations",
+            "search_kwargs",
+        ],
+    )
+    @functools.partial(chex.assert_max_traces, n=4)
+    def learned_model_search(
+        self,
+        learned_model,
+        rng_key,
+        observation_history,
+        num_simulations,
+        root_action_mask,
+        **search_kwargs,
+    ):
+        """TODO: Add description here."""
+
+        root = self.config.root_fn(learned_model, rng_key, observation_history)
+
+        def recurrent_fn(params, rng_key, action, embedding):
+
+            return self.config.recurrent_fn(
+                learned_model,
+                rng_key,
+                action,
+                embedding,
+            )
+
+        root_invalid_actions = utils.add_batch_dim(1 - root_action_mask)
+
+        search_output = self.config.search(
+            params=jnp.zeros(1),
             rng_key=rng_key,
             root=root,
             recurrent_fn=recurrent_fn,

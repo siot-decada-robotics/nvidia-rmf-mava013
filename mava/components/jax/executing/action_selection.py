@@ -132,15 +132,21 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
         observation = utils.add_batch_dim(executor.store.observation.observation)
         action_mask = executor.store.observation.legal_actions
 
-        executor.store.action_info, executor.store.policy_info = self.mcts.get_action(
-            network.forward_fn,
-            network.params,
-            rng_key,
-            executor.store.environment_state,
-            observation,
-            agent,
-            executor.store.is_evaluator,
-            action_mask,
+        # executor.store.action_info, executor.store.policy_info = self.mcts.get_action(
+        #     network.forward_fn,
+        #     network.params,
+        #     rng_key,
+        #     executor.store.environment_state,
+        #     observation,
+        #     agent,
+        #     executor.store.is_evaluator,
+        #     action_mask,
+        # )
+        (
+            executor.store.action_info,
+            executor.store.policy_info,
+        ) = self.mcts.learned_get_action(
+            network, rng_key, observation, executor.store.is_evaluator, action_mask
         )
 
     @staticmethod

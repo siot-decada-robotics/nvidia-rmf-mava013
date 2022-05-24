@@ -357,9 +357,11 @@ class MAMCTSStep(Step):
                 merged_obs = jax.tree_map(
                     lambda x: merge_leading_dims(x, 2), observation
                 )
-
-                _, bootstrap_values = networks[net_key].network.apply(
-                    states.params[net_key], merged_obs
+                # TODO change somehow to be generic
+                _, bootstrap_values = networks[
+                    net_key
+                ].policy_value_network.network.apply(
+                    states.params[net_key]["policy"], merged_obs
                 )
 
                 bootstrap_values = jnp.reshape(bootstrap_values, reward.shape[0:2])
@@ -380,9 +382,12 @@ class MAMCTSStep(Step):
 
             zeros = jnp.zeros_like(list(bootstrap_values.values())[0])
             # Shift the bootstrapping values up by one
-            bootstrap_values = jax.tree_map(lambda x: jnp.concatenate([x[:,1:],jnp.expand_dims(zeros[:,-1],-1)],-1), bootstrap_values)
-            
-           
+            bootstrap_values = jax.tree_map(
+                lambda x: jnp.concatenate(
+                    [x[:, 1:], jnp.expand_dims(zeros[:, -1], -1)], -1
+                ),
+                bootstrap_values,
+            )
 
             target_values = {}
             for key in rewards.keys():
@@ -478,8 +483,12 @@ class MAMCTSStep(Step):
             for net_key in params.keys():
                 # This below forloop is needed to not lose the param reference.
                 net_params = trainer.store.networks["networks"][net_key].params
-                for param_key in net_params.keys():
-                    net_params[param_key] = new_states.params[net_key][param_key]
+
+                for model_param in net_params.keys():
+                    for param_key in net_params[model_param].keys():
+                        net_params[model_param][param_key] = new_states.params[net_key][
+                            model_param
+                        ][param_key]
 
                 # Update the optimizer
                 # This needs to be in the loop to not lose the reference.

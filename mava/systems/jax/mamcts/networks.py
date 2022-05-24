@@ -53,7 +53,6 @@ class MAMCTSNetworks:
         def forward_fn(
             params: Dict[str, jnp.ndarray],
             observations: networks_lib.Observation,
-            key: networks_lib.PRNGKey,
         ) -> Tuple[jnp.ndarray, jnp.ndarray]:
             """TODO: Add description here."""
             # The parameters of the network might change. So it has to
@@ -330,16 +329,12 @@ def make_environment_model_networks(
 
         base_dynamics_network = hk.Sequential(
             [
-                observation_network,
                 hk.nets.MLP(base_layer_sizes, activation=jax.nn.relu),
             ]
         )
-        embedding_head = hk.Sequential(
-            hk.nets.MLP(embedding_head_layer_sizes, activation=jax.nn.relu),
-        )
-        reward_head = hk.Sequential(
-            hk.nets.MLP(reward_head_layer_sizes, activation=jax.nn.relu),
-        )
+        embedding_head = hk.nets.MLP(embedding_head_layer_sizes, activation=jax.nn.relu)
+
+        reward_head = hk.nets.MLP(reward_head_layer_sizes, activation=jax.nn.relu)
 
         inter_state = base_dynamics_network(inputs)
 
@@ -351,7 +346,7 @@ def make_environment_model_networks(
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
-    dummy_embedding = utils.zeros_like(embedding_head_layer_sizes[-1])
+    dummy_embedding = jnp.zeros(embedding_head_layer_sizes[-1])
     dummy_embedding = utils.add_batch_dim(dummy_embedding)  # Dummy 'sequence' dim.
     dummy_action = jnp.zeros((), int)
     dummy_action = utils.add_batch_dim(dummy_action)
@@ -405,7 +400,7 @@ def make_policy_value_networks(
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
-    dummy_obs = utils.zeros_like(learned_model_embedding_size)
+    dummy_obs = jnp.zeros(learned_model_embedding_size)
     dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
 
     network_key, key = jax.random.split(key)
@@ -431,19 +426,26 @@ class LearnedModelNetworks:
         self.policy_value_network = mamcts_network
         self.dynamics = environment_dynamics_network
         self.representation = representation_network
+        self.params = {
+            "policy": self.policy_value_network.params,
+            "dynamics": self.dynamics.params,
+            "representation": self.representation.params,
+        }
 
         self.policy_value_fn = self.policy_value_network.forward_fn
         self.dynamics_fn = self.dynamics.forward_fn
         self.representation_fn = self.representation.forward_fn
 
     def get_policy_value(self, embedding):
-        return self.policy_value_fn(embedding)
+        return self.policy_value_fn(self.params["policy"], embedding)
 
     def get_next_state_reward(self, embedding, action):
-        return self.dynamics_fn(embedding, action)
+        return self.dynamics_fn(self.params["dynamics"], embedding, action)
 
     def get_root_state(self, observation_history):
-        return self.representation_fn(observation_history)
+        return self.representation_fn(
+            self.params["representation"], observation_history
+        )
 
 
 def make_learned_model_networks(
@@ -466,7 +468,6 @@ def make_learned_model_networks(
         key=key,
         base_layer_sizes=base_layer_sizes,
         learned_model_embedding_size=embedding_head_layer_sizes[-1],
-        observation_network=observation_network,
     )
 
     environment_dynamics_net = make_environment_model_networks(
@@ -479,17 +480,18 @@ def make_learned_model_networks(
         observation_network=observation_network,
     )
 
+    base_layer_sizes = (*base_layer_sizes, embedding_head_layer_sizes[-1])
     representation_net = make_representation_networks(
         environment_spec=spec,
         key=key,
-        base_layer_sizes=base_layer_sizes + embedding_head_layer_sizes[-1],
+        base_layer_sizes=base_layer_sizes,
         observation_network=observation_network,
     )
 
     return LearnedModelNetworks(
-        MAMCTS_network=mamcts_net,
-        Environment_Dynamics_Network=environment_dynamics_net,
-        Representation_Network=representation_net,
+        mamcts_network=mamcts_net,
+        environment_dynamics_network=environment_dynamics_net,
+        representation_network=representation_net,
     )
 
 

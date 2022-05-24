@@ -36,7 +36,7 @@ class LearnedModel:
 
         return root_fn
 
-    def learned_recurrent_fn(default_action, discount_gamma=0.99) -> Callable:
+    def learned_recurrent_fn(discount_gamma=0.99) -> Callable:
         """Creates a recurrent function used by the MCTS component - this setting makes
         other agents all select a default action in an individual agents tree search"""
 
@@ -57,9 +57,13 @@ class LearnedModel:
 
             return (
                 mctx.RecurrentFnOutput(
-                    reward=reward,
-                    discount=discount_gamma,
-                    prior_logits=prior_logits,
+                    reward=reward.reshape(
+                        1,
+                    ),
+                    discount=jnp.float32(discount_gamma).reshape(
+                        1,
+                    ),
+                    prior_logits=prior_logits.logits,
                     value=values,
                 ),
                 new_embedding,
