@@ -49,6 +49,7 @@ class MCTS:
         observation,
         agent_info,
         is_evaluator,
+        action_mask,
     ):
         """TODO: Add description here."""
 
@@ -72,6 +73,7 @@ class MCTS:
             observation,
             agent_info,
             num_simulations,
+            action_mask,
             **search_kwargs,
         )
         action = jnp.squeeze(search_out.action.astype(jnp.int32))
@@ -98,6 +100,7 @@ class MCTS:
         observation,
         agent_info,
         num_simulations,
+        action_mask,
         **search_kwargs,
     ):
         """TODO: Add description here."""
@@ -116,9 +119,7 @@ class MCTS:
                 agent_info,
             )
 
-        root_invalid_actions = utils.add_batch_dim(
-            self.config.environment_model.get_agent_mask(env_state, agent_info)
-        )
+        root_invalid_actions = utils.add_batch_dim(1 - action_mask)
 
         search_output = self.config.search(
             params=params,

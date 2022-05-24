@@ -130,6 +130,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
         rng_key, executor.store.key = jax.random.split(executor.store.key)
 
         observation = utils.add_batch_dim(executor.store.observation.observation)
+        action_mask = executor.store.observation.legal_actions
 
         executor.store.action_info, executor.store.policy_info = self.mcts.get_action(
             network.forward_fn,
@@ -139,6 +140,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             observation,
             agent,
             executor.store.is_evaluator,
+            action_mask,
         )
 
     @staticmethod
