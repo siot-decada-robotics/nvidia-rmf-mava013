@@ -65,7 +65,7 @@ class MCTS:
         )
 
         # agent_info = EntityId.from_string(agent_info)
-        search_out = self.search(
+        search_out = self.environment_model_search(
             forward_fn,
             params,
             rng_key,
@@ -91,7 +91,7 @@ class MCTS:
             "search_kwargs",
         ],
     )
-    def search(
+    def environment_model_search(
         self,
         forward_fn,
         params,

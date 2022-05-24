@@ -102,7 +102,6 @@ def make_networks(
         256,
         256,
     ),
-    critic_layer_sizes: Sequence[int] = (512, 512, 256),
     observation_network=utils.batch_concat,
 ) -> MAMCTSNetworks:
     """TODO: Add description here."""
@@ -110,8 +109,7 @@ def make_networks(
         return make_discrete_networks(
             environment_spec=spec,
             key=key,
-            policy_layer_sizes=policy_layer_sizes,
-            critic_layer_sizes=critic_layer_sizes,
+            base_layer_sizes=policy_layer_sizes,
             observation_network=observation_network,
         )
     else:
@@ -172,7 +170,6 @@ def make_default_networks(
         256,
         256,
     ),
-    critic_layer_sizes: Sequence[int] = (512, 512, 256),
     observation_network=utils.batch_concat,
 ) -> Dict[str, Any]:
     """Description here"""
@@ -190,7 +187,6 @@ def make_default_networks(
             specs[net_key],
             key=rng_key,
             policy_layer_sizes=policy_layer_sizes,
-            critic_layer_sizes=critic_layer_sizes,
             observation_network=observation_network,
         )
 
@@ -381,6 +377,47 @@ def make_environment_network(
     )
 
 
+def make_policy_value_networks(
+    environment_spec: specs.EnvironmentSpec,
+    key: networks_lib.PRNGKey,
+    base_layer_sizes: Sequence[int],
+    learned_model_embedding_size: int = 10,
+    observation_network=utils.batch_concat,
+) -> MAMCTSNetworks:
+    """TODO: Add description here."""
+
+    num_actions = environment_spec.actions.num_values
+
+    # TODO (dries): Investigate if one forward_fn function is slower
+    # than having a policy_fn and critic_fn. Maybe jit solves
+    # this issue. Having one function makes obs network calculations
+    # easier.
+    def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+        policy_value_network = hk.Sequential(
+            [
+                observation_network,
+                hk.nets.MLP(base_layer_sizes, activation=jax.nn.relu),
+                networks_lib.CategoricalValueHead(num_values=num_actions),
+            ]
+        )
+        return policy_value_network(inputs)
+
+    # Transform into pure functions.
+    forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
+
+    dummy_obs = utils.zeros_like(learned_model_embedding_size)
+    dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
+
+    network_key, key = jax.random.split(key)
+    params = forward_fn.init(network_key, dummy_obs)  # type: ignore
+
+    # Create PPONetworks to add functionality required by the agent.
+    return make_mcts_network(
+        network=forward_fn,
+        params=params,
+    )
+
+
 class LearnedModelNetworks:
     """TODO: Add description here."""
 
@@ -391,13 +428,22 @@ class LearnedModelNetworks:
         representation_network: RepresentationNetwork,
     ) -> None:
         """TODO: Add description here."""
-        self.network = mamcts_network
+        self.policy_value_network = mamcts_network
         self.dynamics = environment_dynamics_network
         self.representation = representation_network
 
-        self.forward_fn = self.network.forward_fn
+        self.policy_value_fn = self.policy_value_network.forward_fn
         self.dynamics_fn = self.dynamics.forward_fn
         self.representation_fn = self.representation.forward_fn
+
+    def get_policy_value(self, embedding):
+        return self.policy_value_fn(embedding)
+
+    def get_next_state_reward(self, embedding, action):
+        return self.dynamics_fn(embedding, action)
+
+    def get_root_state(self, observation_history):
+        return self.representation_fn(observation_history)
 
 
 def make_learned_model_networks(
@@ -412,13 +458,14 @@ def make_learned_model_networks(
     reward_head_layer_sizes: Sequence[int] = (256, 100),
     action_embedding_size: int = 10,
     observation_network=utils.batch_concat,
-) -> MAMCTSNetworks:
+) -> LearnedModelNetworks:
     """TODO: Add description here."""
 
-    mamcts_net = make_discrete_networks(
+    mamcts_net = make_policy_value_networks(
         environment_spec=spec,
         key=key,
         base_layer_sizes=base_layer_sizes,
+        learned_model_embedding_size=embedding_head_layer_sizes[-1],
         observation_network=observation_network,
     )
 

@@ -30,12 +30,7 @@ from marlin.mava_exps.environments.debug_env.debug_grid_env_wrapper import (
 from mctx import RecurrentFnOutput, RootFnOutput
 
 from mava.systems.jax import mamcts
-from mava.systems.jax.mamcts.mcts_utils import (
-    default_action_recurrent_fn,
-    generic_root_fn,
-    greedy_policy_recurrent_fn,
-    random_action_recurrent_fn,
-)
+from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
@@ -78,15 +73,12 @@ def make_environment(rows=8, cols=8, evaluation: bool = None, num_agents: int = 
     )
 
 
-def network_factory(
-    policy_layer_sizes=(64,), critic_layer_sizes=(64,), *args, **kwargs
-):
+def network_factory(policy_layer_sizes=(64,), *args, **kwargs):
     obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), DeepAtariTorso()])(
         x.astype(int)
     )
     return mamcts.make_default_networks(
         policy_layer_sizes=policy_layer_sizes,
-        critic_layer_sizes=critic_layer_sizes,
         observation_network=obs_net_forward,
         *args,
         **kwargs,
@@ -137,8 +129,8 @@ def main(_: Any) -> None:
         num_epochs=4,
         num_executors=1,
         multi_process=True,
-        root_fn=generic_root_fn(),
-        recurrent_fn=greedy_policy_recurrent_fn(discount_gamma=1.0),
+        root_fn=EnvironmentModel.environment_root_fn(),
+        recurrent_fn=EnvironmentModel.greedy_policy_recurrent_fn(discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
         environment_model=environment_factory(),
         num_simulations=20,
