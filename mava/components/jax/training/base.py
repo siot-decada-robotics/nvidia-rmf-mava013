@@ -45,6 +45,8 @@ class MCTSBatch(NamedTuple):
     observations: Any
     search_policies: Any
     target_values: Any
+    rewards: Any
+    actions: Any
 
 
 class TrainingState(NamedTuple):

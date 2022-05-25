@@ -178,9 +178,91 @@ class MAPGEpochUpdate(Utility):
             #         lambda x: x.shape[0]==trainer.store.full_batch_size, batch
             #     )
             # assert ...
-            print(list(batch.observations.values())[0].observation.shape[0])
-            print("VS")
-            print(trainer.store.full_batch_size)
+
+            assert (
+                list(batch.observations.values())[0].observation.shape[0]
+                == trainer.store.full_batch_size
+            )
+
+            permutation = jax.random.permutation(subkey, trainer.store.full_batch_size)
+
+            shuffled_batch = jax.tree_map(
+                lambda x: jnp.take(x, permutation, axis=0), batch
+            )
+            minibatches = jax.tree_map(
+                lambda x: jnp.reshape(
+                    x, [self.config.num_minibatches, -1] + list(x.shape[1:])
+                ),
+                shuffled_batch,
+            )
+
+            (new_params, new_opt_states), metrics = jax.lax.scan(
+                trainer.store.minibatch_update_fn,
+                (params, opt_states),
+                minibatches,
+                length=self.config.num_minibatches,
+            )
+
+            return (new_key, new_params, new_opt_states, batch), metrics
+
+        trainer.store.epoch_update_fn = model_update_epoch
+
+    @staticmethod
+    def name() -> str:
+        """_summary_
+
+        Returns:
+            _description_
+        """
+        return "epoch_update_fn"
+
+    @staticmethod
+    def config_class() -> Optional[Callable]:
+        """Config class used for component.
+
+        Returns:
+            config class/dataclass for component.
+        """
+        return MAPGEpochUpdateConfig
+
+
+class MAMCTSLearnedModelEpochUpdate(Utility):
+    def __init__(
+        self,
+        config: MAPGEpochUpdateConfig = MAPGEpochUpdateConfig(),
+    ):
+        """_summary_
+
+        Args:
+            config : _description_.
+        """
+        self.config = config
+
+    def on_training_utility_fns(self, trainer: SystemTrainer) -> None:
+        """_summary_"""
+        trainer.store.num_epochs = self.config.num_epochs
+        trainer.store.num_minibatches = self.config.num_minibatches
+
+        def model_update_epoch(
+            carry: Tuple[KeyArray, Any, optax.OptState, Batch],
+            unused_t: Tuple[()],
+        ) -> Tuple[
+            Tuple[KeyArray, Any, optax.OptState, Batch],
+            Dict[str, jnp.ndarray],
+        ]:
+
+            """Performs model updates based on one epoch of data."""
+            key, params, opt_states, batch = carry
+
+            new_key, subkey = jax.random.split(key)
+
+            # TODO (dries): This assert is ugly. Is there a better way to do this check?
+            # Maybe using a tree map of some sort?
+            # shapes = jax.tree_map(
+            #         lambda x: x.shape[0]==trainer.store.full_batch_size, batch
+            #     )
+            # assert ...
+
             assert (
                 list(batch.observations.values())[0].observation.shape[0]
                 == trainer.store.full_batch_size
@@ -276,6 +358,8 @@ class MAMCTSMinibatchUpdate(Utility):
                 minibatch.observations,
                 minibatch.search_policies,
                 minibatch.target_values,
+                minibatch.rewards,
+                minibatch.actions,
             )
 
             # Update the networks and optimizors.

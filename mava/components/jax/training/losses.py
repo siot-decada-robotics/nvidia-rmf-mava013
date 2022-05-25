@@ -18,9 +18,11 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
 
+import haiku as hk
 import jax
 import jax.numpy as jnp
 import rlax
+from haiku._src.basic import merge_leading_dims
 
 from mava.components.jax.training.base import Loss
 from mava.core_jax import SystemTrainer
@@ -199,10 +201,8 @@ class MAMCTSLoss(Loss):
                     search_policies: jnp.ndarray,
                     target_values: jnp.ndarray,
                 ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
-                    # TODO Change to be generic somehow
-                    logits, values = network.policy_value_network.network.apply(
-                        params["policy"], observations
-                    )
+
+                    logits, values = network.network.apply(params, observations)
 
                     policy_loss = jnp.mean(
                         jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
@@ -249,3 +249,154 @@ class MAMCTSLoss(Loss):
     @staticmethod
     def config_class() -> Callable:
         return MAMCTSLossConfig
+
+
+class MAMCTSLearnedModelLoss(Loss):
+    """MAMCTS Loss - essentially a decentralised AlphaZero loss"""
+
+    def __init__(
+        self,
+        config: MAMCTSLossConfig = MAMCTSLossConfig(),
+    ):
+        """_summary_
+
+        Args:
+            config : _description_.
+        """
+        self.config = config
+
+    def on_training_loss_fns(self, trainer: SystemTrainer) -> None:
+        """_summary_"""
+
+        def loss_grad_fn(
+            params: Any,
+            observations: Any,
+            search_policies: Dict[str, jnp.ndarray],
+            target_values: Dict[str, jnp.ndarray],
+            rewards: Dict[str, jnp.ndarray],
+            actions: Dict[str, jnp.ndarray],
+        ) -> Tuple[Dict[str, jnp.ndarray], Dict[str, Dict[str, jnp.ndarray]]]:
+            """Surrogate loss using clipped probability ratios."""
+
+            grads = {}
+            loss_info = {}
+            for agent_key in trainer.store.trainer_agents:
+                agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
+                network = trainer.store.networks["networks"][agent_net_key]
+
+                # Note (dries): This is placed here to set the networks correctly in
+                # the case of non-shared weights.
+                def loss_fn(
+                    params: Any,
+                    observations: Any,
+                    search_policies: jnp.ndarray,
+                    target_values: jnp.ndarray,
+                    rewards: jnp.ndarray,
+                    actions: jnp.ndarray,
+                ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
+
+                    initial_observations = observations[:, 0]
+                    root_embeddings = network.representation_network.network.apply(
+                        params["representation"], initial_observations
+                    )
+
+                    def dynamics_step(action, prev_state) -> Tuple[Any, Any]:
+                        """Run one step of the RNN.
+                        Args:
+                        inputs: An arbitrarily nested structure.
+                        prev_state: Previous core state.
+                        Returns:
+                        A tuple with two elements ``output, next_state``. ``output`` is an
+                        arbitrarily nested structure. ``next_state`` is the next core state, this
+                        must be the same shape as ``prev_state``."""
+                        new_embedding, reward = network.dynamics_network.network.apply(
+                            params["dynamics"], prev_state, action
+                        )
+                        return reward, new_embedding
+
+                    predicted_rewards, predicted_embeddings = hk.dynamic_unroll(
+                        dynamics_step,
+                        actions,
+                        root_embeddings,
+                        time_major=False,
+                        return_all_states=True,
+                    )
+
+                    predicted_embeddings = jnp.concatenate(
+                        [
+                            jnp.expand_dims(root_embeddings, 1),
+                            predicted_embeddings[:, :-1],
+                        ],
+                        axis=1,
+                    )
+
+                    reward_loss = jnp.mean(
+                        rlax.l2_loss(
+                            jnp.squeeze(predicted_rewards), jnp.squeeze(rewards)
+                        )
+                    )
+
+                    logits, values = network.policy_value_network.network.apply(
+                        params["policy"], merge_leading_dims(predicted_embeddings, 2)
+                    )
+
+                    policy_loss = jnp.mean(
+                        jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
+                            merge_leading_dims(search_policies, 2), logits.logits
+                        )
+                    )
+
+                    value_loss = jnp.mean(
+                        rlax.l2_loss(values, merge_leading_dims(target_values, 2))
+                    )
+
+                    # Entropy regulariser.
+                    l2_regularisation = sum(
+                        jnp.sum(jnp.square(parameter))
+                        for parameter in jax.tree_leaves(params)
+                    )
+
+                    total_loss = (
+                        policy_loss
+                        + self.config.value_cost * value_loss
+                        + reward_loss
+                        + self.config.L2_regularisation_coeff * l2_regularisation
+                    )
+
+                    loss_info = {
+                        "loss_total": total_loss,
+                        "loss_policy": policy_loss,
+                        "loss_value": value_loss,
+                        "loss_reward": reward_loss,
+                        "loss_regularisation_term": l2_regularisation,
+                    }
+
+                    return total_loss, loss_info
+
+                grads[agent_key], loss_info[agent_key] = jax.grad(
+                    loss_fn, has_aux=True
+                )(
+                    params[agent_net_key],
+                    observations[agent_key].observation,
+                    search_policies[agent_key],
+                    target_values[agent_key],
+                    rewards[agent_key],
+                    actions[agent_key],
+                )
+            return grads, loss_info
+
+        # Save the gradient funciton.
+        trainer.store.grad_fn = loss_grad_fn
+
+    @staticmethod
+    def config_class() -> Callable:
+        return MAMCTSLossConfig
+
+    @staticmethod
+    def name() -> str:
+        """_summary_
+
+        Returns:
+            _description_
+        """
+        return "loss_fn"

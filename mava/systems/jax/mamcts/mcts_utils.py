@@ -80,9 +80,7 @@ class EnvironmentModel:
             Callable function used by the MCTS component"""
 
         def root_fn(forward_fn, params, rng_key, env_state, observation):
-            prior_logits, values = forward_fn(
-                observations=observation, params=params, key=rng_key
-            )
+            prior_logits, values = forward_fn(observations=observation, params=params)
 
             return mctx.RootFnOutput(
                 prior_logits=prior_logits.logits,
@@ -118,9 +116,7 @@ class EnvironmentModel:
             observation = environment_model.get_observation(next_state, agent_info)
 
             prior_logits, values = forward_fn(
-                observations=utils.add_batch_dim(observation),
-                params=params,
-                key=rng_key,
+                observations=utils.add_batch_dim(observation), params=params
             )
 
             agent_mask = utils.add_batch_dim(

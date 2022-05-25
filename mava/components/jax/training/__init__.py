@@ -17,10 +17,12 @@
 from mava.components.jax.training.advantage_estimation import GAE
 from mava.components.jax.training.base import Batch, Loss, Step, TrainingState, Utility
 from mava.components.jax.training.losses import (
+    MAMCTSLearnedModelLoss,
     MAMCTSLoss,
     MAPGWithTrustRegionClippingLoss,
 )
 from mava.components.jax.training.model_updating import (
+    MAMCTSLearnedModelEpochUpdate,
     MAMCTSMinibatchUpdate,
     MAPGEpochUpdate,
     MAPGMinibatchUpdate,
@@ -30,6 +32,7 @@ from mava.components.jax.training.n_step_bootstrapped_returns import (
 )
 from mava.components.jax.training.step import (
     DefaultStep,
+    MAMCTSLearnedModelStep,
     MAMCTSStep,
     MAPGWithTrustRegionStep,
 )

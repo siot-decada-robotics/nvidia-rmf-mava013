@@ -22,6 +22,7 @@ from mava.systems.jax import System
 from mava.systems.jax.mamcts.components import ExtraSearchPolicySpec
 from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig
 
+
 class MAMCTSSystem(System):
     def design(self) -> Tuple[DesignSpec, Any]:
         """Mock system design with zero components.
@@ -58,6 +59,72 @@ class MAMCTSSystem(System):
             epoch_update=training.MAPGEpochUpdate,
             minibatch_update=training.MAMCTSMinibatchUpdate,
             sgd_step=training.MAMCTSStep,
+            step=training.DefaultStep,
+            trainer_dataset=building.TrajectoryDataset,
+        ).get()
+
+        # Data Server
+        data_server_process = DesignSpec(
+            data_server=building.OnPolicyDataServer,
+            data_server_adder_signature=building.ParallelSequenceAdderSignature,
+            extras_spec=ExtraSearchPolicySpec,
+        ).get()
+
+        # Parameter Server
+        parameter_server_process = DesignSpec(
+            parameter_server=updating.DefaultParameterServer,
+            executor_parameter_client=building.ExecutorParameterClient,
+            trainer_parameter_client=building.TrainerParameterClient,
+        ).get()
+
+        system = DesignSpec(
+            **system_init,
+            **data_server_process,
+            **parameter_server_process,
+            **executor_process,
+            **trainer_process,
+            distributor=building.Distributor,
+            logger=building.Logger,
+        )
+        return system, default_params
+
+
+class MAMCTSLearnedModelSystem(System):
+    def design(self) -> Tuple[DesignSpec, Any]:
+        """Mock system design with zero components.
+
+        Returns:
+            system callback components
+        """
+
+        # Set the default configs
+        default_params = MAMCTSDefaultConfig()
+
+        # Default system processes
+        # System initialization
+        system_init = DesignSpec(
+            environment_spec=building.EnvironmentSpec, system_init=building.SystemInit
+        ).get()
+
+        # Default system processes
+        # Executor
+        executor_process = DesignSpec(
+            executor_init=executing.ExecutorInit,
+            executor_observe=executing.FeedforwardExecutorObserve,
+            executor_select_action=executing.MCTSFeedforwardExecutorSelectAction,
+            executor_adder=building.ParallelSequenceAdder,
+            executor_environment_loop=building.JAXParallelExecutorEnvironmentLoop,
+            networks=building.DefaultNetworks,
+        ).get()
+
+        # Trainer
+        trainer_process = DesignSpec(
+            trainer_init=training.TrainerInit,
+            n_step_fn=training.NStepBootStrappedReturns,
+            loss=training.MAMCTSLearnedModelLoss,
+            epoch_update=training.MAMCTSLearnedModelEpochUpdate,
+            minibatch_update=training.MAMCTSMinibatchUpdate,
+            sgd_step=training.MAMCTSLearnedModelStep,
             step=training.DefaultStep,
             trainer_dataset=building.TrajectoryDataset,
         ).get()

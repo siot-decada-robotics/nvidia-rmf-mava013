@@ -77,8 +77,12 @@ class MCTS:
         )
         action = jnp.squeeze(search_out.action.astype(jnp.int32))
         search_policy = jnp.squeeze(search_out.action_weights)
+        search_value = jnp.squeeze(search_out.search_tree.node_values[:, 0])
 
-        return (action, {"search_policies": search_policy})
+        return (
+            action,
+            {"search_policies": search_policy, "search_values": search_value},
+        )
 
     @functools.partial(
         jit,
@@ -118,7 +122,9 @@ class MCTS:
                 agent_info,
             )
 
-        root_invalid_actions = utils.add_batch_dim(1 - root_action_mask)
+        root_invalid_actions = utils.add_batch_dim(1 - root_action_mask) + jnp.array(
+            [[1, 0, 0, 0, 0]]
+        )
 
         search_output = self.config.search(
             params=params,
@@ -164,8 +170,12 @@ class MCTS:
         )
         action = jnp.squeeze(search_out.action.astype(jnp.int32))
         search_policy = jnp.squeeze(search_out.action_weights)
+        search_value = jnp.squeeze(search_out.search_tree.node_values[:, 0])
 
-        return (action, {"search_policies": search_policy})
+        return (
+            action,
+            {"search_policies": search_policy, "search_values": search_value},
+        )
 
     @functools.partial(
         jit,
@@ -199,7 +209,9 @@ class MCTS:
                 embedding,
             )
 
-        root_invalid_actions = utils.add_batch_dim(1 - root_action_mask)
+        root_invalid_actions = utils.add_batch_dim(1 - root_action_mask) + jnp.array(
+            [[1, 0, 0, 0, 0]]
+        )
 
         search_output = self.config.search(
             params=jnp.zeros(1),
