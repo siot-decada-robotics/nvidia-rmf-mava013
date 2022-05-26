@@ -47,6 +47,7 @@ class MCTSBatch(NamedTuple):
     target_values: Any
     rewards: Any
     actions: Any
+    observation_history: Any = None
 
 
 class TrainingState(NamedTuple):

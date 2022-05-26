@@ -19,7 +19,10 @@ from typing import Any, Tuple
 from mava.components.jax import building, executing, training, updating
 from mava.specs import DesignSpec
 from mava.systems.jax import System
-from mava.systems.jax.mamcts.components import ExtraSearchPolicySpec
+from mava.systems.jax.mamcts.components import (
+    ExtraLearnedSearchPolicySpec,
+    ExtraSearchPolicySpec,
+)
 from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig
 
 
@@ -133,7 +136,7 @@ class MAMCTSLearnedModelSystem(System):
         data_server_process = DesignSpec(
             data_server=building.OnPolicyDataServer,
             data_server_adder_signature=building.ParallelSequenceAdderSignature,
-            extras_spec=ExtraSearchPolicySpec,
+            extras_spec=ExtraLearnedSearchPolicySpec,
         ).get()
 
         # Parameter Server

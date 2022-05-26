@@ -360,6 +360,7 @@ class MAMCTSMinibatchUpdate(Utility):
                 minibatch.target_values,
                 minibatch.rewards,
                 minibatch.actions,
+                minibatch.observation_history,
             )
 
             # Update the networks and optimizors.

@@ -174,7 +174,11 @@ class MCTS:
 
         return (
             action,
-            {"search_policies": search_policy, "search_values": search_value},
+            {
+                "search_policies": search_policy,
+                "search_values": search_value,
+                "observation_history": jnp.squeeze(observation_history, 0),
+            },
         )
 
     @functools.partial(

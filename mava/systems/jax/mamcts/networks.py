@@ -224,24 +224,20 @@ class RepresentationNetwork:
 def make_representation_networks(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
-    observation_network=utils.batch_concat,
+    representation_network_torso=utils.batch_concat,
 ) -> RepresentationNetwork:
     """TODO: Add description here."""
 
     def forward_fn(observation_history: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
 
-        representation_network = hk.Sequential(
-            [
-                observation_network,
-            ]
-        )
+        representation_network = hk.Sequential([representation_network_torso])
         initial_state = representation_network(observation_history)
         return initial_state
 
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
-    dummy_obs = utils.zeros_like(environment_spec.observations.observation)
+    dummy_obs = jnp.zeros((*environment_spec.observations.observation.shape, 10))
     dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
 
     network_key, key = jax.random.split(key)
@@ -313,11 +309,12 @@ def make_environment_model_networks(
         prev_embedding: jnp.ndarray, action: jnp.ndarray
     ) -> networks_lib.FeedForwardNetwork:
 
+        # Create Bias plane for action
         action = jnp.expand_dims(action, -1)
         action_one_hot = jnp.ones((*prev_embedding.shape[0:-1], 1))
-
         action_one_hot = action[:, :, None, None] * action_one_hot / num_actions
 
+        # Concatenate the action plane to the channel dimension
         inputs = jnp.concatenate([prev_embedding, action_one_hot], axis=-1)
 
         base_dynamics_network = dynamics_net_torso
@@ -334,13 +331,15 @@ def make_environment_model_networks(
 
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
-    dummy_obs = utils.zeros_like(environment_spec.observations.observation)
+    dummy_obs = dummy_obs = jnp.zeros(
+        (*environment_spec.observations.observation.shape, 10)
+    )
     dummy_obs = utils.add_batch_dim(dummy_obs)
 
     dummy_root_embedding = representation_net.forward_fn(
         representation_net.params, dummy_obs
     )
-    dummy_action = jnp.ones((), int)
+    dummy_action = jnp.zeros((), int)
     dummy_action = utils.add_batch_dim(dummy_action)
 
     network_key, key = jax.random.split(key)
@@ -394,16 +393,18 @@ def make_policy_value_networks(
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
-    dummy_obs = utils.zeros_like(environment_spec.observations.observation)
+    dummy_obs = dummy_obs = jnp.zeros(
+        (*environment_spec.observations.observation.shape, 10)
+    )
     dummy_obs = utils.add_batch_dim(dummy_obs)
 
     dummy_root_embedding = representation_net.forward_fn(
         representation_net.params, dummy_obs
     )
-    dummy_action = jnp.ones((), int)
+    dummy_action = jnp.zeros((), int)
     dummy_action = utils.add_batch_dim(dummy_action)
 
-    dummy_embedding, dummy_reward = environment_dynamics_net.forward_fn(
+    dummy_embedding, _ = environment_dynamics_net.forward_fn(
         environment_dynamics_net.params, dummy_root_embedding, dummy_action
     )
     network_key, key = jax.random.split(key)
@@ -469,7 +470,7 @@ def make_learned_model_networks(
     representation_net = make_representation_networks(
         environment_spec=spec,
         key=key,
-        observation_network=representation_observation_network,
+        representation_network_torso=representation_observation_network,
     )
 
     environment_dynamics_net = make_environment_model_networks(

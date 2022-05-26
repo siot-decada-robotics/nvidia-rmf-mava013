@@ -275,6 +275,7 @@ class MAMCTSLearnedModelLoss(Loss):
             target_values: Dict[str, jnp.ndarray],
             rewards: Dict[str, jnp.ndarray],
             actions: Dict[str, jnp.ndarray],
+            observation_history: Dict[str, jnp.ndarray],
         ) -> Tuple[Dict[str, jnp.ndarray], Dict[str, Dict[str, jnp.ndarray]]]:
             """Surrogate loss using clipped probability ratios."""
 
@@ -293,11 +294,19 @@ class MAMCTSLearnedModelLoss(Loss):
                     target_values: jnp.ndarray,
                     rewards: jnp.ndarray,
                     actions: jnp.ndarray,
+                    observation_history: jnp.ndarray,
                 ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
 
-                    initial_observations = observations[:, 0]
+                    # print("search_policies",jnp.isnan(search_policies).any())
+                    # print("target_values",jnp.isnan(target_values).any())
+                    # print("rewards",jnp.isnan(rewards).any())
+                    # print("actions",jnp.isnan(actions).any())
+                    # print("observation_history",jnp.isnan(observation_history).any())
+
+                    initial_observation_history = observation_history[:, 0]
+
                     root_embeddings = network.representation_network.network.apply(
-                        params["representation"], initial_observations
+                        params["representation"], initial_observation_history
                     )
 
                     def dynamics_step(action, prev_state) -> Tuple[Any, Any]:
@@ -356,6 +365,11 @@ class MAMCTSLearnedModelLoss(Loss):
                         for parameter in jax.tree_leaves(params)
                     )
 
+                    # print("RL",jnp.isnan(reward_loss))
+                    # print("PL",jnp.isnan(policy_loss))
+                    # print("VL",jnp.isnan(value_loss))
+                    # print("RGL",jnp.isnan(l2_regularisation))
+
                     total_loss = (
                         policy_loss
                         + self.config.value_cost * value_loss
@@ -382,6 +396,7 @@ class MAMCTSLearnedModelLoss(Loss):
                     target_values[agent_key],
                     rewards[agent_key],
                     actions[agent_key],
+                    observation_history[agent_key],
                 )
             return grads, loss_info
 

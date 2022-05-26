@@ -545,12 +545,16 @@ class MAMCTSLearnedModelStep(Step):
 
             search_policies = {}
             search_values = {}
+            observation_history = {}
             for agent_key in extra["policy_info"].keys():
                 search_policies[agent_key] = extra["policy_info"][agent_key][
                     "search_policies"
                 ]
                 search_values[agent_key] = extra["policy_info"][agent_key][
                     "search_values"
+                ]
+                observation_history[agent_key] = extra["policy_info"][agent_key][
+                    "observation_history"
                 ]
 
             agent_nets = trainer.store.trainer_agent_net_keys
@@ -586,6 +590,7 @@ class MAMCTSLearnedModelStep(Step):
                 target_values=target_values,
                 rewards=rewards,
                 actions=actions,
+                observation_history=observation_history,
             )
 
             # Concatenate all trajectories. Reshape from [num_sequences, num_steps,..]

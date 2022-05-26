@@ -89,7 +89,7 @@ class Config:
 
         for name, dataclass in kwargs.items():
             if is_dataclass(dataclass):
-                print(list(self._config.keys()))
+
                 if name in list(self._config.keys()):
                     # When updating a component, the list of current parameter names
                     # might contain the parameter names of the new component

@@ -16,6 +16,7 @@
 """A simple multi-agent-system-environment training loop."""
 
 import time
+from collections import deque
 from functools import partial
 from typing import Any, Callable, Dict, Generic, NamedTuple, Optional, Tuple, TypeVar
 
@@ -635,13 +636,15 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
         # Internalize agent and environment.
         self._environment = environment
 
-        self.jitted_reset_fn = jax.jit(chex.assert_max_traces(self._environment.reset,1))
-        self.jitted_step_fn = jax.jit(chex.assert_max_traces(self._environment.step,1))
+        self.jitted_reset_fn = jax.jit(
+            chex.assert_max_traces(self._environment.reset, 1)
+        )
+        self.jitted_step_fn = jax.jit(chex.assert_max_traces(self._environment.step, 1))
 
         self._executor = executor
         self._counter = counter or counting.Counter()
         self._logger = logger or loggers.make_default_logger(label)
-    
+
         self._should_update = should_update
         self._running_statistics: Dict[str, float] = {}
 
@@ -719,6 +722,15 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
 
         self.rng_key, reset_key = random.split(self.rng_key)
 
+        self._executor.store.environment_state_history = {
+            agent: deque(maxlen=self._executor.store.history_size)
+            for agent in self._environment.reward_spec().keys()
+        }
+        self._executor.store.action_history = {
+            agent: deque([jnp.int32(0)], maxlen=self._executor.store.history_size)
+            for agent in self._environment.reward_spec().keys()
+        }
+
         state, timestep, extras = self.jitted_reset_fn(reset_key)
 
         if type(timestep) == tuple:
@@ -728,7 +740,7 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
 
         # Make the first observation.
         self._executor.observe_first(timestep, extras=env_extras)
-        self._executor.store.environment_state = state
+
         # For evaluation, this keeps track of the total undiscounted reward
         # for each agent accumulated during the episode.
         rewards: Dict[str, float] = {}
@@ -739,7 +751,7 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
 
         # Run an episode.
         while not timestep.last():
-
+            self._executor.store.environment_state = state
             # Generate an action from the agent's policy and step the environment.
             actions = self._get_actions(timestep)
 
@@ -763,7 +775,6 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
             self._executor.observe(
                 actions, next_timestep=timestep, next_extras=env_extras
             )
-            self._executor.store.environment_state = state
 
             if self._should_update:
                 self._executor.update()
