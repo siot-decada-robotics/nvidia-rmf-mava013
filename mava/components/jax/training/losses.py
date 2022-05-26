@@ -189,8 +189,11 @@ class MAMCTSLoss(Loss):
             observations: Any,
             search_policies: Dict[str, jnp.ndarray],
             target_values: Dict[str, jnp.ndarray],
+            rewards: Dict[str, jnp.ndarray],
+            actions: Dict[str, jnp.ndarray],
+            observation_history: Dict[str, jnp.ndarray],
         ) -> Tuple[Dict[str, jnp.ndarray], Dict[str, Dict[str, jnp.ndarray]]]:
-            """Surrogate loss using clipped probability ratios."""
+            """TODO add description"""
 
             grads = {}
             loss_info = {}
@@ -207,15 +210,28 @@ class MAMCTSLoss(Loss):
                     target_values: jnp.ndarray,
                 ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
 
-                    logits, values = network.network.apply(params, observations)
+                    logits, value_logits = network.forward_fn(params, observations)
 
+                    # Transform the target values into logits
+                    target_values = value_transform(target_values)
+                    target_values_logits = scalar_to_two_hot(
+                        target_values, network._num_bins
+                    )
+                    target_values_logits = jax.lax.stop_gradient(target_values_logits)
+
+                    # Compute the policy loss
                     policy_loss = jnp.mean(
                         jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
-                            search_policies, logits.logits
+                            search_policies, logits
                         )
                     )
 
-                    value_loss = jnp.mean(rlax.l2_loss(values, target_values))
+                    # Compute the value loss
+                    value_loss = jnp.mean(
+                        jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
+                            target_values_logits, value_logits
+                        )
+                    )
 
                     # Entropy regulariser.
                     l2_regularisation = sum(
@@ -244,7 +260,7 @@ class MAMCTSLoss(Loss):
                     params[agent_net_key],
                     observations[agent_key].observation,
                     search_policies[agent_key],
-                    target_values[agent_key],
+                    target_values[agent_key]
                 )
             return grads, loss_info
 
@@ -282,7 +298,7 @@ class MAMCTSLearnedModelLoss(Loss):
             actions: Dict[str, jnp.ndarray],
             observation_history: Dict[str, jnp.ndarray],
         ) -> Tuple[Dict[str, jnp.ndarray], Dict[str, Dict[str, jnp.ndarray]]]:
-            """Surrogate loss using clipped probability ratios."""
+            """TODO add description"""
 
             grads = {}
             loss_info = {}
@@ -357,8 +373,8 @@ class MAMCTSLearnedModelLoss(Loss):
                     )
 
                     # Get the policy and value logits for each of the generated embeddings
-                    logits, value_logits = network.policy_value_network.forward_fn(
-                        params["policy"], merge_leading_dims(predicted_embeddings, 2)
+                    logits, value_logits = network.prediction_network.forward_fn(
+                        params["prediction"], merge_leading_dims(predicted_embeddings, 2)
                     )
 
                     # Compute the policy loss

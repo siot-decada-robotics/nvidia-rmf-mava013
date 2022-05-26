@@ -722,14 +722,7 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
 
         self.rng_key, reset_key = random.split(self.rng_key)
 
-        self._executor.store.environment_state_history = {
-            agent: deque(maxlen=self._executor.store.history_size)
-            for agent in self._environment.reward_spec().keys()
-        }
-        self._executor.store.action_history = {
-            agent: deque([jnp.int32(0)], maxlen=self._executor.store.history_size)
-            for agent in self._environment.reward_spec().keys()
-        }
+        
 
         state, timestep, extras = self.jitted_reset_fn(reset_key)
 

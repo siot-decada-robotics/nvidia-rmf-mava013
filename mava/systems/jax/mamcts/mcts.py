@@ -77,11 +77,10 @@ class MCTS:
         )
         action = jnp.squeeze(search_out.action.astype(jnp.int32))
         search_policy = jnp.squeeze(search_out.action_weights)
-        search_value = jnp.squeeze(search_out.search_tree.node_values[:, 0])
 
         return (
             action,
-            {"search_policies": search_policy, "search_values": search_value},
+            {"search_policies": search_policy},
         )
 
     @functools.partial(
@@ -141,7 +140,10 @@ class MCTS:
 
     def learned_get_action(
         self,
-        learned_model,
+        representation_fn,
+        dynamics_fn,
+        prediction_fn,
+        params,
         rng_key,
         observation_history,
         is_evaluator,
@@ -161,7 +163,10 @@ class MCTS:
         )
 
         search_out = self.learned_model_search(
-            learned_model,
+            representation_fn,
+            dynamics_fn,
+            prediction_fn,
+            params,
             rng_key,
             observation_history,
             num_simulations,
@@ -185,7 +190,9 @@ class MCTS:
         jit,
         static_argnames=[
             "self",
-            "learned_model",
+            "representation_fn",
+            "dynamics_fn",
+            "prediction_fn",
             "num_simulations",
             "search_kwargs",
         ],
@@ -193,7 +200,10 @@ class MCTS:
     @functools.partial(chex.assert_max_traces, n=4)
     def learned_model_search(
         self,
-        learned_model,
+        representation_fn,
+        dynamics_fn,
+        prediction_fn,
+        params,
         rng_key,
         observation_history,
         num_simulations,
@@ -202,12 +212,14 @@ class MCTS:
     ):
         """TODO: Add description here."""
 
-        root = self.config.root_fn(learned_model, rng_key, observation_history)
+        root = self.config.root_fn(representation_fn, prediction_fn, params, rng_key, observation_history)
 
         def recurrent_fn(params, rng_key, action, embedding):
 
             return self.config.recurrent_fn(
-                learned_model,
+                dynamics_fn,
+                prediction_fn,
+                params,
                 rng_key,
                 action,
                 embedding,
@@ -218,7 +230,7 @@ class MCTS:
         )
 
         search_output = self.config.search(
-            params=jnp.zeros(1),
+            params=params,
             rng_key=rng_key,
             root=root,
             recurrent_fn=recurrent_fn,

@@ -45,7 +45,7 @@ DiscreteArray = dm_specs.DiscreteArray
 EntropyFn = Callable[[Any], jnp.ndarray]
 
 
-@dataclasses.dataclass
+
 class PredictionNetworks:
     """TODO: Add description here."""
 
@@ -53,10 +53,12 @@ class PredictionNetworks:
         self,
         network: networks_lib.FeedForwardNetwork,
         params: networks_lib.Params,
+        num_bins : int
     ) -> None:
         """TODO: Add description here."""
         self.network = network
         self.params = params
+        self._num_bins = num_bins
 
         @jit
         def forward_fn(
@@ -80,14 +82,18 @@ class PredictionNetworks:
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:
         """TODO: Add description here."""
-        _, value = self.forward_fn(self.params, observations)
+        _, value_logits = self.forward_fn(self.params, observations)
+        value = logits_to_scalar(value_logits)
+        value = inv_value_transform(value)
         return value
 
     def get_logits_and_value(
         self, observations: networks_lib.Observation
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """TODO: Add description here."""
-        logits, value = self.forward_fn(self.params, observations)
+        logits, value_logits = self.forward_fn(self.params, observations)
+        value = logits_to_scalar(value_logits)
+        value = inv_value_transform(value)
         return logits, value
 
 
@@ -109,6 +115,10 @@ def make_prediction_network(
     # this issue. Having one function makes obs network calculations
     # easier.
     def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+        
+        if representation_net is None:
+            inputs = hk.Embed(128,8)(inputs.astype(int))
+
         policy_value_network = PredictionNet(
             num_actions=num_actions,
             num_bins=num_bins,
@@ -152,6 +162,7 @@ def make_prediction_network(
     return PredictionNetworks(
         network=forward_fn,
         params=params,
+        num_bins=num_bins
     )
 
 
@@ -347,26 +358,30 @@ class LearnedModelNetworks:
         prediction_network: PredictionNetworks,
         dynamics_network: DynamicsNetwork,
         representation_network: RepresentationNetwork,
-        num_bins: int,
     ) -> None:
         """TODO: Add description here."""
-        self._num_bins = num_bins
+        self._num_bins = prediction_network._num_bins
 
-        self.policy_value_network = prediction_network
+        self.prediction_network = prediction_network
         self.dynamics_network = dynamics_network
         self.representation_network = representation_network
         self.params = {
-            "policy": self.policy_value_network.params,
+            "prediction": self.prediction_network.params,
             "dynamics": self.dynamics_network.params,
             "representation": self.representation_network.params,
         }
 
-        self.policy_value_fn = self.policy_value_network.forward_fn
+        self.prediction_fn = self.prediction_network.forward_fn
         self.dynamics_fn = self.dynamics_network.forward_fn
         self.representation_fn = self.representation_network.forward_fn
 
+    def update_inner_params(self):
+        self.prediction_network.params = self.params["prediction"]
+        self.dynamics_network.params = self.params["dynamics"]
+        self.representation_network.params = self.params["representation"]
+
     def get_policy_value(self, embedding):
-        logits, value_logits = self.policy_value_fn(self.params["policy"], embedding)
+        logits, value_logits = self.prediction_fn(self.params["prediction"], embedding)
         value = logits_to_scalar(value_logits)
         value = inv_value_transform(value)
         return logits, value
@@ -426,7 +441,6 @@ def make_learned_model_networks(
         prediction_network=prediction_net,
         dynamics_network=dynamics_net,
         representation_network=representation_net,
-        num_bins=num_bins,
     )
 
 

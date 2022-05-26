@@ -33,6 +33,7 @@ from mava.components.jax import Component
 from mava.components.jax.training import Batch, Step, TrainingState
 from mava.components.jax.training.base import MCTSBatch
 from mava.core_jax import SystemTrainer
+from mava.systems.jax.mamcts.learned_model_utils import inv_value_transform, logits_to_scalar
 
 
 @dataclass
@@ -362,10 +363,11 @@ class MAMCTSStep(Step):
                     lambda x: merge_leading_dims(x, 2), observation
                 )
 
-                _, bootstrap_values = networks[net_key].network.apply(
+                _, bootstrap_values = networks[net_key].forward_fn(
                     states.params[net_key], merged_obs
                 )
-
+                bootstrap_values = logits_to_scalar(bootstrap_values)
+                bootstrap_values = inv_value_transform(bootstrap_values)
                 bootstrap_values = jnp.reshape(bootstrap_values, reward.shape[0:2])
                 return bootstrap_values
 
@@ -522,7 +524,7 @@ class MAMCTSLearnedModelStep(Step):
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
 
-        # @jit
+        @jit
         def sgd_step(
             states: TrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
@@ -598,23 +600,18 @@ class MAMCTSLearnedModelStep(Step):
             agent_0_t_vals = list(target_values.values())[0]
             assert len(agent_0_t_vals) > 1
             num_sequences = agent_0_t_vals.shape[0]
-            num_steps = agent_0_t_vals.shape[1]
-            batch_size = num_sequences * num_steps
+            batch_size = num_sequences
             assert batch_size % trainer.store.num_minibatches == 0, (
                 "Num minibatches must divide batch size. Got batch_size={}"
                 " num_minibatches={}."
             ).format(batch_size, trainer.store.num_minibatches)
-
-            # batch = jax.tree_map(
-            #     lambda x: x.reshape((batch_size,) + x.shape[2:]), trajectories
-            # )
-            with jax.disable_jit():
-                (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
-                    trainer.store.epoch_update_fn,
-                    (states.random_key, states.params, states.opt_states, trajectories),
-                    (),
-                    length=trainer.store.num_epochs,
-                )
+            
+            (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
+                trainer.store.epoch_update_fn,
+                (states.random_key, states.params, states.opt_states, trajectories),
+                (),
+                length=trainer.store.num_epochs,
+            )
 
             # Set the metrics
             metrics = jax.tree_map(jnp.mean, metrics)

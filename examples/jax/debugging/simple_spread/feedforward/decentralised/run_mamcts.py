@@ -73,13 +73,12 @@ def make_environment(rows=12, cols=12, evaluation: bool = None, num_agents: int 
     )
 
 
-def network_factory(base_layer_sizes=(64,), *args, **kwargs):
-    obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), DeepAtariTorso()])(
-        x.astype(int)
-    )
-    return mamcts.make_default_networks(
-        base_layer_sizes=base_layer_sizes,
-        observation_network=obs_net_forward,
+def network_factory(*args, **kwargs):
+   
+    return mamcts.make_environment_model_networks(
+        num_bins=100,
+        use_v2=True,
+        output_init_scale=0.0,
         *args,
         **kwargs,
     )
@@ -110,7 +109,7 @@ def main(_: Any) -> None:
 
     # Optimizer.
     optimizer = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-3)
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-2)
     )
 
     # Create the system.
@@ -127,7 +126,7 @@ def main(_: Any) -> None:
         sample_batch_size=128,
         num_minibatches=8,
         num_epochs=4,
-        num_executors=6,
+        num_executors=8,
         multi_process=True,
         environment_model=environment_factory(),
         root_fn=EnvironmentModel.environment_root_fn(),

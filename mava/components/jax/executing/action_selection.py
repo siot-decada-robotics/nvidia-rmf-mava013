@@ -15,6 +15,7 @@
 
 """Execution components for system builders"""
 
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
@@ -117,7 +118,24 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             raise ValueError("Required arguments for MCTS config have not been given")
 
         self.mcts = MCTS(self.config)
+        
+        try:
+            self.history_size = executor.store.history_size
+        except:
+            self.history_size = 0
 
+    def on_execution_observe_first_end(self, executor: SystemExecutor) -> None:
+        
+        executor.store.environment_state_history = {
+            agent: deque(maxlen=self.history_size)
+            for agent in executor.store.agent_net_keys.keys()
+        }
+        executor.store.action_history = {
+            agent: deque([jnp.int32(0)], maxlen=self.history_size)
+            for agent in executor.store.agent_net_keys.keys()
+        }
+
+        return super().on_execution_observe_first_end(executor)
     # TODO figure out how to pass agent ids since it is a string
     # Select action
     def on_execution_select_action_compute(self, executor: SystemExecutor) -> None:
@@ -172,7 +190,10 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
                 executor.store.action_info,
                 executor.store.policy_info,
             ) = self.mcts.learned_get_action(
-                network,
+                network.representation_fn,
+                network.dynamics_fn,
+                network.prediction_fn,
+                network.params,
                 rng_key,
                 stacked_observation_history,
                 executor.store.is_evaluator,

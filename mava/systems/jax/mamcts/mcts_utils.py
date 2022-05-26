@@ -6,8 +6,9 @@ import mctx
 from acme.jax import utils
 from chex import Array
 from mctx._src.policies import _mask_invalid_actions
+from mava.systems.jax.mamcts.learned_model_utils import inv_value_transform, logits_to_scalar
 
-from mava.systems.jax.mamcts.networks import LearnedModelNetworks
+from mava.systems.jax.mamcts.networks import LearnedModelNetworks, PredictionNetworks
 from mava.utils.id_utils import EntityId
 from mava.utils.tree_utils import add_batch_dim_tree, remove_batch_dim_tree, stack_trees
 from mava.wrappers.env_wrappers import EnvironmentModelWrapper
@@ -20,13 +21,16 @@ class LearnedModel:
         Return:
             Callable function used by the MCTS component"""
 
-        def root_fn(learned_model: LearnedModelNetworks, rng_key, observation_history):
-
-            embedding = learned_model.get_root_state(
-                observation_history=observation_history
+        def root_fn(representation_fn, prediction_fn, params, rng_key, observation_history):
+         
+            embedding = representation_fn(
+                observation_history=observation_history, params=params["representation"]
             )
 
-            prior_logits, values = learned_model.get_policy_value(embedding)
+            prior_logits, values = prediction_fn(observations=embedding,params=params["prediction"])
+
+            values = logits_to_scalar(values)
+            values = inv_value_transform(values)
 
             return mctx.RootFnOutput(
                 prior_logits=prior_logits,
@@ -41,19 +45,26 @@ class LearnedModel:
         other agents all select a default action in an individual agents tree search"""
 
         def recurrent_fn(
-            learned_model: LearnedModelNetworks,
+            dynamics_fn,
+            prediction_fn,
+            params,
             rng_key,
             action,
             embedding,
         ) -> mctx.RecurrentFnOutput:
-
-            new_embedding, reward = learned_model.get_next_state_and_reward(
-                embedding=embedding, action=action
+            
+            
+            new_embedding, reward = dynamics_fn(
+                previous_embedding=embedding, action=action, params=params["dynamics"]
             )
+            reward = logits_to_scalar(reward)
+            reward = inv_value_transform(reward)
 
-            prior_logits, values = learned_model.get_policy_value(
-                embedding=new_embedding
+            prior_logits, values = prediction_fn(
+                observations=new_embedding, params=params["prediction"]
             )
+            values = logits_to_scalar(values)
+            values = inv_value_transform(values)
 
             return (
                 mctx.RecurrentFnOutput(
@@ -64,7 +75,7 @@ class LearnedModel:
                         1,
                     ),
                     prior_logits=prior_logits,
-                    value=values,
+                    value=values.reshape(1,),
                 ),
                 new_embedding,
             )
@@ -79,11 +90,14 @@ class EnvironmentModel:
         Return:
             Callable function used by the MCTS component"""
 
-        def root_fn(forward_fn, params, rng_key, env_state, observation):
-            prior_logits, values = forward_fn(observations=observation, params=params)
+        def root_fn(forward_fn , params, rng_key, env_state, observation):
+            
+            prior_logits, values = forward_fn(observations=observation, params= params)
+            values = logits_to_scalar(values)
+            values = inv_value_transform(values)
 
             return mctx.RootFnOutput(
-                prior_logits=prior_logits.logits,
+                prior_logits=prior_logits,
                 value=values,
                 embedding=add_batch_dim_tree(env_state),
             )
@@ -96,7 +110,7 @@ class EnvironmentModel:
 
         def recurrent_fn(
             environment_model: EnvironmentModelWrapper,
-            forward_fn,
+            forward_fn : PredictionNetworks,
             params,
             rng_key,
             action,
@@ -115,15 +129,15 @@ class EnvironmentModel:
 
             observation = environment_model.get_observation(next_state, agent_info)
 
-            prior_logits, values = forward_fn(
-                observations=utils.add_batch_dim(observation), params=params
-            )
+            prior_logits, values = forward_fn(observations=utils.add_batch_dim(observation),params=params)
+            values = logits_to_scalar(values)
+            values = inv_value_transform(values)
 
             agent_mask = utils.add_batch_dim(
                 environment_model.get_agent_mask(next_state, agent_info)
             )
 
-            prior_logits = _mask_invalid_actions(prior_logits.logits, agent_mask)
+            prior_logits = _mask_invalid_actions(prior_logits, agent_mask)
 
             reward = timestep.reward[agent_info].reshape(
                 1,
