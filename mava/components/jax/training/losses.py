@@ -26,6 +26,11 @@ from haiku._src.basic import merge_leading_dims
 
 from mava.components.jax.training.base import Loss
 from mava.core_jax import SystemTrainer
+from mava.systems.jax.mamcts.learned_model_utils import (
+    scalar_to_two_hot,
+    scale_gradient,
+    value_transform,
+)
 
 
 @dataclass
@@ -297,12 +302,7 @@ class MAMCTSLearnedModelLoss(Loss):
                     observation_history: jnp.ndarray,
                 ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
 
-                    # print("search_policies",jnp.isnan(search_policies).any())
-                    # print("target_values",jnp.isnan(target_values).any())
-                    # print("rewards",jnp.isnan(rewards).any())
-                    # print("actions",jnp.isnan(actions).any())
-                    # print("observation_history",jnp.isnan(observation_history).any())
-
+                    # Get batch initial root embeddings
                     initial_observation_history = observation_history[:, 0]
 
                     root_embeddings = network.representation_network.network.apply(
@@ -318,12 +318,17 @@ class MAMCTSLearnedModelLoss(Loss):
                         A tuple with two elements ``output, next_state``. ``output`` is an
                         arbitrarily nested structure. ``next_state`` is the next core state, this
                         must be the same shape as ``prev_state``."""
-                        new_embedding, reward = network.dynamics_network.network.apply(
+                        (
+                            new_embedding,
+                            reward_logits,
+                        ) = network.dynamics_network.forward_fn(
                             params["dynamics"], prev_state, action
                         )
-                        return reward, new_embedding
+                        new_embedding = scale_gradient(new_embedding, 0.5)
+                        return reward_logits, new_embedding
 
-                    predicted_rewards, predicted_embeddings = hk.dynamic_unroll(
+                    # unroll and get the predicted reward logits and embeddings
+                    predicted_rewards_logits, predicted_embeddings = hk.dynamic_unroll(
                         dynamics_step,
                         actions,
                         root_embeddings,
@@ -331,6 +336,18 @@ class MAMCTSLearnedModelLoss(Loss):
                         return_all_states=True,
                     )
 
+                    # Transform the rewards into logits
+                    rewards = value_transform(rewards)
+                    rewards_logits = scalar_to_two_hot(rewards, network._num_bins)
+
+                    # Transform the target values into logits
+                    target_values = value_transform(target_values)
+                    target_values_logits = scalar_to_two_hot(
+                        target_values, network._num_bins
+                    )
+                    target_values_logits = jax.lax.stop_gradient(target_values_logits)
+
+                    # Add the initial root embedding to the sequence of generated embeddings
                     predicted_embeddings = jnp.concatenate(
                         [
                             jnp.expand_dims(root_embeddings, 1),
@@ -339,24 +356,31 @@ class MAMCTSLearnedModelLoss(Loss):
                         axis=1,
                     )
 
-                    reward_loss = jnp.mean(
-                        rlax.l2_loss(
-                            jnp.squeeze(predicted_rewards), jnp.squeeze(rewards)
-                        )
-                    )
-
-                    logits, values = network.policy_value_network.network.apply(
+                    # Get the policy and value logits for each of the generated embeddings
+                    logits, value_logits = network.policy_value_network.forward_fn(
                         params["policy"], merge_leading_dims(predicted_embeddings, 2)
                     )
 
+                    # Compute the policy loss
                     policy_loss = jnp.mean(
                         jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
-                            merge_leading_dims(search_policies, 2), logits.logits
+                            merge_leading_dims(search_policies, 2), logits
                         )
                     )
 
+                    # Compute the value loss
                     value_loss = jnp.mean(
-                        rlax.l2_loss(values, merge_leading_dims(target_values, 2))
+                        jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
+                            merge_leading_dims(target_values_logits, 2), value_logits
+                        )
+                    )
+
+                    # Compute the reward loss
+                    reward_loss = jnp.mean(
+                        jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
+                            merge_leading_dims(rewards_logits, 2),
+                            merge_leading_dims(predicted_rewards_logits, 2),
+                        )
                     )
 
                     # Entropy regulariser.
@@ -365,10 +389,11 @@ class MAMCTSLearnedModelLoss(Loss):
                         for parameter in jax.tree_leaves(params)
                     )
 
-                    # print("RL",jnp.isnan(reward_loss))
-                    # print("PL",jnp.isnan(policy_loss))
-                    # print("VL",jnp.isnan(value_loss))
-                    # print("RGL",jnp.isnan(l2_regularisation))
+                    # Scale the gradients by 1/N where N is sequence length
+                    sequence_length = actions.shape[-1]
+                    policy_loss = scale_gradient(policy_loss, 1 / sequence_length)
+                    value_loss = scale_gradient(value_loss, 1 / sequence_length)
+                    reward_loss = scale_gradient(reward_loss, 1 / sequence_length)
 
                     total_loss = (
                         policy_loss

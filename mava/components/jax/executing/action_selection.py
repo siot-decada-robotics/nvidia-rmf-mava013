@@ -26,7 +26,7 @@ from acme.jax import utils
 from mava.components.jax import Component
 from mava.core_jax import SystemExecutor
 from mava.systems.jax.mamcts.mcts import MCTS, MaxDepth, RecurrentFn, RootFn, TreeSearch
-from mava.systems.jax.mamcts.networks import LearnedModelNetworks, MAMCTSNetworks
+from mava.systems.jax.mamcts.networks import LearnedModelNetworks, PredictionNetworks
 
 
 @dataclass
@@ -140,6 +140,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
                 executor.store.observation.observation
             )
 
+            @jax.jit
             def pad_observation_history(stacked_observation_history):
                 padded_hist_size = (
                     self.config.history_size - stacked_observation_history.shape[2]
@@ -157,12 +158,11 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             stacked_observation_history = jnp.stack(
                 executor.store.environment_state_history[agent], -1
             )
-            stacked_observation_history = jax.lax.cond(
-                stacked_observation_history.shape[-1] < self.config.history_size,
-                pad_observation_history,
-                lambda x: x,
-                stacked_observation_history,
-            )
+
+            if stacked_observation_history.shape[-1] < self.config.history_size:
+                stacked_observation_history = pad_observation_history(
+                    stacked_observation_history
+                )
 
             stacked_observation_history = utils.add_batch_dim(
                 stacked_observation_history
@@ -182,7 +182,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             executor.store.action_history[agent].append(executor.store.action_info)
 
         elif self.config.environment_model is not None and isinstance(
-            network, MAMCTSNetworks
+            network, PredictionNetworks
         ):
             (
                 executor.store.action_info,

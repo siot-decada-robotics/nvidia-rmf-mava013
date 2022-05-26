@@ -29,7 +29,7 @@ class LearnedModel:
             prior_logits, values = learned_model.get_policy_value(embedding)
 
             return mctx.RootFnOutput(
-                prior_logits=prior_logits.logits,
+                prior_logits=prior_logits,
                 value=values,
                 embedding=embedding,
             )
@@ -47,7 +47,7 @@ class LearnedModel:
             embedding,
         ) -> mctx.RecurrentFnOutput:
 
-            new_embedding, reward = learned_model.get_next_state_reward(
+            new_embedding, reward = learned_model.get_next_state_and_reward(
                 embedding=embedding, action=action
             )
 
@@ -63,7 +63,7 @@ class LearnedModel:
                     discount=jnp.float32(discount_gamma).reshape(
                         1,
                     ),
-                    prior_logits=prior_logits.logits,
+                    prior_logits=prior_logits,
                     value=values,
                 ),
                 new_embedding,

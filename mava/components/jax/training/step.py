@@ -522,7 +522,7 @@ class MAMCTSLearnedModelStep(Step):
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
 
-        @jit
+        # @jit
         def sgd_step(
             states: TrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
@@ -608,13 +608,13 @@ class MAMCTSLearnedModelStep(Step):
             # batch = jax.tree_map(
             #     lambda x: x.reshape((batch_size,) + x.shape[2:]), trajectories
             # )
-
-            (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
-                trainer.store.epoch_update_fn,
-                (states.random_key, states.params, states.opt_states, trajectories),
-                (),
-                length=trainer.store.num_epochs,
-            )
+            with jax.disable_jit():
+                (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
+                    trainer.store.epoch_update_fn,
+                    (states.random_key, states.params, states.opt_states, trajectories),
+                    (),
+                    length=trainer.store.num_epochs,
+                )
 
             # Set the metrics
             metrics = jax.tree_map(jnp.mean, metrics)
