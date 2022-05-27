@@ -37,7 +37,7 @@ class LearnedModel:
             )
 
             values = logits_to_scalar(values)
-            # values = inv_value_transform(values)
+            values = inv_value_transform(values)
 
             return mctx.RootFnOutput(
                 prior_logits=prior_logits,
@@ -70,7 +70,7 @@ class LearnedModel:
                 observations=new_embedding, params=params["prediction"]
             )
             values = logits_to_scalar(values)
-            # values = inv_value_transform(values)
+            values = inv_value_transform(values)
 
             return (
                 mctx.RecurrentFnOutput(
