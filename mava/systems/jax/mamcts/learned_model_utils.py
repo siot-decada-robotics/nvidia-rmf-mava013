@@ -1,3 +1,5 @@
+from typing import Sequence
+
 import chex
 import jax
 import jax.numpy as jnp
@@ -42,3 +44,11 @@ def inv_value_transform(x: chex.Array, epsilon: float = 1e-3):
         ** 2
         - 1
     )
+
+
+def action_to_tile(
+    action_array: chex.Array, tile_shape: Sequence[int], num_actions: int
+):
+    action_tile_plane = jnp.ones((*tile_shape, 1), float)
+    tiled_action_one_hot = action_array * action_tile_plane / num_actions
+    return tiled_action_one_hot

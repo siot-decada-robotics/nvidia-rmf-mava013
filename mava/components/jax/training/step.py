@@ -33,7 +33,10 @@ from mava.components.jax import Component
 from mava.components.jax.training import Batch, Step, TrainingState
 from mava.components.jax.training.base import MCTSBatch
 from mava.core_jax import SystemTrainer
-from mava.systems.jax.mamcts.learned_model_utils import inv_value_transform, logits_to_scalar
+from mava.systems.jax.mamcts.learned_model_utils import (
+    inv_value_transform,
+    logits_to_scalar,
+)
 
 
 @dataclass
@@ -605,7 +608,7 @@ class MAMCTSLearnedModelStep(Step):
                 "Num minibatches must divide batch size. Got batch_size={}"
                 " num_minibatches={}."
             ).format(batch_size, trainer.store.num_minibatches)
-            
+
             (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
                 trainer.store.epoch_update_fn,
                 (states.random_key, states.params, states.opt_states, trajectories),
@@ -678,6 +681,7 @@ class MAMCTSLearnedModelStep(Step):
                 # Update the optimizer
                 # This needs to be in the loop to not lose the reference.
                 trainer.store.opt_states[net_key] = new_states.opt_states[net_key]
+                trainer.store.networks["networks"][net_key].update_inner_params()
 
             return metrics
 

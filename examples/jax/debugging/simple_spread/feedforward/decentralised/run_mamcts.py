@@ -59,7 +59,7 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def make_environment(rows=12, cols=12, evaluation: bool = None, num_agents: int = 1):
+def make_environment(rows=20, cols=20, evaluation: bool = None, num_agents: int = 1):
 
     return DebugEnvWrapper(
         DebugEnv(
@@ -74,11 +74,11 @@ def make_environment(rows=12, cols=12, evaluation: bool = None, num_agents: int 
 
 
 def network_factory(*args, **kwargs):
-   
+
     return mamcts.make_environment_model_networks(
-        num_bins=100,
+        num_bins=10,
         use_v2=True,
-        output_init_scale=0.0,
+        output_init_scale=1.0,
         *args,
         **kwargs,
     )
@@ -109,7 +109,7 @@ def main(_: Any) -> None:
 
     # Optimizer.
     optimizer = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-2)
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-3)
     )
 
     # Create the system.
@@ -142,6 +142,7 @@ def main(_: Any) -> None:
         discount=0.99,
         executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,
         # evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
+        # executor_parameter_update_period = 100
     )
 
     # Launch the system.

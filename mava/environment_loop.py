@@ -16,7 +16,6 @@
 """A simple multi-agent-system-environment training loop."""
 
 import time
-from collections import deque
 from functools import partial
 from typing import Any, Callable, Dict, Generic, NamedTuple, Optional, Tuple, TypeVar
 
@@ -721,8 +720,6 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
         episode_steps = 0
 
         self.rng_key, reset_key = random.split(self.rng_key)
-
-        
 
         state, timestep, extras = self.jitted_reset_fn(reset_key)
 

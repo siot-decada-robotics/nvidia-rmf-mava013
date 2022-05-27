@@ -45,7 +45,6 @@ DiscreteArray = dm_specs.DiscreteArray
 EntropyFn = Callable[[Any], jnp.ndarray]
 
 
-
 class PredictionNetworks:
     """TODO: Add description here."""
 
@@ -53,7 +52,7 @@ class PredictionNetworks:
         self,
         network: networks_lib.FeedForwardNetwork,
         params: networks_lib.Params,
-        num_bins : int
+        num_bins: int,
     ) -> None:
         """TODO: Add description here."""
         self.network = network
@@ -115,9 +114,9 @@ def make_prediction_network(
     # this issue. Having one function makes obs network calculations
     # easier.
     def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
-        
+
         if representation_net is None:
-            inputs = hk.Embed(128,8)(inputs.astype(int))
+            inputs = hk.Embed(128, 8)(inputs.astype(int))
 
         policy_value_network = PredictionNet(
             num_actions=num_actions,
@@ -141,7 +140,7 @@ def make_prediction_network(
         dummy_obs = dummy_obs = jnp.zeros(
             (
                 *environment_spec.observations.observation.shape,
-                representation_net.observation_history_size,
+                int(representation_net.observation_history_size * 2),
             )
         )
         dummy_obs = utils.add_batch_dim(dummy_obs)
@@ -149,7 +148,7 @@ def make_prediction_network(
         dummy_root_embedding = representation_net.forward_fn(
             representation_net.params, dummy_obs
         )
-        dummy_action = jnp.zeros((), int)
+        dummy_action = jnp.ones((), int)
         dummy_action = utils.add_batch_dim(dummy_action)
 
         dummy_embedding, _ = dynamics_net.forward_fn(
@@ -159,11 +158,7 @@ def make_prediction_network(
         params = forward_fn.init(network_key, dummy_embedding)  # type: ignore
 
     # Create PPONetworks to add functionality required by the agent.
-    return PredictionNetworks(
-        network=forward_fn,
-        params=params,
-        num_bins=num_bins
-    )
+    return PredictionNetworks(network=forward_fn, params=params, num_bins=num_bins)
 
 
 def make_environment_model_networks(
@@ -247,7 +242,10 @@ def make_representation_network(
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
     dummy_obs = jnp.zeros(
-        (*environment_spec.observations.observation.shape, observation_history_size)
+        (
+            *environment_spec.observations.observation.shape,
+            int(observation_history_size * 2),
+        )
     )
     dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
 
@@ -329,7 +327,7 @@ def make_dynamics_network(
     dummy_obs = dummy_obs = jnp.zeros(
         (
             *environment_spec.observations.observation.shape,
-            representation_net.observation_history_size,
+            int(representation_net.observation_history_size * 2),
         )
     )
     dummy_obs = utils.add_batch_dim(dummy_obs)
@@ -337,7 +335,7 @@ def make_dynamics_network(
     dummy_root_embedding = representation_net.forward_fn(
         representation_net.params, dummy_obs
     )
-    dummy_action = jnp.zeros((), int)
+    dummy_action = jnp.ones((), int)
     dummy_action = utils.add_batch_dim(dummy_action)
 
     network_key, key = jax.random.split(key)

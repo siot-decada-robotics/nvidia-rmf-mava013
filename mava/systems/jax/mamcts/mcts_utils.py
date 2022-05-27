@@ -6,8 +6,11 @@ import mctx
 from acme.jax import utils
 from chex import Array
 from mctx._src.policies import _mask_invalid_actions
-from mava.systems.jax.mamcts.learned_model_utils import inv_value_transform, logits_to_scalar
 
+from mava.systems.jax.mamcts.learned_model_utils import (
+    inv_value_transform,
+    logits_to_scalar,
+)
 from mava.systems.jax.mamcts.networks import LearnedModelNetworks, PredictionNetworks
 from mava.utils.id_utils import EntityId
 from mava.utils.tree_utils import add_batch_dim_tree, remove_batch_dim_tree, stack_trees
@@ -21,16 +24,20 @@ class LearnedModel:
         Return:
             Callable function used by the MCTS component"""
 
-        def root_fn(representation_fn, prediction_fn, params, rng_key, observation_history):
-         
+        def root_fn(
+            representation_fn, prediction_fn, params, rng_key, observation_history
+        ):
+
             embedding = representation_fn(
                 observation_history=observation_history, params=params["representation"]
             )
 
-            prior_logits, values = prediction_fn(observations=embedding,params=params["prediction"])
+            prior_logits, values = prediction_fn(
+                observations=embedding, params=params["prediction"]
+            )
 
             values = logits_to_scalar(values)
-            values = inv_value_transform(values)
+            # values = inv_value_transform(values)
 
             return mctx.RootFnOutput(
                 prior_logits=prior_logits,
@@ -52,19 +59,18 @@ class LearnedModel:
             action,
             embedding,
         ) -> mctx.RecurrentFnOutput:
-            
-            
+
             new_embedding, reward = dynamics_fn(
                 previous_embedding=embedding, action=action, params=params["dynamics"]
             )
             reward = logits_to_scalar(reward)
-            reward = inv_value_transform(reward)
+            # reward = inv_value_transform(reward)
 
             prior_logits, values = prediction_fn(
                 observations=new_embedding, params=params["prediction"]
             )
             values = logits_to_scalar(values)
-            values = inv_value_transform(values)
+            # values = inv_value_transform(values)
 
             return (
                 mctx.RecurrentFnOutput(
@@ -75,7 +81,9 @@ class LearnedModel:
                         1,
                     ),
                     prior_logits=prior_logits,
-                    value=values.reshape(1,),
+                    value=values.reshape(
+                        1,
+                    ),
                 ),
                 new_embedding,
             )
@@ -90,9 +98,9 @@ class EnvironmentModel:
         Return:
             Callable function used by the MCTS component"""
 
-        def root_fn(forward_fn , params, rng_key, env_state, observation):
-            
-            prior_logits, values = forward_fn(observations=observation, params= params)
+        def root_fn(forward_fn, params, rng_key, env_state, observation):
+
+            prior_logits, values = forward_fn(observations=observation, params=params)
             values = logits_to_scalar(values)
             values = inv_value_transform(values)
 
@@ -110,7 +118,7 @@ class EnvironmentModel:
 
         def recurrent_fn(
             environment_model: EnvironmentModelWrapper,
-            forward_fn : PredictionNetworks,
+            forward_fn: PredictionNetworks,
             params,
             rng_key,
             action,
@@ -129,7 +137,9 @@ class EnvironmentModel:
 
             observation = environment_model.get_observation(next_state, agent_info)
 
-            prior_logits, values = forward_fn(observations=utils.add_batch_dim(observation),params=params)
+            prior_logits, values = forward_fn(
+                observations=utils.add_batch_dim(observation), params=params
+            )
             values = logits_to_scalar(values)
             values = inv_value_transform(values)
 

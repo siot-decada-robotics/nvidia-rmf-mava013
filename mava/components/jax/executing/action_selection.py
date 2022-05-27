@@ -17,15 +17,18 @@
 
 from collections import deque
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Dict
 
 import acme.jax.utils as utils
+import chex
 import jax
 import jax.numpy as jnp
 from acme.jax import utils
 
 from mava.components.jax import Component
 from mava.core_jax import SystemExecutor
+from mava.systems.jax.mamcts.learned_model_utils import action_to_tile
 from mava.systems.jax.mamcts.mcts import MCTS, MaxDepth, RecurrentFn, RootFn, TreeSearch
 from mava.systems.jax.mamcts.networks import LearnedModelNetworks, PredictionNetworks
 
@@ -118,14 +121,14 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             raise ValueError("Required arguments for MCTS config have not been given")
 
         self.mcts = MCTS(self.config)
-        
+
         try:
             self.history_size = executor.store.history_size
         except:
             self.history_size = 0
 
     def on_execution_observe_first_end(self, executor: SystemExecutor) -> None:
-        
+
         executor.store.environment_state_history = {
             agent: deque(maxlen=self.history_size)
             for agent in executor.store.agent_net_keys.keys()
@@ -136,6 +139,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
         }
 
         return super().on_execution_observe_first_end(executor)
+
     # TODO figure out how to pass agent ids since it is a string
     # Select action
     def on_execution_select_action_compute(self, executor: SystemExecutor) -> None:
@@ -159,28 +163,64 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             )
 
             @jax.jit
-            def pad_observation_history(stacked_observation_history):
+            @partial(chex.assert_max_traces, n=self.history_size + 1)
+            def pad_observation_action_history(
+                stacked_observation_history, stacked_action_history
+            ):
                 padded_hist_size = (
-                    self.config.history_size - stacked_observation_history.shape[2]
+                    self.config.history_size - stacked_observation_history.shape[-1]
                 )
                 padded_obs = jnp.zeros(
                     (*stacked_observation_history.shape[0:-1], 1),
                     stacked_observation_history.dtype,
                 )
                 padded_obs = jnp.repeat(padded_obs, padded_hist_size, axis=-1)
+
                 stacked_observation_history = jnp.concatenate(
                     [padded_obs, stacked_observation_history], axis=-1
                 )
-                return stacked_observation_history
+
+                padded_actions = jnp.zeros(
+                    (*stacked_action_history.shape[0:-1], 1),
+                    stacked_action_history.dtype,
+                )
+                padded_actions = jnp.repeat(padded_actions, padded_hist_size, axis=-1)
+
+                stacked_action_history = jnp.concatenate(
+                    [padded_actions, stacked_action_history], axis=-1
+                )
+
+                stacked_action_history_one_hot = action_to_tile(
+                    stacked_action_history,
+                    stacked_observation_history.shape[:-1],
+                    action_mask.shape[-1],
+                )
+
+                return stacked_observation_history, stacked_action_history_one_hot
 
             stacked_observation_history = jnp.stack(
                 executor.store.environment_state_history[agent], -1
             )
+            stacked_action_history = jnp.stack(executor.store.action_history[agent], -1)
 
             if stacked_observation_history.shape[-1] < self.config.history_size:
-                stacked_observation_history = pad_observation_history(
-                    stacked_observation_history
+
+                (
+                    stacked_observation_history,
+                    stacked_action_history,
+                ) = pad_observation_action_history(
+                    stacked_observation_history, stacked_action_history
                 )
+            else:
+                stacked_action_history = action_to_tile(
+                    stacked_action_history,
+                    stacked_observation_history.shape[:-1],
+                    action_mask.shape[-1],
+                )
+
+            stacked_observation_history = jnp.concatenate(
+                [stacked_observation_history, stacked_action_history], axis=-1
+            )
 
             stacked_observation_history = utils.add_batch_dim(
                 stacked_observation_history

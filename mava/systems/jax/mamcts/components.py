@@ -112,7 +112,7 @@ class ExtraLearnedSearchPolicySpec(Component):
                 "observation_history": jnp.ones(
                     shape=(
                         *spec.observations.observation.shape,
-                        self.config.history_size,
+                        int(self.config.history_size * 2),
                     ),
                     dtype=spec.observations.observation.dtype,
                 ),

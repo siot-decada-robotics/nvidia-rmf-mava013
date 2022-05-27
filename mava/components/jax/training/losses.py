@@ -260,7 +260,7 @@ class MAMCTSLoss(Loss):
                     params[agent_net_key],
                     observations[agent_key].observation,
                     search_policies[agent_key],
-                    target_values[agent_key]
+                    target_values[agent_key],
                 )
             return grads, loss_info
 
@@ -337,7 +337,7 @@ class MAMCTSLearnedModelLoss(Loss):
                         (
                             new_embedding,
                             reward_logits,
-                        ) = network.dynamics_network.forward_fn(
+                        ) = network.dynamics_network.network.apply(
                             params["dynamics"], prev_state, action
                         )
                         new_embedding = scale_gradient(new_embedding, 0.5)
@@ -367,14 +367,15 @@ class MAMCTSLearnedModelLoss(Loss):
                     predicted_embeddings = jnp.concatenate(
                         [
                             jnp.expand_dims(root_embeddings, 1),
-                            predicted_embeddings[:, :-1],
+                            predicted_embeddings[:, 0:-1],
                         ],
                         axis=1,
                     )
 
                     # Get the policy and value logits for each of the generated embeddings
-                    logits, value_logits = network.prediction_network.forward_fn(
-                        params["prediction"], merge_leading_dims(predicted_embeddings, 2)
+                    logits, value_logits = network.prediction_network.network.apply(
+                        params["prediction"],
+                        merge_leading_dims(predicted_embeddings, 2),
                     )
 
                     # Compute the policy loss

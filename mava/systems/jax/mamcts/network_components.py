@@ -239,8 +239,6 @@ class DynamicsNet(hk.Module):
                 axis=(-3, -2, -1), create_scale=True, create_offset=True
             )(prev_state)
             prev_state = jax.nn.relu(prev_state)
-        # action = action[None, None, :]
-        # action_one_hot = jnp.broadcast_to(action, prev_state.shape[:-1] + action.shape[-1:])
 
         # Create Bias plane for action
         action_one_hot = jnp.ones((*prev_state.shape[0:-1], 1))

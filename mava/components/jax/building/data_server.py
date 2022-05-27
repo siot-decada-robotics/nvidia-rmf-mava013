@@ -101,8 +101,8 @@ class DataServer(Component):
 
 @dataclass
 class OffPolicyDataServerConfig:
-    sampler: reverb_types.SelectorType = reverb.selectors.Uniform()
-    remover: reverb_types.SelectorType = reverb.selectors.Fifo()
+    sampler: reverb_types.SelectorType = reverb.selectors.Uniform
+    remover: reverb_types.SelectorType = reverb.selectors.Fifo
     max_size: int = 100000
     rate_limiter: rate_limiters.RateLimiter = None
     max_times_sampled: int = 0
@@ -139,8 +139,8 @@ class OffPolicyDataServer(DataServer):
         """
         table = reverb.Table(
             name=table_key,
-            sampler=self.config.sampler,
-            remover=self.config.remover,
+            sampler=self.config.sampler(),
+            remover=self.config.remover(),
             max_size=self.config.max_size,
             rate_limiter=builder.store.rate_limiter_fn(),
             signature=builder.store.adder_signature_fn(environment_spec, extras_spec),
