@@ -64,7 +64,7 @@ class LearnedModel:
                 previous_embedding=embedding, action=action, params=params["dynamics"]
             )
             reward = logits_to_scalar(reward)
-            # reward = inv_value_transform(reward)
+            reward = inv_value_transform(reward)
 
             prior_logits, values = prediction_fn(
                 observations=new_embedding, params=params["prediction"]
@@ -208,16 +208,16 @@ class EnvironmentModel:
             observation = environment_model.get_observation(next_state, agent_info)
 
             prior_logits, values = forward_fn(
-                observations=utils.add_batch_dim(observation),
-                params=params,
-                key=rng_key,
+                observations=utils.add_batch_dim(observation), params=params
             )
+            values = logits_to_scalar(values)
+            values = inv_value_transform(values)
 
             agent_mask = utils.add_batch_dim(
                 environment_model.get_agent_mask(next_state, agent_info)
             )
 
-            prior_logits = _mask_invalid_actions(prior_logits.logits, agent_mask)
+            prior_logits = _mask_invalid_actions(prior_logits, agent_mask)
 
             reward = timestep.reward[agent_info].reshape(
                 1,
@@ -266,7 +266,7 @@ class EnvironmentModel:
             )(env_state, stacked_agents)
 
             prev_prior_logits, _ = forward_fn(
-                observations=prev_observations, params=params, key=rng_key
+                observations=prev_observations, params=params
             )
 
             other_agent_masks = jax.vmap(
@@ -274,7 +274,7 @@ class EnvironmentModel:
             )(env_state, stacked_agents)
 
             prev_prior_logits = jax.vmap(_mask_invalid_actions, in_axes=(0, 0))(
-                prev_prior_logits.logits, other_agent_masks
+                prev_prior_logits, other_agent_masks
             )
 
             agent_actions = jnp.argmax(prev_prior_logits, -1)
@@ -290,14 +290,15 @@ class EnvironmentModel:
             prior_logits, values = forward_fn(
                 observations=utils.add_batch_dim(observation),
                 params=params,
-                key=rng_key,
             )
+            values = logits_to_scalar(values)
+            values = inv_value_transform(values)
 
             agent_mask = utils.add_batch_dim(
                 environment_model.get_agent_mask(next_state, agent_info)
             )
 
-            prior_logits = _mask_invalid_actions(prior_logits.logits, agent_mask)
+            prior_logits = _mask_invalid_actions(prior_logits, agent_mask)
 
             reward = timestep.reward[agent_info].reshape(
                 1,

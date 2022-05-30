@@ -291,7 +291,6 @@ class MAMCTSLearnedModelLoss(Loss):
 
         def loss_grad_fn(
             params: Any,
-            observations: Any,
             search_policies: Dict[str, jnp.ndarray],
             target_values: Dict[str, jnp.ndarray],
             rewards: Dict[str, jnp.ndarray],
@@ -310,7 +309,6 @@ class MAMCTSLearnedModelLoss(Loss):
                 # the case of non-shared weights.
                 def loss_fn(
                     params: Any,
-                    observations: Any,
                     search_policies: jnp.ndarray,
                     target_values: jnp.ndarray,
                     rewards: jnp.ndarray,
@@ -334,12 +332,14 @@ class MAMCTSLearnedModelLoss(Loss):
                         A tuple with two elements ``output, next_state``. ``output`` is an
                         arbitrarily nested structure. ``next_state`` is the next core state, this
                         must be the same shape as ``prev_state``."""
+
                         (
                             new_embedding,
                             reward_logits,
                         ) = network.dynamics_network.network.apply(
                             params["dynamics"], prev_state, action
                         )
+
                         new_embedding = scale_gradient(new_embedding, 0.5)
                         return reward_logits, new_embedding
 
@@ -433,7 +433,6 @@ class MAMCTSLearnedModelLoss(Loss):
                     loss_fn, has_aux=True
                 )(
                     params[agent_net_key],
-                    observations[agent_key].observation,
                     search_policies[agent_key],
                     target_values[agent_key],
                     rewards[agent_key],

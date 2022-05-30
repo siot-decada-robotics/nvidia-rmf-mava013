@@ -101,11 +101,12 @@ class ParallelEpisodeAdder(EpisodeAdder, ReverbParallelAdder):
             and self._writer.episode_steps < self._max_sequence_length
         ):
             history = self._writer.history
+
             padding_step = dict(
-                observation=history["observation"],
-                action=history["action"],
-                reward=history["reward"],
-                discount=history["discount"],
+                observation=history["observations"],
+                action=history["actions"],
+                reward=history["rewards"],
+                discount=history["discounts"],
                 extras=history.get("extras", ()),
             )
             # Get shapes and dtypes from the last element.

@@ -102,7 +102,10 @@ class ExtraLearnedSearchPolicySpec(Component):
         builder.store.extras_spec = {"policy_info": {}}
 
         for agent, spec in agent_specs.items():
-
+            # TODO Change obs history back
+            size = spec.observations.observation.shape[0]
+            for s in spec.observations.observation.shape[1:]:
+                size += size * s
             # Make dummy specs
             builder.store.extras_spec["policy_info"][agent] = {
                 "search_policies": jnp.ones(
@@ -111,8 +114,8 @@ class ExtraLearnedSearchPolicySpec(Component):
                 "search_values": jnp.ones(shape=(), dtype=jnp.float32),
                 "observation_history": jnp.ones(
                     shape=(
-                        *spec.observations.observation.shape,
-                        int(self.config.history_size * 2),
+                        (size + spec.actions.num_values)
+                        * int(self.config.history_size),
                     ),
                     dtype=spec.observations.observation.dtype,
                 ),

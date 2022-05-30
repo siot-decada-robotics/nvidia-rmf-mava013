@@ -212,7 +212,9 @@ class MCTS:
     ):
         """TODO: Add description here."""
 
-        root = self.config.root_fn(representation_fn, prediction_fn, params, rng_key, observation_history)
+        root = self.config.root_fn(
+            representation_fn, prediction_fn, params, rng_key, observation_history
+        )
 
         def recurrent_fn(params, rng_key, action, embedding):
 
@@ -225,17 +227,15 @@ class MCTS:
                 embedding,
             )
 
-        root_invalid_actions = utils.add_batch_dim(1 - root_action_mask) + jnp.array(
-            [[1, 0, 0, 0, 0]]
-        )
-
+        # root_invalid_actions = utils.add_batch_dim(1 - root_action_mask) #+ jnp.array([[1, 0, 0, 0, 0]])
+        # TODO (Edan): change back
         search_output = self.config.search(
             params=params,
             rng_key=rng_key,
             root=root,
             recurrent_fn=recurrent_fn,
             num_simulations=num_simulations,
-            invalid_actions=root_invalid_actions,
+            # invalid_actions=root_invalid_actions,
             max_depth=self.config.max_depth,
             **search_kwargs,
         )

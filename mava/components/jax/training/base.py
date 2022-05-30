@@ -45,9 +45,16 @@ class MCTSBatch(NamedTuple):
     observations: Any
     search_policies: Any
     target_values: Any
+
+
+class MCTSLearnedModelBatch(NamedTuple):
+    """A batch of MAMCTS data; all shapes are expected to be [B, ...]."""
+
+    search_policies: Any
+    target_values: Any
     rewards: Any
     actions: Any
-    observation_history: Any = None
+    observation_history: Any
 
 
 class TrainingState(NamedTuple):

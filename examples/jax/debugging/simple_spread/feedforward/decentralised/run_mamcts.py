@@ -59,7 +59,7 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def make_environment(rows=20, cols=20, evaluation: bool = None, num_agents: int = 1):
+def make_environment(rows=8, cols=8, evaluation: bool = None, num_agents: int = 3):
 
     return DebugEnvWrapper(
         DebugEnv(
@@ -76,7 +76,7 @@ def make_environment(rows=20, cols=20, evaluation: bool = None, num_agents: int 
 def network_factory(*args, **kwargs):
 
     return mamcts.make_environment_model_networks(
-        num_bins=10,
+        num_bins=50,
         use_v2=True,
         output_init_scale=1.0,
         *args,
@@ -130,12 +130,10 @@ def main(_: Any) -> None:
         multi_process=True,
         environment_model=environment_factory(),
         root_fn=EnvironmentModel.environment_root_fn(),
-        recurrent_fn=EnvironmentModel.default_action_recurrent_fn(
-            0, discount_gamma=1.0
-        ),
+        recurrent_fn=EnvironmentModel.greedy_policy_recurrent_fn(discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
         num_simulations=30,
-        evaluator_num_simulations=30,
+        evaluator_num_simulations=50,
         evaluator_other_search_params=lambda: {"gumbel_scale": 0.0},
         rng_seed=0,
         n_step=10,

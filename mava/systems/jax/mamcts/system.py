@@ -126,7 +126,7 @@ class MAMCTSLearnedModelSystem(System):
             n_step_fn=training.NStepBootStrappedReturns,
             loss=training.MAMCTSLearnedModelLoss,
             epoch_update=training.MAMCTSLearnedModelEpochUpdate,
-            minibatch_update=training.MAMCTSMinibatchUpdate,
+            minibatch_update=training.MAMCTSLearnedModelMinibatchUpdate,
             sgd_step=training.MAMCTSLearnedModelStep,
             step=training.DefaultStep,
             trainer_dataset=building.TrajectoryDataset,
@@ -134,9 +134,10 @@ class MAMCTSLearnedModelSystem(System):
 
         # Data Server
         data_server_process = DesignSpec(
-            data_server=building.OnPolicyDataServer,
-            data_server_adder_signature=building.ParallelSequenceAdderSignature,
             extras_spec=ExtraLearnedSearchPolicySpec,
+            rate_limiter=building.SampleToInsertRateLimiter,
+            data_server=building.OffPolicyDataServer,
+            data_server_adder_signature=building.ParallelSequenceAdderSignature,
         ).get()
 
         # Parameter Server

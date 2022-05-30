@@ -104,58 +104,69 @@ def make_prediction_network(
     use_v2: bool = True,
     representation_net=None,
     dynamics_net=None,
+    fully_connected=False,
+    prediction_layers=(256, 256, 256),
 ) -> PredictionNetworks:
     """TODO: Add description here."""
 
     num_actions = environment_spec.actions.num_values
 
-    # TODO (dries): Investigate if one forward_fn function is slower
-    # than having a policy_fn and critic_fn. Maybe jit solves
-    # this issue. Having one function makes obs network calculations
-    # easier.
-    def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+    if fully_connected:
 
-        if representation_net is None:
-            inputs = hk.Embed(128, 8)(inputs.astype(int))
+        def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
 
-        policy_value_network = PredictionNet(
-            num_actions=num_actions,
-            num_bins=num_bins,
-            output_init_scale=output_init_scale,
-            use_v2=use_v2,
+            base_network = networks_lib.LayerNormMLP(prediction_layers)
+            policy_network = hk.Linear(num_actions)
+            value_network = hk.Linear(num_bins)
+
+            inputs = base_network(inputs)
+
+            return policy_network(inputs), value_network(inputs)
+
+        size = environment_spec.observations.observation.shape[0]
+        for s in environment_spec.observations.observation.shape[1:]:
+            size += size * s
+
+        dummy_obs = jnp.zeros(
+            ((size + num_actions) * int(representation_net.observation_history_size),)
         )
-        return policy_value_network(inputs)
-
-    # Transform into pure functions.
-    forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
-
-    network_key, key = jax.random.split(key)
-
-    if representation_net is None or dynamics_net is None:
-        dummy_obs = utils.zeros_like(environment_spec.observations.observation)
-        dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
-
-        params = forward_fn.init(network_key, dummy_obs)  # type: ignore
     else:
+
+        def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+
+            policy_value_network = PredictionNet(
+                num_actions=num_actions,
+                num_bins=num_bins,
+                output_init_scale=output_init_scale,
+                use_v2=use_v2,
+            )
+            return policy_value_network(inputs)
+
         dummy_obs = dummy_obs = jnp.zeros(
             (
                 *environment_spec.observations.observation.shape,
                 int(representation_net.observation_history_size * 2),
             )
         )
-        dummy_obs = utils.add_batch_dim(dummy_obs)
 
-        dummy_root_embedding = representation_net.forward_fn(
-            representation_net.params, dummy_obs
-        )
-        dummy_action = jnp.ones((), int)
-        dummy_action = utils.add_batch_dim(dummy_action)
+    # Transform into pure functions.
+    forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
-        dummy_embedding, _ = dynamics_net.forward_fn(
-            dynamics_net.params, dummy_root_embedding, dummy_action
-        )
+    network_key, key = jax.random.split(key)
 
-        params = forward_fn.init(network_key, dummy_embedding)  # type: ignore
+    dummy_obs = utils.add_batch_dim(dummy_obs)
+
+    dummy_root_embedding = representation_net.forward_fn(
+        representation_net.params, dummy_obs
+    )
+    dummy_action = jnp.ones((), int)
+    dummy_action = utils.add_batch_dim(dummy_action)
+
+    dummy_embedding, _ = dynamics_net.forward_fn(
+        dynamics_net.params, dummy_root_embedding, dummy_action
+    )
+
+    params = forward_fn.init(network_key, dummy_embedding)  # type: ignore
 
     # Create PPONetworks to add functionality required by the agent.
     return PredictionNetworks(network=forward_fn, params=params, num_bins=num_bins)
@@ -229,24 +240,51 @@ def make_representation_network(
     channels: int = 64,
     use_v2: bool = True,
     observation_history_size=10,
+    fully_connected=False,
+    encoding_size=100,
+    representation_layers=(256, 256, 256),
 ) -> RepresentationNetwork:
     """TODO: Add description here."""
+    num_actions = environment_spec.actions.num_values
 
-    def forward_fn(observation_history: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+    if fully_connected:
 
-        representation_network = RepresentationNet(channels=channels, use_v2=use_v2)
-        initial_state = representation_network(observation_history)
-        return initial_state
+        def forward_fn(
+            observation_history: jnp.ndarray,
+        ) -> networks_lib.FeedForwardNetwork:
+
+            representation_network = networks_lib.LayerNormMLP(
+                (*representation_layers, encoding_size)
+            )
+            initial_state = representation_network(observation_history)
+            return initial_state
+
+        size = environment_spec.observations.observation.shape[0]
+        for s in environment_spec.observations.observation.shape[1:]:
+            size += size * s
+
+        dummy_obs = jnp.zeros(((size + num_actions) * int(observation_history_size),))
+
+    else:
+
+        def forward_fn(
+            observation_history: jnp.ndarray,
+        ) -> networks_lib.FeedForwardNetwork:
+
+            representation_network = RepresentationNet(channels=channels, use_v2=use_v2)
+            initial_state = representation_network(observation_history)
+            return initial_state
+
+        dummy_obs = dummy_obs = jnp.zeros(
+            (
+                *environment_spec.observations.observation.shape,
+                int(observation_history_size * 2),
+            )
+        )
 
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
-    dummy_obs = jnp.zeros(
-        (
-            *environment_spec.observations.observation.shape,
-            int(observation_history_size * 2),
-        )
-    )
     dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
 
     network_key, key = jax.random.split(key)
@@ -298,38 +336,66 @@ def make_dynamics_network(
     output_init_scale: float = 1.0,
     use_v2: bool = True,
     representation_net=None,
+    fully_connected=False,
+    encoding_size=100,
+    dynamics_layers=(256, 256, 256),
 ) -> DynamicsNetwork:
     """TODO: Add description here."""
 
     num_actions = environment_spec.actions.num_values
 
-    # TODO (dries): Investigate if one forward_fn function is slower
-    # than having a policy_fn and critic_fn. Maybe jit solves
-    # this issue. Having one function makes obs network calculations
-    # easier.
-    def forward_fn(
-        prev_embedding: jnp.ndarray, action: jnp.ndarray
-    ) -> networks_lib.FeedForwardNetwork:
+    if fully_connected:
 
-        dynamics_network = DynamicsNet(
-            num_bins=num_bins,
-            output_init_scale=output_init_scale,
-            use_v2=use_v2,
-            num_actions=num_actions,
+        def forward_fn(
+            prev_embedding: jnp.ndarray, action: jnp.ndarray
+        ) -> networks_lib.FeedForwardNetwork:
+            action_one_hot = hk.one_hot(action, num_actions)
+            inputs = jnp.concatenate([prev_embedding, action_one_hot], axis=-1)
+            dynamics_network = networks_lib.LayerNormMLP(
+                (*dynamics_layers, encoding_size)
+            )
+            rewards_network = networks_lib.LayerNormMLP((*dynamics_layers, num_bins))
+
+            next_state = dynamics_network(inputs)
+
+            rewards = rewards_network(inputs)
+
+            return next_state, rewards
+
+        size = environment_spec.observations.observation.shape[0]
+        for s in environment_spec.observations.observation.shape[1:]:
+            size += size * s
+
+        dummy_obs = jnp.zeros(
+            ((size + num_actions) * int(representation_net.observation_history_size),)
         )
 
-        next_state, reward_logits = dynamics_network(prev_embedding, action)
+    else:
 
-        return next_state, reward_logits
+        def forward_fn(
+            prev_embedding: jnp.ndarray, action: jnp.ndarray
+        ) -> networks_lib.FeedForwardNetwork:
 
+            dynamics_network = DynamicsNet(
+                num_bins=num_bins,
+                output_init_scale=output_init_scale,
+                use_v2=use_v2,
+                num_actions=num_actions,
+            )
+
+            next_state, reward_logits = dynamics_network(prev_embedding, action)
+
+            return next_state, reward_logits
+
+        dummy_obs = dummy_obs = jnp.zeros(
+            (
+                *environment_spec.observations.observation.shape,
+                int(representation_net.observation_history_size * 2),
+            )
+        )
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
-    dummy_obs = dummy_obs = jnp.zeros(
-        (
-            *environment_spec.observations.observation.shape,
-            int(representation_net.observation_history_size * 2),
-        )
-    )
+
     dummy_obs = utils.add_batch_dim(dummy_obs)
 
     dummy_root_embedding = representation_net.forward_fn(
@@ -397,6 +463,17 @@ class LearnedModelNetworks:
             self.params["representation"], observation_history
         )
 
+    # def normalise_encoded_state(self, state_embedding, epsilon = 1e-5):
+    #      # Scale encoded state between [0, 1] (See paper appendix Training)
+    #     min_state_embedding = jnp.min(state_embedding,axis=1,keepdims=True)
+    #     max_state_embedding = jnp.max(state_embedding,axis=1,keepdims=True)
+    #     scale_state_embedding = max_state_embedding - min_state_embedding
+    #     scale_state_embedding[scale_state_embedding < epsilon] += epsilon
+    #     state_embedding_normalized = (
+    #         state_embedding - min_state_embedding
+    #     ) / scale_state_embedding
+    #     return state_embedding_normalized
+
 
 def make_learned_model_networks(
     spec: specs.EnvironmentSpec,
@@ -406,6 +483,11 @@ def make_learned_model_networks(
     output_init_scale: float = 1.0,
     use_v2: bool = True,
     observation_history_size: int = 10,
+    fully_connected=False,
+    encoding_size=100,
+    representation_layers=(256, 256, 256),
+    dynamics_layers=(256, 256, 256),
+    prediction_layers=(256, 256, 256),
 ) -> LearnedModelNetworks:
     """TODO: Add description here."""
 
@@ -415,6 +497,9 @@ def make_learned_model_networks(
         channels=channels,
         use_v2=use_v2,
         observation_history_size=observation_history_size,
+        fully_connected=fully_connected,
+        encoding_size=encoding_size,
+        representation_layers=representation_layers,
     )
 
     dynamics_net = make_dynamics_network(
@@ -424,6 +509,9 @@ def make_learned_model_networks(
         output_init_scale=output_init_scale,
         use_v2=use_v2,
         representation_net=representation_net,
+        fully_connected=fully_connected,
+        encoding_size=encoding_size,
+        dynamics_layers=dynamics_layers,
     )
 
     prediction_net = make_prediction_network(
@@ -433,6 +521,8 @@ def make_learned_model_networks(
         output_init_scale=output_init_scale,
         representation_net=representation_net,
         dynamics_net=dynamics_net,
+        fully_connected=fully_connected,
+        prediction_layers=prediction_layers,
     )
 
     return LearnedModelNetworks(
@@ -452,6 +542,11 @@ def make_default_learned_model_networks(
     output_init_scale: float = 1.0,
     use_v2: bool = True,
     observation_history_size: int = 10,
+    fully_connected=False,
+    encoding_size=100,
+    representation_layers=(256, 256, 256),
+    dynamics_layers=(256, 256, 256),
+    prediction_layers=(256, 256, 256),
 ) -> Dict[str, Any]:
     """Description here"""
 
@@ -472,6 +567,11 @@ def make_default_learned_model_networks(
             output_init_scale=output_init_scale,
             use_v2=use_v2,
             observation_history_size=observation_history_size,
+            fully_connected=fully_connected,
+            encoding_size=encoding_size,
+            representation_layers=representation_layers,
+            dynamics_layers=dynamics_layers,
+            prediction_layers=prediction_layers,
         )
 
     return {

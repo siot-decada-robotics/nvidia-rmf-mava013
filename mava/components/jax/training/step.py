@@ -17,6 +17,7 @@
 
 import time
 from dataclasses import dataclass
+from functools import partial
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import jax
@@ -31,7 +32,7 @@ from jax import jit
 
 from mava.components.jax import Component
 from mava.components.jax.training import Batch, Step, TrainingState
-from mava.components.jax.training.base import MCTSBatch
+from mava.components.jax.training.base import MCTSBatch, MCTSLearnedModelBatch
 from mava.core_jax import SystemTrainer
 from mava.systems.jax.mamcts.learned_model_utils import (
     inv_value_transform,
@@ -387,6 +388,7 @@ class MAMCTSStep(Step):
                 trainer.store.n_step_fn, in_axes=(0, 0, 0, None, None)
             )
 
+            # TODO shift as is done in the old way
             zeros = jnp.zeros_like(list(bootstrap_values.values())[0])
             # Shift the bootstrapping values up by one
             bootstrap_values = jax.tree_map(
@@ -410,8 +412,6 @@ class MAMCTSStep(Step):
                 observations=observations,
                 search_policies=search_policies,
                 target_values=target_values,
-                rewards=rewards,
-                actions=actions,
             )
 
             # Concatenate all trajectories. Reshape from [num_sequences, num_steps,..]
@@ -508,10 +508,15 @@ class MAMCTSStep(Step):
         return MAMCTSStepConfig
 
 
+@dataclass
+class MAMCTSLearnedModelStepConfig(MAMCTSStepConfig):
+    unroll_steps: int = 5
+
+
 class MAMCTSLearnedModelStep(Step):
     def __init__(
         self,
-        config: MAMCTSStepConfig = MAMCTSStepConfig(),
+        config: MAMCTSLearnedModelStepConfig = MAMCTSLearnedModelStepConfig(),
     ):
         """_summary_
 
@@ -570,13 +575,29 @@ class MAMCTSLearnedModelStep(Step):
                 trainer.store.n_step_fn, in_axes=(0, 0, 0, None, None)
             )
 
-            zeros = jnp.zeros_like(list(bootstrap_values.values())[0])
             # Shift the bootstrapping values up by one
             bootstrap_values = jax.tree_map(
-                lambda x: jnp.concatenate(
-                    [x[:, 1:], jnp.expand_dims(zeros[:, -1], -1)], -1
-                ),
+                lambda x: x[:, 1:],
                 bootstrap_values,
+            )
+
+            (
+                observations,
+                search_policies,
+                rewards,
+                actions,
+                observation_history,
+                discounts,
+            ) = jax.tree_map(
+                lambda x: x[:, :-1],
+                (
+                    observations,
+                    search_policies,
+                    rewards,
+                    actions,
+                    observation_history,
+                    discounts,
+                ),
             )
 
             target_values = {}
@@ -589,8 +610,89 @@ class MAMCTSLearnedModelStep(Step):
                     self.config.lambda_t,
                 )
 
-            trajectories = MCTSBatch(
-                observations=observations,
+            def get_start_indices(rng_key, termination):
+                end_of_sequence = (
+                    jnp.squeeze(
+                        jnp.argwhere(
+                            termination == 0, size=1, fill_value=termination.shape[-1]
+                        )
+                    )
+                    - self.config.unroll_steps
+                )
+                end_of_sequence = jax.lax.cond(
+                    end_of_sequence < 0, lambda: jnp.int32(0), lambda: end_of_sequence
+                )
+                sampled_state_index = jnp.squeeze(
+                    jax.random.randint(
+                        rng_key, (1,), minval=0, maxval=end_of_sequence + 1
+                    )
+                )
+                return sampled_state_index
+
+            def cut_trajectory(field, start_index):
+                start_other_dims = [0] * len(field.shape[1:])
+                end_other_dims = field.shape[1:]
+                return jax.lax.dynamic_slice(
+                    field,
+                    (start_index, *start_other_dims),
+                    (self.config.unroll_steps, *end_other_dims),
+                )
+
+            batch_size = list(rewards.values())[0].shape[0]
+
+            new_key, *rng_keys = jax.random.split(states.random_key, batch_size + 1)
+            index_keys = jnp.array(rng_keys)
+            indices = jax.tree_map(
+                lambda term: jax.vmap(get_start_indices, in_axes=(0, 0))(
+                    index_keys, term
+                ),
+                termination,
+            )
+
+            search_policies = jax.tree_map(
+                lambda field, index: jax.vmap(cut_trajectory, in_axes=(0, 0))(
+                    field, index
+                ),
+                search_policies,
+                indices,
+            )
+            rewards = jax.tree_map(
+                lambda field, index: jax.vmap(cut_trajectory, in_axes=(0, 0))(
+                    field, index
+                ),
+                rewards,
+                indices,
+            )
+            actions = jax.tree_map(
+                lambda field, index: jax.vmap(cut_trajectory, in_axes=(0, 0))(
+                    field, index
+                ),
+                actions,
+                indices,
+            )
+            observation_history = jax.tree_map(
+                lambda field, index: jax.vmap(cut_trajectory, in_axes=(0, 0))(
+                    field, index
+                ),
+                observation_history,
+                indices,
+            )
+            discounts = jax.tree_map(
+                lambda field, index: jax.vmap(cut_trajectory, in_axes=(0, 0))(
+                    field, index
+                ),
+                discounts,
+                indices,
+            )
+            target_values = jax.tree_map(
+                lambda field, index: jax.vmap(cut_trajectory, in_axes=(0, 0))(
+                    field, index
+                ),
+                target_values,
+                indices,
+            )
+
+            trajectories = MCTSLearnedModelBatch(
                 search_policies=search_policies,
                 target_values=target_values,
                 rewards=rewards,
@@ -601,7 +703,7 @@ class MAMCTSLearnedModelStep(Step):
             # Concatenate all trajectories. Reshape from [num_sequences, num_steps,..]
             # to [num_sequences * num_steps,..]
             agent_0_t_vals = list(target_values.values())[0]
-            assert len(agent_0_t_vals) > 1
+            assert len(agent_0_t_vals) >= 1
             num_sequences = agent_0_t_vals.shape[0]
             batch_size = num_sequences
             assert batch_size % trainer.store.num_minibatches == 0, (
@@ -611,7 +713,7 @@ class MAMCTSLearnedModelStep(Step):
 
             (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
                 trainer.store.epoch_update_fn,
-                (states.random_key, states.params, states.opt_states, trajectories),
+                (new_key, states.params, states.opt_states, trajectories),
                 (),
                 length=trainer.store.num_epochs,
             )
@@ -689,7 +791,7 @@ class MAMCTSLearnedModelStep(Step):
 
     @staticmethod
     def config_class() -> Callable:
-        return MAMCTSStepConfig
+        return MAMCTSLearnedModelStepConfig
 
     @staticmethod
     def name() -> str:

@@ -75,6 +75,7 @@ class DataServer(Component):
                 builder.store.extras_spec,
                 num_networks,
             )
+
             table = self.table(table_key, env_spec, extras_spec, builder)
             data_tables.append(table)
         return data_tables
@@ -137,13 +138,19 @@ class OffPolicyDataServer(DataServer):
         Returns:
             _description_
         """
+        if builder.store.__dict__.get("sequence_length"):
+            signature = builder.store.adder_signature_fn(
+                environment_spec, builder.store.sequence_length, extras_spec
+            )
+        else:
+            signature = builder.store.adder_signature_fn(environment_spec, extras_spec)
         table = reverb.Table(
             name=table_key,
             sampler=self.config.sampler(),
             remover=self.config.remover(),
             max_size=self.config.max_size,
             rate_limiter=builder.store.rate_limiter_fn(),
-            signature=builder.store.adder_signature_fn(environment_spec, extras_spec),
+            signature=signature,
             max_times_sampled=self.config.max_times_sampled,
         )
         return table

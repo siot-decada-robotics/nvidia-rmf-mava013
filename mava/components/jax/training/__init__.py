@@ -23,6 +23,7 @@ from mava.components.jax.training.losses import (
 )
 from mava.components.jax.training.model_updating import (
     MAMCTSLearnedModelEpochUpdate,
+    MAMCTSLearnedModelMinibatchUpdate,
     MAMCTSMinibatchUpdate,
     MAPGEpochUpdate,
     MAPGMinibatchUpdate,
