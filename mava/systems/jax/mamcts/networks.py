@@ -32,6 +32,7 @@ from mava import specs as mava_specs
 from mava.systems.jax.mamcts.learned_model_utils import (
     inv_value_transform,
     logits_to_scalar,
+    normalise_encoded_state,
 )
 from mava.systems.jax.mamcts.network_components import (
     DynamicsNet,
@@ -95,6 +96,62 @@ class PredictionNetworks:
         value = inv_value_transform(value)
         return logits, value
 
+def make_environment_model_prediction_network(
+    environment_spec: specs.EnvironmentSpec,
+    key: networks_lib.PRNGKey,
+    num_bins: int,
+    output_init_scale: float = 1.0,
+    use_v2: bool = True,
+    fully_connected=False,
+    prediction_layers=(256, 256, 256),
+) -> PredictionNetworks:
+    """TODO: Add description here."""
+
+    num_actions = environment_spec.actions.num_values
+
+    if fully_connected:
+
+        def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+
+            base_network = networks_lib.LayerNormMLP(prediction_layers)
+            policy_network = hk.Linear(num_actions)
+            value_network = hk.Linear(num_bins)
+
+            inputs = base_network(inputs)
+
+            return policy_network(inputs), value_network(inputs)
+
+        size = environment_spec.observations.observation.shape[0]
+        for s in environment_spec.observations.observation.shape[1:]:
+            size += size * s
+
+        dummy_obs = jnp.zeros(size)
+    else:
+
+        def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+            embedding_network = hk.Embed(128,8)
+            inputs = embedding_network(inputs.astype(int))
+            policy_value_network = PredictionNet(
+                num_actions=num_actions,
+                num_bins=num_bins,
+                output_init_scale=output_init_scale,
+                use_v2=use_v2,
+            )
+            return policy_value_network(inputs)
+
+        dummy_obs = jnp.zeros(environment_spec.observations.observation.shape)
+
+    # Transform into pure functions.
+    forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
+
+    network_key, key = jax.random.split(key)
+
+    dummy_obs = utils.add_batch_dim(dummy_obs)
+
+    params = forward_fn.init(network_key, dummy_obs)  # type: ignore
+
+    # Create PPONetworks to add functionality required by the agent.
+    return PredictionNetworks(network=forward_fn, params=params, num_bins=num_bins)
 
 def make_prediction_network(
     environment_spec: specs.EnvironmentSpec,
@@ -171,7 +228,6 @@ def make_prediction_network(
     # Create PPONetworks to add functionality required by the agent.
     return PredictionNetworks(network=forward_fn, params=params, num_bins=num_bins)
 
-
 def make_environment_model_networks(
     environment_spec: mava_specs.MAEnvironmentSpec,
     agent_net_keys: Dict[str, str],
@@ -192,7 +248,7 @@ def make_environment_model_networks(
 
     networks: Dict[str, Any] = {}
     for net_key in specs.keys():
-        networks[net_key] = make_prediction_network(
+        networks[net_key] = make_environment_model_prediction_network(
             specs[net_key],
             key=rng_key,
             num_bins=num_bins,
@@ -229,6 +285,7 @@ class RepresentationNetwork:
             # The parameters of the network might change. So it has to
             # be fed into the jitted function.
             root_embedding = self.network.apply(params, observation_history)
+            root_embedding = normalise_encoded_state(root_embedding)
             return root_embedding
 
         self.forward_fn = forward_fn
@@ -323,7 +380,7 @@ class DynamicsNetwork:
             embedding, reward_logits = self.network.apply(
                 params, previous_embedding, action
             )
-
+            embedding = normalise_encoded_state(embedding)
             return embedding, reward_logits
 
         self.forward_fn = forward_fn
@@ -393,6 +450,7 @@ def make_dynamics_network(
                 int(representation_net.observation_history_size * 2),
             )
         )
+        
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 

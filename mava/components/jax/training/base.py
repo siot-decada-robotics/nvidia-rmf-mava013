@@ -55,6 +55,7 @@ class MCTSLearnedModelBatch(NamedTuple):
     rewards: Any
     actions: Any
     observation_history: Any
+    priorities : Any
 
 
 class TrainingState(NamedTuple):

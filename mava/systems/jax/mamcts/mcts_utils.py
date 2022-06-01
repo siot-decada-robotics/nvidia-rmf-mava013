@@ -31,6 +31,7 @@ class LearnedModel:
             embedding = representation_fn(
                 observation_history=observation_history, params=params["representation"]
             )
+            
 
             prior_logits, values = prediction_fn(
                 observations=embedding, params=params["prediction"]

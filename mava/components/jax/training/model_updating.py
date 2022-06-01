@@ -432,6 +432,7 @@ class MAMCTSLearnedModelMinibatchUpdate(MAMCTSMinibatchUpdate):
                 minibatch.rewards,
                 minibatch.actions,
                 minibatch.observation_history,
+                minibatch.priorities
             )
 
             # Update the networks and optimizors.

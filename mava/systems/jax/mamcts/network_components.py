@@ -6,6 +6,8 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 
+from mava.systems.jax.mamcts.learned_model_utils import actions_to_tiles
+
 
 class ResidualConvBlockV1(hk.Module):
     """A v1 residual convolutional block."""
@@ -232,6 +234,7 @@ class DynamicsNet(hk.Module):
     def __call__(self, prev_state, action) -> chex.Array:
         output_init = hk.initializers.VarianceScaling(scale=self._output_init_scale)
         channels = prev_state.shape[-1]
+        tile_shape = prev_state.shape[1:-1]
         ResBlock = ResidualConvBlockV2 if self._use_v2 else ResidualConvBlockV1
         shortcut = prev_state
         if self._use_v2:
@@ -240,13 +243,10 @@ class DynamicsNet(hk.Module):
             )(prev_state)
             prev_state = jax.nn.relu(prev_state)
 
+        
         # Create Bias plane for action
-        action = hk.one_hot(action, self._num_actions, action.dtype)
-        action = action[None, None, :]
-        action_one_hot = (
-            jnp.broadcast_to(action, prev_state.shape[:-1] + action.shape[-1:])
-            / self._num_actions
-        )
+        action_one_hot = actions_to_tiles(action,tile_shape,self._num_actions)
+        
 
         x_and_h = jnp.concatenate([prev_state, action_one_hot], axis=-1)
         out = hk.Conv2D(

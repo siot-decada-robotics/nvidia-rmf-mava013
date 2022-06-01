@@ -22,6 +22,7 @@ from mava.systems.jax import System
 from mava.systems.jax.mamcts.components import (
     ExtraLearnedSearchPolicySpec,
     ExtraSearchPolicySpec,
+    ReanalyseWorker,
 )
 from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig
 
@@ -68,6 +69,8 @@ class MAMCTSSystem(System):
 
         # Data Server
         data_server_process = DesignSpec(
+            # rate_limiter=building.SampleToInsertRateLimiter,
+            # data_server=building.OffPolicyDataServer,
             data_server=building.OnPolicyDataServer,
             data_server_adder_signature=building.ParallelSequenceAdderSignature,
             extras_spec=ExtraSearchPolicySpec,

@@ -15,12 +15,13 @@
 
 """Custom components for MAMCTS system."""
 from dataclasses import dataclass
+from typing import Callable, Optional
 
 import jax.numpy as jnp
 from dm_env import specs
 
 from mava.components.jax import Component
-from mava.core_jax import SystemBuilder
+from mava.core_jax import SystemBuilder, SystemParameterServer
 
 
 @dataclass
@@ -112,13 +113,17 @@ class ExtraLearnedSearchPolicySpec(Component):
                     shape=(spec.actions.num_values,), dtype=jnp.float32
                 ),
                 "search_values": jnp.ones(shape=(), dtype=jnp.float32),
-                "observation_history": jnp.ones(
+                "observation_history": jnp.ones(  ## For Flat envs
                     shape=(
                         (size + spec.actions.num_values)
                         * int(self.config.history_size),
                     ),
                     dtype=spec.observations.observation.dtype,
                 ),
+                # "observation_history": jnp.ones( ## For non-flat envs
+                #     shape=(*spec.observations.observation.shape,2* int(self.config.history_size)),
+                #     dtype=spec.observations.observation.dtype,
+                # ),
             }
 
         # Add the networks keys to extras.
@@ -139,3 +144,50 @@ class ExtraLearnedSearchPolicySpec(Component):
     @staticmethod
     def config_class():
         return ExtraLearnedSearchPolicySpecConfig
+
+
+@dataclass
+class ReanalyseWorkerConfig:
+    pass
+
+class ReanalyseWorker(Component):
+
+    def __init__(
+        self,
+        config: ReanalyseWorkerConfig = ReanalyseWorkerConfig(),
+    ):
+        """_summary_
+
+        Args:
+            config : _description_.
+        """
+        self.config = config
+        self.dataset_iterator = None
+        self.data_server_client = None
+    
+    def on_building_trainer_dataset(self, builder: SystemBuilder) -> None:
+        
+        self.dataset_iterator = builder.store.dataset_iterator
+        self.data_server_client = builder.store.data_server_client
+
+    def reanalyse_data(self):
+        pass
+
+
+    def on_parameter_server_run_loop(self, server: SystemParameterServer) -> None:
+        if self.dataset_iterator and self.data_server_client:
+            self.reanalyse_data()
+         
+
+    @staticmethod
+    def name() -> str:
+        """Static method that returns component name."""
+        return "reanalyse_worker"
+
+    @staticmethod
+    def config_class() -> Optional[Callable]:
+        """
+        Optional class which specifies the
+        dataclass/config object for the component.
+        """
+        return ReanalyseWorkerConfig

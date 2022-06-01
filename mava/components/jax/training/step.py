@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 import reverb
 import tree
@@ -29,6 +30,7 @@ from acme.jax import utils
 from chex import Array, Scalar
 from haiku._src.basic import merge_leading_dims
 from jax import jit
+from mava.adders.base import DEFAULT_PRIORITY_TABLE
 
 from mava.components.jax import Component
 from mava.components.jax.training import Batch, Step, TrainingState
@@ -541,6 +543,10 @@ class MAMCTSLearnedModelStep(Step):
             # Extract the data.
             data = sample.data
 
+            keys, sequence_priorities, *_ = sample.info
+
+            
+
             observations, actions, rewards, termination, extra = (
                 data.observations,
                 data.actions,
@@ -568,6 +574,33 @@ class MAMCTSLearnedModelStep(Step):
                 ]
 
             agent_nets = trainer.store.trainer_agent_net_keys
+            networks = trainer.store.networks["networks"]
+
+            def get_predicted_values(
+                net_key: Any, reward: Any, observation_history: Any
+            ) -> jnp.ndarray:
+                merged_obs_hist = jax.tree_map(
+                    lambda x: merge_leading_dims(x, 2), observation_history
+                )
+                merged_root_embeddings = networks[net_key].representation_fn(
+                    states.params[net_key]["representation"], merged_obs_hist
+                )
+
+                _, predicted_value_logits = networks[net_key].prediction_fn(
+                    states.params[net_key]["prediction"], merged_root_embeddings
+                )
+                predicted_values = logits_to_scalar(predicted_value_logits)
+                predicted_values = inv_value_transform(predicted_values)
+                predicted_values = jnp.reshape(predicted_values, reward.shape[0:2])
+                return predicted_values
+
+            predicted_values = {
+                key: get_predicted_values(
+                    agent_nets[key], rewards[key], observation_history[key]
+                )
+                for key in agent_nets.keys()
+            }
+
             bootstrap_values = {key: search_values[key] for key in agent_nets.keys()}
 
             # Vmap over batch dimension
@@ -588,6 +621,7 @@ class MAMCTSLearnedModelStep(Step):
                 actions,
                 observation_history,
                 discounts,
+                predicted_values,
             ) = jax.tree_map(
                 lambda x: x[:, :-1],
                 (
@@ -597,6 +631,7 @@ class MAMCTSLearnedModelStep(Step):
                     actions,
                     observation_history,
                     discounts,
+                    predicted_values,
                 ),
             )
 
@@ -610,7 +645,13 @@ class MAMCTSLearnedModelStep(Step):
                     self.config.lambda_t,
                 )
 
-            def get_start_indices(rng_key, termination):
+            state_priorities = jax.tree_map(
+                lambda pred_val, target_val: jnp.abs(pred_val - target_val),
+                predicted_values,
+                target_values,
+            )
+
+            def get_start_indices(rng_key, termination, probabilities):
                 end_of_sequence = (
                     jnp.squeeze(
                         jnp.argwhere(
@@ -622,11 +663,17 @@ class MAMCTSLearnedModelStep(Step):
                 end_of_sequence = jax.lax.cond(
                     end_of_sequence < 0, lambda: jnp.int32(0), lambda: end_of_sequence
                 )
-                sampled_state_index = jnp.squeeze(
-                    jax.random.randint(
-                        rng_key, (1,), minval=0, maxval=end_of_sequence + 1
-                    )
+
+                probabilities = probabilities * jnp.concatenate(
+                    (jnp.array([1.0]), termination[:-1])
                 )
+
+                # Sample a state according to priorities
+                sampled_state_index = jnp.squeeze(
+                    jax.random.categorical(rng_key, probabilities, axis=-1, shape=())
+                )
+                
+
                 return sampled_state_index
 
             def cut_trajectory(field, start_index):
@@ -643,10 +690,11 @@ class MAMCTSLearnedModelStep(Step):
             new_key, *rng_keys = jax.random.split(states.random_key, batch_size + 1)
             index_keys = jnp.array(rng_keys)
             indices = jax.tree_map(
-                lambda term: jax.vmap(get_start_indices, in_axes=(0, 0))(
-                    index_keys, term
+                lambda term, probs: jax.vmap(get_start_indices, in_axes=(0, 0, 0))(
+                    index_keys, term, probs
                 ),
-                termination,
+                discounts,
+                state_priorities,
             )
 
             search_policies = jax.tree_map(
@@ -698,6 +746,7 @@ class MAMCTSLearnedModelStep(Step):
                 rewards=rewards,
                 actions=actions,
                 observation_history=observation_history,
+                priorities=sequence_priorities,
             )
 
             # Concatenate all trajectories. Reshape from [num_sequences, num_steps,..]
@@ -717,6 +766,14 @@ class MAMCTSLearnedModelStep(Step):
                 (),
                 length=trainer.store.num_epochs,
             )
+
+           
+            priorities = None
+            for agent_key in metrics:
+                if priorities is None:
+                    priorities = metrics[agent_key][agent_key].pop("priorities")
+                else:
+                    priorities += metrics[agent_key][agent_key].pop("priorities")
 
             # Set the metrics
             metrics = jax.tree_map(jnp.mean, metrics)
@@ -745,7 +802,7 @@ class MAMCTSLearnedModelStep(Step):
             new_states = TrainingState(
                 params=new_params, opt_states=new_opt_states, random_key=new_key
             )
-            return new_states, metrics
+            return new_states, metrics, keys, priorities
 
         def step(sample: reverb.ReplaySample) -> Tuple[Dict[str, jnp.ndarray]]:
 
@@ -759,8 +816,15 @@ class MAMCTSLearnedModelStep(Step):
             states = TrainingState(
                 params=params, opt_states=opt_states, random_key=random_key
             )
-            new_states, metrics = sgd_step(states, sample)
-
+            new_states, metrics, keys, priorities = sgd_step(states, sample)
+   
+            keys, priorities = tree.map_structure(utils.fetch_devicearray,(keys, jnp.squeeze(priorities)))
+            priority_updates = dict(zip(keys, priorities))
+            
+            
+            for table_key in trainer.store.table_network_config.keys():
+                trainer.store.data_server_client.mutate_priorities(table=table_key,updates=priority_updates)
+            
             # Set the new variables
             # TODO (dries): key is probably not being store correctly.
             # The variable client might lose reference to it when checkpointing.
