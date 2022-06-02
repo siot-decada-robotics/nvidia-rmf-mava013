@@ -79,7 +79,7 @@ class ExtraSearchPolicySpec(Component):
 
 @dataclass
 class ExtraLearnedSearchPolicySpecConfig:
-    history_size: int = 10
+    history_size: int = 1
     fully_connected: bool = False
 
 

@@ -96,6 +96,7 @@ class PredictionNetworks:
         value = inv_value_transform(value)
         return logits, value
 
+
 def make_environment_model_prediction_network(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
@@ -130,7 +131,7 @@ def make_environment_model_prediction_network(
     else:
 
         def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
-            embedding_network = hk.Embed(128,8)
+            embedding_network = hk.Embed(128, 8)
             inputs = embedding_network(inputs.astype(int))
             policy_value_network = PredictionNet(
                 num_actions=num_actions,
@@ -153,6 +154,7 @@ def make_environment_model_prediction_network(
 
     # Create PPONetworks to add functionality required by the agent.
     return PredictionNetworks(network=forward_fn, params=params, num_bins=num_bins)
+
 
 def make_prediction_network(
     environment_spec: specs.EnvironmentSpec,
@@ -228,6 +230,7 @@ def make_prediction_network(
 
     # Create PPONetworks to add functionality required by the agent.
     return PredictionNetworks(network=forward_fn, params=params, num_bins=num_bins)
+
 
 def make_environment_model_networks(
     environment_spec: mava_specs.MAEnvironmentSpec,
@@ -321,7 +324,7 @@ def make_representation_network(
         size = environment_spec.observations.observation.shape[0]
         for s in environment_spec.observations.observation.shape[1:]:
             size *= s
-        
+
         dummy_obs = jnp.zeros(((size + num_actions) * int(observation_history_size),))
 
     else:
@@ -410,7 +413,7 @@ def make_dynamics_network(
         ) -> networks_lib.FeedForwardNetwork:
 
             prev_embedding = utils.batch_concat(prev_embedding)
-            
+
             action_one_hot = hk.one_hot(action, num_actions)
             inputs = jnp.concatenate([prev_embedding, action_one_hot], axis=-1)
             dynamics_network = networks_lib.LayerNormMLP(
@@ -455,7 +458,7 @@ def make_dynamics_network(
                 int(representation_net.observation_history_size * 2),
             )
         )
-        
+
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
 
@@ -604,7 +607,7 @@ def make_default_learned_model_networks(
     num_bins: int = 601,
     output_init_scale: float = 1.0,
     use_v2: bool = True,
-    observation_history_size: int = 10,
+    observation_history_size: int = 1,
     fully_connected=False,
     encoding_size=100,
     representation_layers=(256, 256, 256),
