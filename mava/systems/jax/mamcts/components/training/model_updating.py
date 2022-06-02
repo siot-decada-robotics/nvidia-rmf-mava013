@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, NamedTuple, Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -8,12 +8,30 @@ from acme.jax import networks as networks_lib
 from jax.random import KeyArray
 
 from mava.components.jax.training import Utility
-from mava.components.jax.training.base import MCTSBatch, MCTSLearnedModelBatch
 from mava.components.jax.training.model_updating import (
     MAPGEpochUpdateConfig,
     MAPGMinibatchUpdateConfig,
 )
 from mava.core_jax import SystemTrainer
+
+
+class MCTSBatch(NamedTuple):
+    """A batch of MAMCTS data; all shapes are expected to be [B, ...]."""
+
+    observations: Any
+    search_policies: Any
+    target_values: Any
+
+
+class MCTSLearnedModelBatch(NamedTuple):
+    """A batch of MAMCTS data; all shapes are expected to be [B, ...]."""
+
+    search_policies: Any
+    target_values: Any
+    rewards: Any
+    actions: Any
+    observation_history: Any
+    priorities: Any
 
 
 class MAMCTSLearnedModelEpochUpdate(Utility):

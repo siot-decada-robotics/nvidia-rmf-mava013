@@ -11,9 +11,12 @@ from haiku._src.basic import merge_leading_dims
 from jax import jit
 
 from mava.components.jax.training import Step, TrainingState
-from mava.components.jax.training.base import MCTSBatch, MCTSLearnedModelBatch
 from mava.components.jax.training.step import MAPGWithTrustRegionStepConfig
 from mava.core_jax import SystemTrainer
+from mava.systems.jax.mamcts.components.training.model_updating import (
+    MCTSBatch,
+    MCTSLearnedModelBatch,
+)
 from mava.systems.jax.mamcts.learned_model_utils import (
     inv_value_transform,
     logits_to_scalar,

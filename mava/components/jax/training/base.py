@@ -39,25 +39,6 @@ class Batch(NamedTuple):
     behavior_log_probs: Any
 
 
-class MCTSBatch(NamedTuple):
-    """A batch of MAMCTS data; all shapes are expected to be [B, ...]."""
-
-    observations: Any
-    search_policies: Any
-    target_values: Any
-
-
-class MCTSLearnedModelBatch(NamedTuple):
-    """A batch of MAMCTS data; all shapes are expected to be [B, ...]."""
-
-    search_policies: Any
-    target_values: Any
-    rewards: Any
-    actions: Any
-    observation_history: Any
-    priorities : Any
-
-
 class TrainingState(NamedTuple):
     """Training state consists of network parameters and optimiser state."""
 
