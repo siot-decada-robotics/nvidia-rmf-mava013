@@ -16,11 +16,9 @@
 """Trainer components for advantage calculations."""
 
 from dataclasses import dataclass
-from typing import Callable, Tuple, Union
+from typing import Callable, Union
 
-import jax
 import jax.numpy as jnp
-import numpy as np
 import rlax
 from chex import Array, Scalar
 

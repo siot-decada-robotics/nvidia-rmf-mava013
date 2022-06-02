@@ -117,13 +117,14 @@ def make_environment_model_prediction_network(
             policy_network = hk.Linear(num_actions)
             value_network = hk.Linear(num_bins)
 
+            inputs = utils.batch_concat(inputs)
             inputs = base_network(inputs)
 
             return policy_network(inputs), value_network(inputs)
 
         size = environment_spec.observations.observation.shape[0]
         for s in environment_spec.observations.observation.shape[1:]:
-            size += size * s
+            size *= s
 
         dummy_obs = jnp.zeros(size)
     else:
@@ -175,14 +176,14 @@ def make_prediction_network(
             base_network = networks_lib.LayerNormMLP(prediction_layers)
             policy_network = hk.Linear(num_actions)
             value_network = hk.Linear(num_bins)
-
+            inputs = utils.batch_concat(inputs)
             inputs = base_network(inputs)
 
             return policy_network(inputs), value_network(inputs)
 
         size = environment_spec.observations.observation.shape[0]
         for s in environment_spec.observations.observation.shape[1:]:
-            size += size * s
+            size *= s
 
         dummy_obs = jnp.zeros(
             ((size + num_actions) * int(representation_net.observation_history_size),)
@@ -313,13 +314,14 @@ def make_representation_network(
             representation_network = networks_lib.LayerNormMLP(
                 (*representation_layers, encoding_size)
             )
+            observation_history = utils.batch_concat(observation_history)
             initial_state = representation_network(observation_history)
             return initial_state
 
         size = environment_spec.observations.observation.shape[0]
         for s in environment_spec.observations.observation.shape[1:]:
-            size += size * s
-
+            size *= s
+        
         dummy_obs = jnp.zeros(((size + num_actions) * int(observation_history_size),))
 
     else:
@@ -406,6 +408,9 @@ def make_dynamics_network(
         def forward_fn(
             prev_embedding: jnp.ndarray, action: jnp.ndarray
         ) -> networks_lib.FeedForwardNetwork:
+
+            prev_embedding = utils.batch_concat(prev_embedding)
+            
             action_one_hot = hk.one_hot(action, num_actions)
             inputs = jnp.concatenate([prev_embedding, action_one_hot], axis=-1)
             dynamics_network = networks_lib.LayerNormMLP(
@@ -421,7 +426,7 @@ def make_dynamics_network(
 
         size = environment_spec.observations.observation.shape[0]
         for s in environment_spec.observations.observation.shape[1:]:
-            size += size * s
+            size *= s
 
         dummy_obs = jnp.zeros(
             ((size + num_actions) * int(representation_net.observation_history_size),)

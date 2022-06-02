@@ -19,10 +19,28 @@ from typing import Any, Tuple
 from mava.components.jax import building, executing, training, updating
 from mava.specs import DesignSpec
 from mava.systems.jax import System
-from mava.systems.jax.mamcts.components import (
+from mava.systems.jax.mamcts.components.executing.action_selection import (
+    MCTSFeedforwardExecutorSelectAction,
+)
+from mava.systems.jax.mamcts.components.extra.extra_specs import (
     ExtraLearnedSearchPolicySpec,
     ExtraSearchPolicySpec,
-    ReanalyseWorker,
+)
+from mava.systems.jax.mamcts.components.training.losses import (
+    MAMCTSLearnedModelLoss,
+    MAMCTSLoss,
+)
+from mava.systems.jax.mamcts.components.training.model_updating import (
+    MAMCTSLearnedModelEpochUpdate,
+    MAMCTSLearnedModelMinibatchUpdate,
+    MAMCTSMinibatchUpdate,
+)
+from mava.systems.jax.mamcts.components.training.n_step_bootstrapped_returns import (
+    NStepBootStrappedReturns,
+)
+from mava.systems.jax.mamcts.components.training.step import (
+    MAMCTSLearnedModelStep,
+    MAMCTSStep,
 )
 from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig
 
@@ -49,7 +67,7 @@ class MAMCTSSystem(System):
         executor_process = DesignSpec(
             executor_init=executing.ExecutorInit,
             executor_observe=executing.FeedforwardExecutorObserve,
-            executor_select_action=executing.MCTSFeedforwardExecutorSelectAction,
+            executor_select_action=MCTSFeedforwardExecutorSelectAction,
             executor_adder=building.ParallelSequenceAdder,
             executor_environment_loop=building.JAXParallelExecutorEnvironmentLoop,
             networks=building.DefaultNetworks,
@@ -58,11 +76,11 @@ class MAMCTSSystem(System):
         # Trainer
         trainer_process = DesignSpec(
             trainer_init=training.TrainerInit,
-            n_step_fn=training.NStepBootStrappedReturns,
-            loss=training.MAMCTSLoss,
+            n_step_fn=NStepBootStrappedReturns,
+            loss=MAMCTSLoss,
             epoch_update=training.MAPGEpochUpdate,
-            minibatch_update=training.MAMCTSMinibatchUpdate,
-            sgd_step=training.MAMCTSStep,
+            minibatch_update=MAMCTSMinibatchUpdate,
+            sgd_step=MAMCTSStep,
             step=training.DefaultStep,
             trainer_dataset=building.TrajectoryDataset,
         ).get()
@@ -117,7 +135,7 @@ class MAMCTSLearnedModelSystem(System):
         executor_process = DesignSpec(
             executor_init=executing.ExecutorInit,
             executor_observe=executing.FeedforwardExecutorObserve,
-            executor_select_action=executing.MCTSFeedforwardExecutorSelectAction,
+            executor_select_action=MCTSFeedforwardExecutorSelectAction,
             executor_adder=building.ParallelSequenceAdder,
             executor_environment_loop=building.JAXParallelExecutorEnvironmentLoop,
             networks=building.DefaultNetworks,
@@ -126,11 +144,11 @@ class MAMCTSLearnedModelSystem(System):
         # Trainer
         trainer_process = DesignSpec(
             trainer_init=training.TrainerInit,
-            n_step_fn=training.NStepBootStrappedReturns,
-            loss=training.MAMCTSLearnedModelLoss,
-            epoch_update=training.MAMCTSLearnedModelEpochUpdate,
-            minibatch_update=training.MAMCTSLearnedModelMinibatchUpdate,
-            sgd_step=training.MAMCTSLearnedModelStep,
+            n_step_fn=NStepBootStrappedReturns,
+            loss=MAMCTSLearnedModelLoss,
+            epoch_update=MAMCTSLearnedModelEpochUpdate,
+            minibatch_update=MAMCTSLearnedModelMinibatchUpdate,
+            sgd_step=MAMCTSLearnedModelStep,
             step=training.DefaultStep,
             trainer_dataset=building.TrajectoryDataset,
         ).get()

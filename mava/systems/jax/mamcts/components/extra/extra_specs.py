@@ -80,6 +80,7 @@ class ExtraSearchPolicySpec(Component):
 @dataclass
 class ExtraLearnedSearchPolicySpecConfig:
     history_size: int = 10
+    fully_connected : bool = False
 
 
 class ExtraLearnedSearchPolicySpec(Component):
@@ -96,6 +97,7 @@ class ExtraLearnedSearchPolicySpec(Component):
 
     def on_building_init_end(self, builder: SystemBuilder) -> None:
         """[summary]"""
+        builder.store.fully_connected = self.config.fully_connected
         builder.store.history_size = self.config.history_size
 
         agent_specs = builder.store.environment_spec.get_agent_specs()
@@ -106,7 +108,7 @@ class ExtraLearnedSearchPolicySpec(Component):
             # TODO Change obs history back
             size = spec.observations.observation.shape[0]
             for s in spec.observations.observation.shape[1:]:
-                size += size * s
+                size *= s
             # Make dummy specs
             builder.store.extras_spec["policy_info"][agent] = {
                 "search_policies": jnp.ones(
@@ -119,11 +121,15 @@ class ExtraLearnedSearchPolicySpec(Component):
                         * int(self.config.history_size),
                     ),
                     dtype=spec.observations.observation.dtype,
+                )
+                if self.config.fully_connected
+                else jnp.ones(  ## For non-flat envs
+                    shape=(
+                        *spec.observations.observation.shape,
+                        2 * int(self.config.history_size),
+                    ),
+                    dtype=spec.observations.observation.dtype,
                 ),
-                # "observation_history": jnp.ones( ## For non-flat envs
-                #     shape=(*spec.observations.observation.shape,2* int(self.config.history_size)),
-                #     dtype=spec.observations.observation.dtype,
-                # ),
             }
 
         # Add the networks keys to extras.
@@ -144,50 +150,3 @@ class ExtraLearnedSearchPolicySpec(Component):
     @staticmethod
     def config_class():
         return ExtraLearnedSearchPolicySpecConfig
-
-
-@dataclass
-class ReanalyseWorkerConfig:
-    pass
-
-class ReanalyseWorker(Component):
-
-    def __init__(
-        self,
-        config: ReanalyseWorkerConfig = ReanalyseWorkerConfig(),
-    ):
-        """_summary_
-
-        Args:
-            config : _description_.
-        """
-        self.config = config
-        self.dataset_iterator = None
-        self.data_server_client = None
-    
-    def on_building_trainer_dataset(self, builder: SystemBuilder) -> None:
-        
-        self.dataset_iterator = builder.store.dataset_iterator
-        self.data_server_client = builder.store.data_server_client
-
-    def reanalyse_data(self):
-        pass
-
-
-    def on_parameter_server_run_loop(self, server: SystemParameterServer) -> None:
-        if self.dataset_iterator and self.data_server_client:
-            self.reanalyse_data()
-         
-
-    @staticmethod
-    def name() -> str:
-        """Static method that returns component name."""
-        return "reanalyse_worker"
-
-    @staticmethod
-    def config_class() -> Optional[Callable]:
-        """
-        Optional class which specifies the
-        dataclass/config object for the component.
-        """
-        return ReanalyseWorkerConfig
