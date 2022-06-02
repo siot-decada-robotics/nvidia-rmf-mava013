@@ -31,7 +31,6 @@ class LearnedModel:
             embedding = representation_fn(
                 observation_history=observation_history, params=params["representation"]
             )
-            
 
             prior_logits, values = prediction_fn(
                 observations=embedding, params=params["prediction"]
@@ -48,7 +47,7 @@ class LearnedModel:
 
         return root_fn
 
-    def learned_recurrent_fn(discount_gamma=0.99) -> Callable:
+    def learned_recurrent_fn(discount_gamma=1.0) -> Callable:
         """Creates a recurrent function used by the MCTS component - this setting makes
         other agents all select a default action in an individual agents tree search"""
 
