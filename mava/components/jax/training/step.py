@@ -320,7 +320,7 @@ class MAMCTSStep(Step):
     def on_training_init_start(self, trainer: SystemTrainer) -> None:
         # Note (dries): Assuming the batch and sequence dimensions are flattened.
         trainer.store.full_batch_size = trainer.store.sample_batch_size * (
-            trainer.store.sequence_length
+            trainer.store.sequence_length - 1
         )
 
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
@@ -378,11 +378,15 @@ class MAMCTSStep(Step):
                 trainer.store.n_step_fn, in_axes=(0, 0, 0, None, None)
             )
 
-            zeros = jnp.zeros_like(list(bootstrap_values.values())[0])
+            # Exclude the last step - it was only used for bootstrapping.
+            # The shape is [num_sequences, num_steps, ..]
+            observations, rewards, discounts, search_policies = jax.tree_map(
+                lambda x: x[:, :-1],
+                (observations, rewards, discounts, search_policies),
+            )
+
             # Shift the bootstrapping values up by one
-            bootstrap_values = jax.tree_map(lambda x: jnp.concatenate([x[:,1:],jnp.expand_dims(zeros[:,-1],-1)],-1), bootstrap_values)
-            
-           
+            bootstrap_values = jax.tree_map(lambda x: x[:, 1:], bootstrap_values)
 
             target_values = {}
             for key in rewards.keys():
