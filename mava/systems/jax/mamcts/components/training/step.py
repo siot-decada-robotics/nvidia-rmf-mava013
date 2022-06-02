@@ -247,7 +247,7 @@ class MAMCTSLearnedModelStep(Step):
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
 
-        @jit
+        # @jit
         def sgd_step(
             states: TrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
