@@ -608,7 +608,7 @@ def make_default_learned_model_networks(
     output_init_scale: float = 1.0,
     use_v2: bool = True,
     observation_history_size: int = 1,
-    fully_connected=False,
+    fully_connected=True,
     encoding_size=100,
     representation_layers=(256, 256, 256),
     dynamics_layers=(256, 256, 256),
