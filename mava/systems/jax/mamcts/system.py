@@ -22,6 +22,7 @@ from mava.systems.jax import System
 from mava.systems.jax.mamcts.components.executing.action_selection import (
     MCTSFeedforwardExecutorSelectAction,
 )
+from mava.systems.jax.mamcts.components.extra.adder_priority import MuzeroAdderPriority
 from mava.systems.jax.mamcts.components.extra.extra_specs import (
     ExtraLearnedSearchPolicySpec,
     ExtraSearchPolicySpec,
@@ -155,6 +156,7 @@ class MAMCTSLearnedModelSystem(System):
 
         # Data Server
         data_server_process = DesignSpec(
+            adder_priority=MuzeroAdderPriority,
             extras_spec=ExtraLearnedSearchPolicySpec,
             rate_limiter=building.SampleToInsertRateLimiter,
             data_server=building.OffPolicyDataServer,

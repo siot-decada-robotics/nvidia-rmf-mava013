@@ -17,6 +17,7 @@
 from mava.systems.jax.mamcts.components.executing.action_selection import (
     MCTSFeedforwardExecutorSelectAction,
 )
+from mava.systems.jax.mamcts.components.extra.adder_priority import MuzeroAdderPriority
 from mava.systems.jax.mamcts.components.extra.extra_specs import (
     ExtraLearnedSearchPolicySpec,
     ExtraSearchPolicySpec,

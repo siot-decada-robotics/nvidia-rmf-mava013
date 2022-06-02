@@ -80,7 +80,7 @@ class ExtraSearchPolicySpec(Component):
 @dataclass
 class ExtraLearnedSearchPolicySpecConfig:
     history_size: int = 10
-    fully_connected : bool = False
+    fully_connected: bool = False
 
 
 class ExtraLearnedSearchPolicySpec(Component):
@@ -130,6 +130,7 @@ class ExtraLearnedSearchPolicySpec(Component):
                     ),
                     dtype=spec.observations.observation.dtype,
                 ),
+                "predicted_values": jnp.ones(shape=(), dtype=jnp.float32),
             }
 
         # Add the networks keys to extras.

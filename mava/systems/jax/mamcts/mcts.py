@@ -162,7 +162,7 @@ class MCTS:
             else self.config.other_search_params()
         )
 
-        search_out = self.learned_model_search(
+        search_out, predicted_root_value = self.learned_model_search(
             representation_fn,
             dynamics_fn,
             prediction_fn,
@@ -183,6 +183,7 @@ class MCTS:
                 "search_policies": search_policy,
                 "search_values": search_value,
                 "observation_history": jnp.squeeze(observation_history, 0),
+                "predicted_values": jnp.squeeze(predicted_root_value),
             },
         )
 
@@ -242,4 +243,4 @@ class MCTS:
             **search_kwargs,
         )
 
-        return search_output
+        return search_output, root.value

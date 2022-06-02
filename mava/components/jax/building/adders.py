@@ -18,6 +18,8 @@ import abc
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
+from jax import numpy as jnp
+
 from mava import specs
 from mava.adders import reverb as reverb_adders
 from mava.components.jax import Component
@@ -238,14 +240,14 @@ class ParallelSequenceAdder(Adder):
         """
         assert not hasattr(builder.store, "adder_priority_fn")
 
-        # Create custom priority functons for the adder
-        priority_fns = {
-            table_key: lambda x: 1.0
-            for table_key in builder.store.table_network_config.keys()
-        }
+        if not hasattr(builder.store, "priority_fns"):
+            builder.store.priority_fns = {
+                table_key: lambda x: 1.0
+                for table_key in builder.store.table_network_config.keys()
+            }
 
         adder = reverb_adders.ParallelSequenceAdder(
-            priority_fns=priority_fns,
+            priority_fns=builder.store.priority_fns,
             client=builder.store.data_server_client,
             net_ids_to_keys=builder.store.unique_net_keys,
             sequence_length=self.config.sequence_length,
