@@ -9,8 +9,10 @@ from jax.random import KeyArray
 
 from mava.components.jax.training import Utility
 from mava.components.jax.training.model_updating import (
+    EpochUpdate,
     MAPGEpochUpdateConfig,
     MAPGMinibatchUpdateConfig,
+    MinibatchUpdate,
 )
 from mava.core_jax import SystemTrainer
 
@@ -34,7 +36,7 @@ class MCTSLearnedModelBatch(NamedTuple):
     priorities: Any
 
 
-class MAMCTSLearnedModelEpochUpdate(Utility):
+class MAMCTSLearnedModelEpochUpdate(EpochUpdate):
     def __init__(
         self,
         config: MAPGEpochUpdateConfig = MAPGEpochUpdateConfig(),
@@ -100,15 +102,6 @@ class MAMCTSLearnedModelEpochUpdate(Utility):
         trainer.store.epoch_update_fn = model_update_epoch
 
     @staticmethod
-    def name() -> str:
-        """_summary_
-
-        Returns:
-            _description_
-        """
-        return "epoch_update_fn"
-
-    @staticmethod
     def config_class() -> Optional[Callable]:
         """Config class used for component.
 
@@ -123,7 +116,7 @@ class MAMCTSMinibatchUpdateConfig(MAPGMinibatchUpdateConfig):
     pass
 
 
-class MAMCTSMinibatchUpdate(Utility):
+class MAMCTSMinibatchUpdate(MinibatchUpdate):
     def __init__(
         self,
         config: MAMCTSMinibatchUpdateConfig = MAMCTSMinibatchUpdateConfig(),
@@ -190,15 +183,6 @@ class MAMCTSMinibatchUpdate(Utility):
             return (params, opt_states), metrics
 
         trainer.store.minibatch_update_fn = model_update_minibatch
-
-    @staticmethod
-    def name() -> str:
-        """_summary_
-
-        Returns:
-            _description_
-        """
-        return "minibatch_update_fn"
 
     @staticmethod
     def config_class() -> Callable:

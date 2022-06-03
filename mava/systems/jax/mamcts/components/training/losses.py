@@ -331,12 +331,3 @@ class MAMCTSLearnedModelLoss(Loss):
     @staticmethod
     def config_class() -> Callable:
         return MAMCTSLearnedModelLossConfig
-
-    @staticmethod
-    def name() -> str:
-        """_summary_
-
-        Returns:
-            _description_
-        """
-        return "loss_fn"

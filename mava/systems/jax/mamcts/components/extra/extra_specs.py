@@ -22,6 +22,7 @@ from dm_env import specs
 
 from mava.components.jax import Component
 from mava.core_jax import SystemBuilder, SystemParameterServer
+from mava.systems.jax.mappo.components import ExtrasSpec
 
 
 @dataclass
@@ -29,7 +30,7 @@ class ExtraSearchPolicySpecConfig:
     pass
 
 
-class ExtraSearchPolicySpec(Component):
+class ExtraSearchPolicySpec(ExtrasSpec):
     def __init__(
         self,
         config: ExtraSearchPolicySpecConfig = ExtraSearchPolicySpecConfig(),
@@ -64,15 +65,6 @@ class ExtraSearchPolicySpec(Component):
         builder.store.extras_spec.update(net_spec)
 
     @staticmethod
-    def name() -> str:
-        """_summary_
-
-        Returns:
-            _description_
-        """
-        return "extras_search_policy"
-
-    @staticmethod
     def config_class():
         return ExtraSearchPolicySpecConfig
 
@@ -83,7 +75,7 @@ class ExtraLearnedSearchPolicySpecConfig:
     fully_connected: bool = False
 
 
-class ExtraLearnedSearchPolicySpec(Component):
+class ExtraLearnedSearchPolicySpec(ExtrasSpec):
     def __init__(
         self,
         config: ExtraLearnedSearchPolicySpecConfig = ExtraLearnedSearchPolicySpecConfig(),
@@ -138,15 +130,6 @@ class ExtraLearnedSearchPolicySpec(Component):
         agents = builder.store.environment_spec.get_agent_ids()
         net_spec = {"network_keys": {agent: int_spec for agent in agents}}
         builder.store.extras_spec.update(net_spec)
-
-    @staticmethod
-    def name() -> str:
-        """_summary_
-
-        Returns:
-            _description_
-        """
-        return "extras_search_policy"
 
     @staticmethod
     def config_class():

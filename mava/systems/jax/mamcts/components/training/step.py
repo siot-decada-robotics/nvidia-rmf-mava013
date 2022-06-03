@@ -571,12 +571,3 @@ class MAMCTSLearnedModelStep(Step):
     @staticmethod
     def config_class() -> Callable:
         return MAMCTSLearnedModelStepConfig
-
-    @staticmethod
-    def name() -> str:
-        """_summary_
-
-        Returns:
-            _description_
-        """
-        return "step_fn"
