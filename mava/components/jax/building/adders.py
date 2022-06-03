@@ -38,7 +38,7 @@ class Adder(Component):
         Returns:
             _description_
         """
-        return "adder"
+        return "executor_adder"
 
 
 @dataclass
@@ -115,7 +115,7 @@ class AdderSignature(Component):
         Returns:
             _description_
         """
-        return "adder_signature"
+        return "data_server_adder_signature"
 
     @staticmethod
     def config_class() -> Optional[Callable]:

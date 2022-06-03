@@ -94,6 +94,7 @@ class DetailedEpisodeStatistics(EnvironmentLoopStatisticsBase):
         metrics: List = ["episode_length", "episode_return", "steps_per_second"],
     ):
         super().__init__(environment_loop)
+        self._loop_label = self._logger._label
         self._summary_stats = summary_stats
         self._metrics = metrics
         self._running_statistics: Dict[str, float] = {}

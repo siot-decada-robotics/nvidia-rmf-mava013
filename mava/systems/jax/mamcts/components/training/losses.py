@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Tuple
 
+import distrax
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -176,6 +177,8 @@ class MAMCTSLearnedModelLoss(Loss):
                     priorities: jnp.ndarray,
                 ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
 
+                    batch_size = actions.shape[0]
+
                     # Get batch initial root embeddings
                     initial_observation_history = observation_history[:, 0]
 
@@ -236,6 +239,10 @@ class MAMCTSLearnedModelLoss(Loss):
                         merge_leading_dims(predicted_embeddings, 2),
                     )
 
+                    logits = distrax.Categorical(logits=logits)
+                    search_policies = distrax.Categorical(
+                        probs=merge_leading_dims(search_policies, 2)
+                    )
                     # Compute the policy loss
                     policy_loss = jnp.mean(
                         jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
@@ -243,6 +250,8 @@ class MAMCTSLearnedModelLoss(Loss):
                         ),
                         axis=-1,
                     )
+                    # KL Loss
+                    # policy_loss = jnp.mean(search_policies.kl_divergence(logits).reshape(batch_size, -1),axis=-1)
 
                     # Compute the value loss
                     value_loss = jnp.mean(
@@ -285,7 +294,7 @@ class MAMCTSLearnedModelLoss(Loss):
                     total_loss = jnp.mean(importance_weights * batch_loss)
 
                     # Calculate new sequence priorities
-                    batch_size = actions.shape[0]
+
                     predicted_value_scalar = logits_to_scalar(value_logits)
                     priorities = jnp.abs(
                         predicted_value_scalar - merge_leading_dims(target_values, 2)

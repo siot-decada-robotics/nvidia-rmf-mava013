@@ -228,9 +228,9 @@ class MCTS:
                 embedding,
             )
 
-        root_invalid_actions = utils.add_batch_dim(1 - root_action_mask) + jnp.array(
-            [[1, 0, 0, 0, 0]]
-        )
+        root_invalid_actions = utils.add_batch_dim(
+            1 - root_action_mask
+        )  # + jnp.array([[1, 0, 0, 0, 0]])
 
         search_output = self.config.search(
             params=params,
