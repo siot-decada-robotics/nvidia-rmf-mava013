@@ -15,12 +15,11 @@
 
 """Execution components for system builders"""
 
+import abc
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
-import acme.jax.utils as utils
 import jax
-import numpy as np
 from acme.jax import utils
 
 from mava.components.jax import Component
@@ -29,14 +28,49 @@ from mava.systems.jax.mamcts.mcts import MCTS, MaxDepth, RecurrentFn, RootFn, Tr
 
 
 @dataclass
-class ExecutorSelectActionProcessConfig:
+class ExecutorSelectActionConfig:
     pass
 
 
-class FeedforwardExecutorSelectAction(Component):
+class ExecutorSelectAction(Component):
+    @abc.abstractmethod
     def __init__(
         self,
-        config: ExecutorSelectActionProcessConfig = ExecutorSelectActionProcessConfig(),
+        config: ExecutorSelectActionConfig = ExecutorSelectActionConfig(),
+    ):
+        """_summary_
+
+        Args:
+            config : _description_.
+        """
+        self.config = config
+
+    # Select actions
+    @abc.abstractmethod
+    def on_execution_select_actions(self, executor: SystemExecutor) -> None:
+        """Summary"""
+        pass
+
+    # Select action
+    @abc.abstractmethod
+    def on_execution_select_action_compute(self, executor: SystemExecutor) -> None:
+        """Summary"""
+        pass
+
+    @staticmethod
+    def name() -> str:
+        """_summary_
+
+        Returns:
+            _description_
+        """
+        return "executor_select_action"
+
+
+class FeedforwardExecutorSelectAction(ExecutorSelectAction):
+    def __init__(
+        self,
+        config: ExecutorSelectActionConfig = ExecutorSelectActionConfig(),
     ):
         """_summary_
 
@@ -65,7 +99,6 @@ class FeedforwardExecutorSelectAction(Component):
         ]
 
         observation = utils.add_batch_dim(executor.store.observation.observation)
-
         rng_key, executor.store.key = jax.random.split(executor.store.key)
 
         # TODO (dries): We are currently using jit in the networks per agent.

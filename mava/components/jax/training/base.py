@@ -73,7 +73,7 @@ class Loss(Component):
         Returns:
             _description_
         """
-        return "loss_fn"
+        return "loss"
 
 
 class Step(Component):
@@ -88,4 +88,4 @@ class Step(Component):
         Returns:
             _description_
         """
-        return "step_fn"
+        return "sgd_step"
