@@ -10,7 +10,7 @@ from acme.jax import utils
 from mava.components.jax.executing.action_selection import (
     FeedforwardExecutorSelectAction,
 )
-from mava.core_jax import SystemExecutor
+from mava.core_jax import SystemBuilder, SystemExecutor
 from mava.systems.jax.mamcts.learned_model_utils import (
     join_flattened_observation_action_history,
     join_non_flattened_observation_action_history,
@@ -47,18 +47,21 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
         """
         super().__init__(config)
 
-    def on_execution_init_start(self, executor: SystemExecutor) -> None:
-
+    def on_building_init_start(self, builder: SystemBuilder) -> None:
         if None in [self.config.root_fn, self.config.recurrent_fn, self.config.search]:
             raise ValueError("Required arguments for MCTS config have not been given")
 
         if self.config.evaluator_num_simulations is None:
             self.config.evaluator_num_simulations = self.config.num_simulations
 
+        builder.store.num_simulations = self.config.num_simulations
+
         self.mcts = MCTS(self.config)
 
+        builder.store.mcts = self.mcts
+
         try:
-            self.history_size = executor.store.history_size
+            self.history_size = builder.store.history_size
         except:
             self.history_size = 0
 

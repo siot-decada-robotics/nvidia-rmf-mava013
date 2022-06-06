@@ -336,6 +336,7 @@ class MAMCTSLearnedModelStep(Step):
                 observation_history,
                 discounts,
                 predicted_values,
+                termination,
             ) = jax.tree_map(
                 lambda x: x[:, :-1],
                 (
@@ -346,6 +347,7 @@ class MAMCTSLearnedModelStep(Step):
                     observation_history,
                     discounts,
                     predicted_values,
+                    termination,
                 ),
             )
 
@@ -406,7 +408,7 @@ class MAMCTSLearnedModelStep(Step):
                 lambda term, probs: jax.vmap(get_start_indices, in_axes=(0, 0, 0))(
                     index_keys, term, probs
                 ),
-                discounts,
+                termination,
                 state_priorities,
             )
 

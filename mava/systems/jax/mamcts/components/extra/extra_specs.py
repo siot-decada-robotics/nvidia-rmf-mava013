@@ -87,10 +87,12 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
         """
         self.config = config
 
-    def on_building_init_end(self, builder: SystemBuilder) -> None:
-        """[summary]"""
+    def on_building_init_start(self, builder: SystemBuilder) -> None:
         builder.store.fully_connected = self.config.fully_connected
         builder.store.history_size = self.config.history_size
+
+    def on_building_init_end(self, builder: SystemBuilder) -> None:
+        """[summary]"""
 
         agent_specs = builder.store.environment_spec.get_agent_specs()
 

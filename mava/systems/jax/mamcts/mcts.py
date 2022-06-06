@@ -228,9 +228,12 @@ class MCTS:
                 embedding,
             )
 
-        root_invalid_actions = utils.add_batch_dim(
-            1 - root_action_mask
-        )  # + jnp.array([[1, 0, 0, 0, 0]])
+        if root_action_mask is not None:
+            root_invalid_actions = utils.add_batch_dim(
+                1 - root_action_mask
+            )  # + jnp.array([[1, 0, 0, 0, 0]])
+        else:
+            root_invalid_actions = jnp.zeros_like(root.prior_logits)
 
         search_output = self.config.search(
             params=params,

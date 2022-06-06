@@ -27,6 +27,14 @@ from mava.systems.jax.mamcts.components.extra.extra_specs import (
     ExtraLearnedSearchPolicySpec,
     ExtraSearchPolicySpec,
 )
+from mava.systems.jax.mamcts.components.reanalyse.distributor import (
+    ReanalyseDistributor,
+)
+from mava.systems.jax.mamcts.components.reanalyse.reanalyze_components import (
+    ReanalyseDataset,
+    ReanalyseParameterClient,
+    ReanalyseUpdate,
+)
 from mava.systems.jax.mamcts.components.training.losses import (
     MAMCTSLearnedModelLoss,
     MAMCTSLoss,
@@ -176,7 +184,10 @@ class MAMCTSLearnedModelSystem(System):
             **parameter_server_process,
             **executor_process,
             **trainer_process,
-            distributor=building.Distributor,
+            reanalyse_update=ReanalyseUpdate,
+            reanalyse_dataset=ReanalyseDataset,
+            reanalyse_parameter_client=ReanalyseParameterClient,
+            distributor=ReanalyseDistributor,
             logger=building.Logger,
         )
         return system, default_params

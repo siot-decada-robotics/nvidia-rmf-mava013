@@ -239,10 +239,6 @@ class MAMCTSLearnedModelLoss(Loss):
                         merge_leading_dims(predicted_embeddings, 2),
                     )
 
-                    logits = distrax.Categorical(logits=logits)
-                    search_policies = distrax.Categorical(
-                        probs=merge_leading_dims(search_policies, 2)
-                    )
                     # Compute the policy loss
                     policy_loss = jnp.mean(
                         jax.vmap(rlax.categorical_cross_entropy, in_axes=(0, 0))(
@@ -251,6 +247,10 @@ class MAMCTSLearnedModelLoss(Loss):
                         axis=-1,
                     )
                     # KL Loss
+                    # logits = distrax.Categorical(logits=logits)
+                    # search_policies = distrax.Categorical(
+                    #     probs=merge_leading_dims(search_policies, 2)
+                    # )
                     # policy_loss = jnp.mean(search_policies.kl_divergence(logits).reshape(batch_size, -1),axis=-1)
 
                     # Compute the value loss

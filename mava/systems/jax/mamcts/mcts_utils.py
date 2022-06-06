@@ -75,14 +75,14 @@ class LearnedModel:
             return (
                 mctx.RecurrentFnOutput(
                     reward=reward.reshape(
-                        1,
+                        new_embedding.shape[0],
                     ),
                     discount=jnp.float32(discount_gamma).reshape(
-                        1,
+                        new_embedding.shape[0],
                     ),
                     prior_logits=prior_logits,
                     value=values.reshape(
-                        1,
+                        new_embedding.shape[0],
                     ),
                 ),
                 new_embedding,
