@@ -73,7 +73,7 @@ def main(_: Any) -> None:
         _ : _
     """
 
-    environment_factory = make_jax_env
+    environment_factory = functools.partial(make_jax_env, mava=True)
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
