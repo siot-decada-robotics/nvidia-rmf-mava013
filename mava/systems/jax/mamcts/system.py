@@ -90,7 +90,7 @@ class MAMCTSSystem(System):
             epoch_update=training.MAPGEpochUpdate,
             minibatch_update=MAMCTSMinibatchUpdate,
             sgd_step=MAMCTSStep,
-            step=training.DefaultStep,
+            step=training.DefaultTrainerStep,
             trainer_dataset=building.TrajectoryDataset,
         ).get()
 
@@ -158,7 +158,7 @@ class MAMCTSLearnedModelSystem(System):
             epoch_update=MAMCTSLearnedModelEpochUpdate,
             minibatch_update=MAMCTSLearnedModelMinibatchUpdate,
             sgd_step=MAMCTSLearnedModelStep,
-            step=training.DefaultStep,
+            step=training.DefaultTrainerStep,
             trainer_dataset=building.TrajectoryDataset,
         ).get()
 

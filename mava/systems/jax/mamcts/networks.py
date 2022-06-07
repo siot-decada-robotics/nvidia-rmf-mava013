@@ -240,6 +240,8 @@ def make_environment_model_networks(
     num_bins: int = 601,
     output_init_scale: float = 1.0,
     use_v2: bool = True,
+    fully_connected: bool = True,
+    prediction_layers: Sequence[int] = (256,),
 ) -> Dict[str, Any]:
     """Description here"""
 
@@ -258,6 +260,8 @@ def make_environment_model_networks(
             num_bins=num_bins,
             output_init_scale=output_init_scale,
             use_v2=use_v2,
+            fully_connected=fully_connected,
+            prediction_layers=prediction_layers,
         )
 
     return {
