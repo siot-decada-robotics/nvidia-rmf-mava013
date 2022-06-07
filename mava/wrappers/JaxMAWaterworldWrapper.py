@@ -58,7 +58,7 @@ class MAWaterworldWrapper:
         """Steps the environment."""
 
         # Not sure if the order is always correct otherwise this line isnt needed
-        ordered_actions = {agent: actions[agent] for agent in self.possible_agents}
+        ordered_actions = {agent: actions[str(agent)] for agent in self.possible_agents}
 
         formatted_actions = jnp.take(
             self.action_table, jnp.array(list(ordered_actions.values())), axis=0
