@@ -21,13 +21,17 @@ class MAWaterworldWrapper:
 
         self.num_actions = self._environment.act_shape[-1]
 
-        self.num_agents = self._environment.act_shape[0]
+        self.num_agents = self._environment.num_agents
 
         self.action_table = one_hot(jnp.arange(4), 4)
 
     @property
     def possible_agents(self) -> List:
         return [EntityId(type=0, id=i) for i in range(self.num_agents)]
+
+    @property
+    def agents(self):
+        return self.possible_agents
 
     def reset(self, key):
         """Resets the episode."""

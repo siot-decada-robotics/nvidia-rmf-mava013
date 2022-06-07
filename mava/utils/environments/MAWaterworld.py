@@ -409,6 +409,7 @@ class MultiAgentWaterWorld(VectorizedTask):
         self.multi_agent_training = True
         self.max_steps = max_steps
         self.test = test
+        self.num_agents = num_agents
         self.obs_shape = tuple(
             [
                 num_agents,
