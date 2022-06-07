@@ -65,7 +65,7 @@ class ExtraSearchPolicySpec(Component):
         Returns:
             _description_
         """
-        return "extras_search_policy"
+        return "extras_spec"
 
     @staticmethod
     def config_class():

@@ -329,7 +329,7 @@ class MAMCTSMinibatchUpdate(Utility):
         Returns:
             _description_
         """
-        return "minibatch_update_fn"
+        return "minibatch_update"
 
     @staticmethod
     def config_class() -> Callable:

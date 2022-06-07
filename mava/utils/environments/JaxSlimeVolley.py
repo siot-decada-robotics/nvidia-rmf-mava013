@@ -1211,7 +1211,7 @@ class SlimeVolley(VectorizedTask):
         return self._step_fn(state, right_action, left_action)
 
     @staticmethod
-    def render(state: State, task_id: int = 0) -> Image:
+    def render(state: State) -> Image:
         """Render a specified task."""
         game = Game(state.game_state)
         canvas = game.display()

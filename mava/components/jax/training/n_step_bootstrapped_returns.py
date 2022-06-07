@@ -73,7 +73,7 @@ class NStepBootStrappedReturns(Utility):
         Returns:
             _description_
         """
-        return "n_step_bootstrapped_returns"
+        return "n_step_fn"
 
     @staticmethod
     def config_class() -> Callable:
