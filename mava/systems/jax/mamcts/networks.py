@@ -326,10 +326,9 @@ def make_representation_network(
             size *= s
 
         dummy_obs = jnp.zeros(((size + num_actions) * int(observation_history_size),))
-        print("FULLY CONNECTED PIPING")
-        print(dummy_obs)
+
     else:
-        print("Other!!!!!")
+
         def forward_fn(
             observation_history: jnp.ndarray,
         ) -> networks_lib.FeedForwardNetwork:
