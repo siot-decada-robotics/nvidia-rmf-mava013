@@ -187,7 +187,7 @@ class EnvironmentModel:
         ) -> mctx.RecurrentFnOutput:
             agent_list = environment_model.get_possible_agents()
 
-            rng_key, *agent_action_keys = jax.random.split(rng_key, len(agent_list))
+            rng_key, *agent_action_keys = jax.random.split(rng_key, len(agent_list) + 1)
 
             actions = {
                 agent_id: jax.random.randint(

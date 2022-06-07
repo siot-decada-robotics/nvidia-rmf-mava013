@@ -553,8 +553,8 @@ class JAXMonitorEnvironmentLoop(JAXDetailedEpisodeStatistics):
         self,
         environment_loop: JAXParallelEnvironmentLoop,
         filename: str = "agents",
-        record_every: int = 100,
-        fps: int = 15,
+        record_every: int = 10,
+        fps: int = 30,
         format: str = "video",
         figsize: Union[float, Tuple[int, int]] = (360, 640),
     ):

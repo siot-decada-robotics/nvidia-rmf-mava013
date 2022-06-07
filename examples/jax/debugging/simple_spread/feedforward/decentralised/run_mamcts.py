@@ -24,10 +24,12 @@ import optax
 from absl import app, flags
 from acme.jax import utils
 from acme.jax.networks.atari import DeepAtariTorso
-from marlin.mava_exps.environments.debug_env.debug_grid_env_wrapper import (
-    DebugEnvWrapper,
-)
+
+# from marlin.mava_exps.environments.debug_env.debug_grid_env_wrapper import (
+#     DebugEnvWrapper,
+# )
 from mctx import RecurrentFnOutput, RootFnOutput
+from pcb_mava.pcb_grid_utils import make_jax_env
 
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel, LearnedModel
@@ -91,7 +93,7 @@ def main(_: Any) -> None:
         _ : _
     """
     # Environment.
-    environment_factory = functools.partial(make_environment)
+    environment_factory = make_jax_env
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
