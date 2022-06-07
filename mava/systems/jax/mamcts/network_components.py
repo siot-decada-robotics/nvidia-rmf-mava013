@@ -118,7 +118,6 @@ class RepresentationNet(hk.Module):
     def __call__(self, observations: chex.Array) -> chex.Array:
         ResBlock = ResidualConvBlockV2 if self._use_v2 else ResidualConvBlockV1
         torso = [
-            lambda x: x / 255.0,
             hk.Conv2D(
                 self._channels // 2,
                 kernel_shape=3,
@@ -243,10 +242,8 @@ class DynamicsNet(hk.Module):
             )(prev_state)
             prev_state = jax.nn.relu(prev_state)
 
-        
         # Create Bias plane for action
-        action_one_hot = actions_to_tiles(action,tile_shape,self._num_actions)
-        
+        action_one_hot = actions_to_tiles(action, tile_shape, self._num_actions)
 
         x_and_h = jnp.concatenate([prev_state, action_one_hot], axis=-1)
         out = hk.Conv2D(

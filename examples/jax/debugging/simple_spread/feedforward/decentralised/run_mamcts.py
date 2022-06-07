@@ -61,20 +61,6 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def make_environment(rows=8, cols=8, evaluation: bool = None, num_agents: int = 3):
-
-    return DebugEnvWrapper(
-        DebugEnv(
-            rows,
-            cols,
-            num_agents,
-            reward_for_connection=1.0,
-            reward_for_blocked=-1.0,
-            reward_per_timestep=-1.0 / (rows + cols),
-        )
-    )
-
-
 def network_factory(*args, **kwargs):
 
     return mamcts.make_environment_model_networks(
@@ -93,7 +79,7 @@ def main(_: Any) -> None:
         _ : _
     """
     # Environment.
-    environment_factory = make_jax_env
+    environment_factory = functools.partial(make_jax_env, rows=6, cols=6, num_agents=1)
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
@@ -128,7 +114,7 @@ def main(_: Any) -> None:
         sample_batch_size=128,
         num_minibatches=8,
         num_epochs=4,
-        num_executors=8,
+        num_executors=2,
         multi_process=True,
         environment_model=environment_factory(),
         root_fn=EnvironmentModel.environment_root_fn(),
