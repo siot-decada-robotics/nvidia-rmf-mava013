@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Jax MAMCTS system."""
+"""Jax MAMCTS systems."""
 from typing import Any, Tuple
 
 from mava.components.jax import building, executing, training, updating
@@ -56,10 +56,7 @@ from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig
 
 class MAMCTSSystem(System):
     def design(self) -> Tuple[DesignSpec, Any]:
-        """Mock system design with zero components.
-
-        Returns:
-            system callback components
+        """ MAMCTS System - uses environment model.
         """
 
         # Set the default configs
@@ -96,8 +93,6 @@ class MAMCTSSystem(System):
 
         # Data Server
         data_server_process = DesignSpec(
-            # rate_limiter=building.SampleToInsertRateLimiter,
-            # data_server=building.OffPolicyDataServer,
             data_server=building.OnPolicyDataServer,
             data_server_adder_signature=building.ParallelSequenceAdderSignature,
             extras_spec=ExtraSearchPolicySpec,
@@ -124,10 +119,7 @@ class MAMCTSSystem(System):
 
 class MAMCTSLearnedModelSystem(System):
     def design(self) -> Tuple[DesignSpec, Any]:
-        """Mock system design with zero components.
-
-        Returns:
-            system callback components
+        """MAMCTS System that learns an environment model.
         """
 
         # Set the default configs

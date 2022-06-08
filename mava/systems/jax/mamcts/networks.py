@@ -47,7 +47,7 @@ EntropyFn = Callable[[Any], jnp.ndarray]
 
 
 class PredictionNetworks:
-    """TODO: Add description here."""
+    """Networks class used for policy and value predictions"""
 
     def __init__(
         self,
@@ -55,7 +55,13 @@ class PredictionNetworks:
         params: networks_lib.Params,
         num_bins: int,
     ) -> None:
-        """TODO: Add description here."""
+        """Create a PredictionNetworks object.
+        
+        Args:
+            network: an actual haiku network object.
+            params: the parameters for the network object.
+            num_bins: the number of bins the prediction network uses.
+            """
         self.network = network
         self.params = params
         self._num_bins = num_bins
@@ -65,7 +71,7 @@ class PredictionNetworks:
             params: Dict[str, jnp.ndarray],
             observations: networks_lib.Observation,
         ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-            """TODO: Add description here."""
+            """PredictionNetworks forward function - returns the logits and value logits of an input"""
             # The parameters of the network might change. So it has to
             # be fed into the jitted function.
             logits, value_logits = self.network.apply(params, observations)
@@ -75,13 +81,13 @@ class PredictionNetworks:
         self.forward_fn = forward_fn
 
     def get_logits(self, observations: networks_lib.Observation) -> jnp.ndarray:
-        """TODO: Add description here."""
+        """Get only the logits of an input"""
         logits, _ = self.forward_fn(self.params, observations)
 
         return logits
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:
-        """TODO: Add description here."""
+        """Get only the value of an input and convert it to a scalar value"""
         _, value_logits = self.forward_fn(self.params, observations)
         value = logits_to_scalar(value_logits)
         value = inv_value_transform(value)
@@ -90,7 +96,7 @@ class PredictionNetworks:
     def get_logits_and_value(
         self, observations: networks_lib.Observation
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        """TODO: Add description here."""
+        """Get both the logits and scalar value prediction of an input"""
         logits, value_logits = self.forward_fn(self.params, observations)
         value = logits_to_scalar(value_logits)
         value = inv_value_transform(value)
@@ -106,7 +112,7 @@ def make_environment_model_prediction_network(
     fully_connected=False,
     prediction_layers=(256, 256, 256),
 ) -> PredictionNetworks:
-    """TODO: Add description here."""
+    """Create a prediction network for a non-learned model system."""
 
     num_actions = environment_spec.actions.num_values
 
@@ -167,7 +173,7 @@ def make_prediction_network(
     fully_connected=False,
     prediction_layers=(256, 256, 256),
 ) -> PredictionNetworks:
-    """TODO: Add description here."""
+    """Make a prediction network"""
 
     num_actions = environment_spec.actions.num_values
 
@@ -243,7 +249,7 @@ def make_environment_model_networks(
     fully_connected: bool = True,
     prediction_layers: Sequence[int] = (256,),
 ) -> Dict[str, Any]:
-    """Description here"""
+    """Make networks for a non-learned model system"""
 
     # Create agent_type specs.
     specs = environment_spec.get_agent_specs()
@@ -271,7 +277,7 @@ def make_environment_model_networks(
 
 @dataclasses.dataclass
 class RepresentationNetwork:
-    """TODO: Add description here."""
+    """RepresentationNetwork class for a learned model system"""
 
     def __init__(
         self,
@@ -279,7 +285,7 @@ class RepresentationNetwork:
         params: networks_lib.Params,
         observation_history_size: int,
     ) -> None:
-        """TODO: Add description here."""
+        """Create a representation network"""
         self.network = network
         self.params = params
         self.observation_history_size = observation_history_size

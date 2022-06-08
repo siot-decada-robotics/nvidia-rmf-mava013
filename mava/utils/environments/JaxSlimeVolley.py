@@ -666,7 +666,7 @@ class Particle:
 class Agent:
     """keeps track of the agent in the game. note: not the policy network"""
 
-    def __init__(self, agent, c, bounce_limit=3):
+    def __init__(self, agent, c, bounce_limit=1000):
         self.p = agent
         self.state = getZeroObs()
         self.c = c
@@ -1201,7 +1201,7 @@ def get_left_obs(game_state: GameState):
 class SlimeVolley(VectorizedTask):
     """Neural Slime Volleyball Environment."""
 
-    def __init__(self, max_steps: int = 3000, test: bool = False):
+    def __init__(self, max_steps: int = 3000):
 
         self.max_steps = max_steps
         self.obs_shape = tuple(
@@ -1214,7 +1214,7 @@ class SlimeVolley(VectorizedTask):
                 3,
             ]
         )
-        self.test = test
+        self.test = True
 
         def reset_fn(key):
             next_key, key = random.split(key)

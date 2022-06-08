@@ -368,17 +368,6 @@ class MAMCTSLearnedModelStep(Step):
             )
 
             def get_start_indices(rng_key, termination, probabilities):
-                end_of_sequence = (
-                    jnp.squeeze(
-                        jnp.argwhere(
-                            termination == 0, size=1, fill_value=termination.shape[-1]
-                        )
-                    )
-                    - self.config.unroll_steps
-                )
-                end_of_sequence = jax.lax.cond(
-                    end_of_sequence < 0, lambda: jnp.int32(0), lambda: end_of_sequence
-                )
 
                 probabilities = probabilities * jnp.concatenate(
                     (jnp.array([1.0]), termination[:-1])
