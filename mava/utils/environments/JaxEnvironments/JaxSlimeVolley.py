@@ -1201,7 +1201,7 @@ def get_left_obs(game_state: GameState):
 class SlimeVolley(VectorizedTask):
     """Neural Slime Volleyball Environment."""
 
-    def __init__(self, max_steps: int = 3000, test: bool = False):
+    def __init__(self, max_steps: int = 3000):
 
         self.max_steps = max_steps
         self.obs_shape = tuple(
@@ -1214,7 +1214,8 @@ class SlimeVolley(VectorizedTask):
                 3,
             ]
         )
-        self.test = test
+        # If false then episode runs for max timesteps even if agents lose all lives
+        self.test = True
 
         def reset_fn(key):
             next_key, key = random.split(key)
