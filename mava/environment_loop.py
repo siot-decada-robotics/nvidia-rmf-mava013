@@ -636,9 +636,9 @@ class JAXParallelEnvironmentLoop(acme.core.Worker):
         self._environment = environment
 
         self.jitted_reset_fn = jax.jit(
-            chex.assert_max_traces(self._environment.reset, 1)
+            chex.assert_max_traces(self._environment.reset, 5)
         )
-        self.jitted_step_fn = jax.jit(chex.assert_max_traces(self._environment.step, 1))
+        self.jitted_step_fn = jax.jit(chex.assert_max_traces(self._environment.step, 5))
 
         self._executor = executor
         self._counter = counter or counting.Counter()

@@ -16,7 +16,7 @@ from mava.utils.sort_utils import sort_str_num
 class MAWaterworldWrapper:
     """Environment wrapper for Debugging MARL environments."""
 
-    def __init__(self, environment: MultiAgentWaterWorld, is_multi_agent: bool = True):
+    def __init__(self, environment: MultiAgentWaterWorld):
         self._environment = environment
 
         self.num_actions = self._environment.act_shape[-1]
