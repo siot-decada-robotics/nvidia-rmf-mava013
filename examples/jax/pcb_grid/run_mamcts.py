@@ -24,16 +24,11 @@ import optax
 from absl import app, flags
 from acme.jax import utils
 from acme.jax.networks.atari import DeepAtariTorso
-
-# from marlin.mava_exps.environments.debug_env.debug_grid_env_wrapper import (
-#     DebugEnvWrapper,
-# )
 from mctx import RecurrentFnOutput, RootFnOutput
 from pcb_mava.pcb_grid_utils import make_jax_env
 
 from mava.systems.jax import mamcts
-from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel, LearnedModel
-from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
+from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
     JAXDetailedEpisodeStatistics,
@@ -67,6 +62,8 @@ def network_factory(*args, **kwargs):
         num_bins=21,
         use_v2=True,
         output_init_scale=1.0,
+        fully_connected=True,
+        prediction_layers=(256, 256),
         *args,
         **kwargs,
     )
@@ -85,7 +82,7 @@ def main(_: Any) -> None:
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
-    log_every = 5
+    log_every = 1
     logger_factory = functools.partial(
         logger_utils.make_logger,
         directory=FLAGS.base_dir,
@@ -114,21 +111,21 @@ def main(_: Any) -> None:
         sample_batch_size=128,
         num_minibatches=8,
         num_epochs=4,
-        num_executors=2,
+        num_executors=6,
         multi_process=True,
-        environment_model=environment_factory(),
         root_fn=EnvironmentModel.environment_root_fn(),
         recurrent_fn=EnvironmentModel.greedy_policy_recurrent_fn(discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
-        num_simulations=20,
+        environment_model=environment_factory(),
+        num_simulations=50,
         evaluator_num_simulations=50,
         evaluator_other_search_params=lambda: {"gumbel_scale": 0.0},
         rng_seed=0,
         n_step=10,
         discount=0.99,
         executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,
-        # evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
-        # executor_parameter_update_period = 100
+        evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
+        terminal="gnome-terminal-tabs",
     )
 
     # Launch the system.

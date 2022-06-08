@@ -13,28 +13,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example running MAPPO on debug MPE environments."""
+"""Example running MAMCTS on debug MPE environments."""
 import functools
 from datetime import datetime
 from typing import Any
 
-import jax
 import haiku as hk
-from acme.jax.networks.atari import DeepAtariTorso, AtariTorso
+import mctx
 import optax
 from absl import app, flags
+from acme.jax import utils
+from acme.jax.networks.atari import DeepAtariTorso
+from mctx import RecurrentFnOutput, RootFnOutput
 
-from mava.components.jax.building.environments import JAXParallelExecutorEnvironmentLoop
-from mava.systems.jax import mappo
+from mava.systems.jax import mamcts
+from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel
+from mava.utils.environments.JaxEnvironments.jax_env_utils import make_ma_waterworld_env
 from mava.utils.loggers import logger_utils
-from pcb_mava.pcb_grid_utils import make_jax_env
-
-from mava.wrappers.environment_loop_wrappers import JAXDetailedEpisodeStatistics
+from mava.wrappers.environment_loop_wrappers import (
+    JAXDetailedEpisodeStatistics,
+    JAXDetailedPerAgentStatistics,
+    JAXMonitorEnvironmentLoop,
+)
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "env_name",
-    "simple_spread",
+    "debug_env",
     "Debugging environment name (str).",
 )
 flags.DEFINE_string(
@@ -51,16 +56,14 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-def network_factory(
-    policy_layer_sizes=(128,), critic_layer_sizes=(512, 512), *args, **kwargs
-):
-    obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), AtariTorso()])(
-        x.astype(int)
-    )
-    return mappo.make_default_networks(
-        policy_layer_sizes=policy_layer_sizes,
-        critic_layer_sizes=critic_layer_sizes,
-        observation_network=obs_net_forward,
+def network_factory(*args, **kwargs):
+
+    return mamcts.make_environment_model_networks(
+        num_bins=21,
+        use_v2=True,
+        output_init_scale=1.0,
+        fully_connected=True,
+        prediction_layers=(256, 256),
         *args,
         **kwargs,
     )
@@ -72,14 +75,14 @@ def main(_: Any) -> None:
     Args:
         _ : _
     """
-
-    environment_factory = functools.partial(make_jax_env, mava=True)
+    # Environment.
+    environment_factory = functools.partial(make_ma_waterworld_env, num_agents=5)
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
-    log_every = 5
+    log_every = 1
     logger_factory = functools.partial(
         logger_utils.make_logger,
         directory=FLAGS.base_dir,
@@ -91,29 +94,38 @@ def main(_: Any) -> None:
 
     # Optimizer.
     optimizer = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-3)
     )
 
     # Create the system.
-    system = mappo.MAPPOSystem()
-
-    system.update(JAXParallelExecutorEnvironmentLoop)
+    system = mamcts.MAMCTSSystem()
 
     # Build the system.
     system.build(
         environment_factory=environment_factory,
-        network_factory=mappo.make_default_networks,
+        network_factory=network_factory,
         logger_factory=logger_factory,
         checkpoint_subpath=checkpoint_subpath,
         optimizer=optimizer,
         run_evaluator=True,
-        sample_batch_size=256,
+        sample_batch_size=128,
         num_minibatches=8,
         num_epochs=4,
         num_executors=6,
         multi_process=True,
-        learning_rate=0.001,
+        root_fn=EnvironmentModel.environment_root_fn(),
+        recurrent_fn=EnvironmentModel.greedy_policy_recurrent_fn(discount_gamma=1.0),
+        search=mctx.gumbel_muzero_policy,
+        environment_model=environment_factory(),
+        num_simulations=50,
+        evaluator_num_simulations=50,
+        evaluator_other_search_params=lambda: {"gumbel_scale": 0.0},
+        rng_seed=0,
+        n_step=10,
+        discount=0.99,
         executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,
+        evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
+        terminal="gnome-terminal-tabs",
     )
 
     # Launch the system.
