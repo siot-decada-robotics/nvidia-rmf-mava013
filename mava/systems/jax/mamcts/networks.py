@@ -110,8 +110,6 @@ def make_environment_model_prediction_network(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
     num_bins: int,
-    output_init_scale: float = 1.0,
-    use_v2: bool = True,
     fully_connected=False,
     prediction_layers=(256, 256, 256),
     fully_connected_obs_net=utils.batch_concat,
@@ -143,11 +141,10 @@ def make_environment_model_prediction_network(
         def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
             embedding_network = hk.Embed(128, 8)
             inputs = embedding_network(inputs.astype(int))
-            policy_value_network = PredictionNet(
+            policy_value_network = SimplePredictionNet(
+                prediction_layers=prediction_layers,
                 num_actions=num_actions,
                 num_bins=num_bins,
-                output_init_scale=output_init_scale,
-                use_v2=use_v2,
             )
             return policy_value_network(inputs)
 
@@ -246,8 +243,6 @@ def make_environment_model_networks(
     rng_key: List[int],
     net_spec_keys: Dict[str, str] = {},
     num_bins: int = 601,
-    output_init_scale: float = 1.0,
-    use_v2: bool = True,
     fully_connected: bool = True,
     prediction_layers: Sequence[int] = (256,),
     fully_connected_obs_net=utils.batch_concat,
@@ -267,8 +262,6 @@ def make_environment_model_networks(
             specs[net_key],
             key=rng_key,
             num_bins=num_bins,
-            output_init_scale=output_init_scale,
-            use_v2=use_v2,
             fully_connected=fully_connected,
             prediction_layers=prediction_layers,
             fully_connected_obs_net=fully_connected_obs_net,
