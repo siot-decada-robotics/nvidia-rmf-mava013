@@ -35,9 +35,12 @@ from mava.systems.jax.mamcts.learned_model_utils import (
     normalise_encoded_state,
 )
 from mava.systems.jax.mamcts.network_components import (
-    DynamicsNet,
-    PredictionNet,
-    RepresentationNet,
+    EZDynamicsNet,
+    EZPredictionNet,
+    EZRepresentationNet,
+    SimpleDynamicsNet,
+    SimplePredictionNet,
+    SimpleRepresentationNet,
 )
 
 Array = dm_specs.Array
@@ -167,8 +170,6 @@ def make_prediction_network(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
     num_bins: int,
-    output_init_scale: float = 1.0,
-    use_v2: bool = True,
     representation_net=None,
     dynamics_net=None,
     fully_connected=False,
@@ -202,11 +203,10 @@ def make_prediction_network(
 
         def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
 
-            policy_value_network = PredictionNet(
+            policy_value_network = SimplePredictionNet(
+                prediction_layers=prediction_layers,
                 num_actions=num_actions,
                 num_bins=num_bins,
-                output_init_scale=output_init_scale,
-                use_v2=use_v2,
             )
             return policy_value_network(inputs)
 
@@ -312,8 +312,6 @@ class RepresentationNetwork:
 def make_representation_network(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
-    channels: int = 64,
-    use_v2: bool = True,
     observation_history_size=10,
     fully_connected=False,
     encoding_size=100,
@@ -348,7 +346,9 @@ def make_representation_network(
             observation_history: jnp.ndarray,
         ) -> networks_lib.FeedForwardNetwork:
 
-            representation_network = RepresentationNet(channels=channels, use_v2=use_v2)
+            representation_network = SimpleRepresentationNet(
+                representation_layers=representation_layers, encoding_size=encoding_size
+            )
             initial_state = representation_network(observation_history)
             return initial_state
 
@@ -410,12 +410,12 @@ def make_dynamics_network(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
     num_bins: int = 601,
-    output_init_scale: float = 1.0,
-    use_v2: bool = True,
     representation_net=None,
     fully_connected=False,
     encoding_size=100,
-    dynamics_layers=(256, 256, 256),
+    base_layers=(256,),
+    dynamics_layers=(256,),
+    reward_layers=(256,),
     fully_connected_obs_net=utils.batch_concat,
 ) -> DynamicsNetwork:
     """TODO: Add description here."""
@@ -457,11 +457,13 @@ def make_dynamics_network(
             prev_embedding: jnp.ndarray, action: jnp.ndarray
         ) -> networks_lib.FeedForwardNetwork:
 
-            dynamics_network = DynamicsNet(
+            dynamics_network = SimpleDynamicsNet(
+                base_layers=base_layers,
+                dynamics_layers=dynamics_layers,
+                reward_layers=reward_layers,
                 num_bins=num_bins,
-                output_init_scale=output_init_scale,
-                use_v2=use_v2,
                 num_actions=num_actions,
+                encoding_size=encoding_size,
             )
 
             next_state, reward_logits = dynamics_network(prev_embedding, action)
@@ -545,31 +547,19 @@ class LearnedModelNetworks:
             self.params["representation"], observation_history
         )
 
-    # def normalise_encoded_state(self, state_embedding, epsilon = 1e-5):
-    #      # Scale encoded state between [0, 1] (See paper appendix Training)
-    #     min_state_embedding = jnp.min(state_embedding,axis=1,keepdims=True)
-    #     max_state_embedding = jnp.max(state_embedding,axis=1,keepdims=True)
-    #     scale_state_embedding = max_state_embedding - min_state_embedding
-    #     scale_state_embedding[scale_state_embedding < epsilon] += epsilon
-    #     state_embedding_normalized = (
-    #         state_embedding - min_state_embedding
-    #     ) / scale_state_embedding
-    #     return state_embedding_normalized
-
 
 def make_learned_model_networks(
     spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
-    channels: int = 64,
     num_bins: int = 601,
-    output_init_scale: float = 1.0,
-    use_v2: bool = True,
-    observation_history_size: int = 10,
+    observation_history_size: int = 1,
     fully_connected=False,
     encoding_size=100,
     representation_layers=(256, 256, 256),
-    dynamics_layers=(256, 256, 256),
-    prediction_layers=(256, 256, 256),
+    base_layers=(256, 256),
+    dynamics_layers=(256,),
+    reward_layers=(256,),
+    prediction_layers=(256, 256),
     representation_obs_net=utils.batch_concat,
     dynamics_obs_net=utils.batch_concat,
     prediction_obs_net=utils.batch_concat,
@@ -579,8 +569,6 @@ def make_learned_model_networks(
     representation_net = make_representation_network(
         environment_spec=spec,
         key=key,
-        channels=channels,
-        use_v2=use_v2,
         observation_history_size=observation_history_size,
         fully_connected=fully_connected,
         encoding_size=encoding_size,
@@ -592,12 +580,12 @@ def make_learned_model_networks(
         environment_spec=spec,
         key=key,
         num_bins=num_bins,
-        output_init_scale=output_init_scale,
-        use_v2=use_v2,
         representation_net=representation_net,
         fully_connected=fully_connected,
         encoding_size=encoding_size,
+        base_layers=base_layers,
         dynamics_layers=dynamics_layers,
+        reward_layers=reward_layers,
         fully_connected_obs_net=dynamics_obs_net,
     )
 
@@ -605,7 +593,6 @@ def make_learned_model_networks(
         environment_spec=spec,
         key=key,
         num_bins=num_bins,
-        output_init_scale=output_init_scale,
         representation_net=representation_net,
         dynamics_net=dynamics_net,
         fully_connected=fully_connected,
@@ -625,15 +612,14 @@ def make_default_learned_model_networks(
     agent_net_keys: Dict[str, str],
     rng_key: List[int],
     net_spec_keys: Dict[str, str] = {},
-    channels: int = 64,
     num_bins: int = 601,
-    output_init_scale: float = 1.0,
-    use_v2: bool = True,
     observation_history_size: int = 1,
     fully_connected=True,
     encoding_size=100,
     representation_layers=(256, 256, 256),
+    base_layers=(256,),
     dynamics_layers=(256, 256, 256),
+    reward_layers=(256,),
     prediction_layers=(256, 256, 256),
     representation_obs_net=utils.batch_concat,
     dynamics_obs_net=utils.batch_concat,
@@ -653,14 +639,13 @@ def make_default_learned_model_networks(
         networks[net_key] = make_learned_model_networks(
             specs[net_key],
             key=rng_key,
-            channels=channels,
             num_bins=num_bins,
-            output_init_scale=output_init_scale,
-            use_v2=use_v2,
             observation_history_size=observation_history_size,
             fully_connected=fully_connected,
             encoding_size=encoding_size,
             representation_layers=representation_layers,
+            base_layers=base_layers,
+            reward_layers=reward_layers,
             dynamics_layers=dynamics_layers,
             prediction_layers=prediction_layers,
             representation_obs_net=representation_obs_net,

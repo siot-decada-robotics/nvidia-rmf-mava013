@@ -5,6 +5,8 @@ import chex
 import haiku as hk
 import jax
 import jax.numpy as jnp
+from acme.jax import networks as networks_lib
+from acme.jax.networks.atari import DeepAtariTorso
 
 from mava.systems.jax.mamcts.learned_model_utils import actions_to_tiles
 
@@ -107,11 +109,11 @@ class ResidualConvBlockV2(hk.Module):
         return shortcut + out
 
 
-class RepresentationNet(hk.Module):
+class EZRepresentationNet(hk.Module):
     """EfficientZero encoder architecture."""
 
     def __init__(self, channels, use_v2, name="representation_net"):
-        super(RepresentationNet, self).__init__(name=name)
+        super(EZRepresentationNet, self).__init__(name=name)
         self._channels = channels
         self._use_v2 = use_v2
 
@@ -149,11 +151,11 @@ class RepresentationNet(hk.Module):
         return hk.Sequential(torso)(observations)
 
 
-class PredictionNet(hk.Module):
+class EZPredictionNet(hk.Module):
     def __init__(
         self, num_actions, num_bins, output_init_scale, use_v2, name="prediction_net"
     ):
-        super(PredictionNet, self).__init__(name=name)
+        super(EZPredictionNet, self).__init__(name=name)
         self._num_actions = num_actions
         self._num_bins = num_bins
         self._output_init_scale = output_init_scale
@@ -218,13 +220,13 @@ class PredictionNet(hk.Module):
         return logits, value_logits
 
 
-class DynamicsNet(hk.Module):
+class EZDynamicsNet(hk.Module):
     """EfficientZero transition architecture."""
 
     def __init__(
         self, num_bins, output_init_scale, use_v2, num_actions=1, name="dynamics_net"
     ):
-        super(DynamicsNet, self).__init__(name=name)
+        super(EZDynamicsNet, self).__init__(name=name)
         self._use_v2 = use_v2
         self._output_init_scale = output_init_scale
         self._num_bins = num_bins
@@ -284,3 +286,86 @@ class DynamicsNet(hk.Module):
         reward_logits = hk.Sequential(reward_head)(prev_state)
 
         return next_state, reward_logits
+
+
+class SimplePredictionNet(hk.Module):
+    def __init__(self, prediction_layers, num_actions, num_bins, name="prediction_net"):
+        super(SimplePredictionNet, self).__init__(name=name)
+        self._num_actions = num_actions
+        self._num_bins = num_bins
+        self.prediction_layers = prediction_layers
+
+    def __call__(self, states: chex.Array) -> Tuple[chex.Array, chex.Array, chex.Array]:
+
+        base_network = networks_lib.LayerNormMLP(self.prediction_layers)
+        policy_network = hk.Linear(self._num_actions)
+        value_network = hk.Linear(self._num_bins)
+
+        inputs = base_network(states)
+
+        return policy_network(inputs), value_network(inputs)
+
+
+class SimpleDynamicsNet(hk.Module):
+    """Simple transition architecture."""
+
+    def __init__(
+        self,
+        base_layers,
+        dynamics_layers,
+        reward_layers,
+        encoding_size,
+        num_bins,
+        num_actions=1,
+        name="dynamics_net",
+    ):
+        super(SimpleDynamicsNet, self).__init__(name=name)
+        self._num_bins = num_bins
+        self._num_actions = num_actions
+        self.base_layers = base_layers
+        self.dynamics_layers = dynamics_layers
+        self.reward_layers = reward_layers
+        self.encoding_size = encoding_size
+
+    def __call__(self, prev_state, action) -> chex.Array:
+
+        action_one_hot = hk.one_hot(action, self._num_actions)
+        inputs = jnp.concatenate([prev_state, action_one_hot], axis=-1)
+        base_network = networks_lib.LayerNormMLP(self.base_layers, activate_final=True)
+
+        dynamics_network = networks_lib.LayerNormMLP(
+            (*self.dynamics_layers, self.encoding_size)
+        )
+
+        rewards_network = networks_lib.LayerNormMLP(
+            (*self.reward_layers, self._num_bins)
+        )
+
+        base_inputs = base_network(inputs)
+
+        next_state = dynamics_network(base_inputs)
+
+        rewards = rewards_network(base_inputs)
+
+        return next_state, rewards
+
+
+class SimpleRepresentationNet(hk.Module):
+    """Simple encoder architecture."""
+
+    def __init__(self, representation_layers, encoding_size, name="representation_net"):
+        super(SimpleRepresentationNet, self).__init__(name=name)
+        self.representation_layers = representation_layers
+        self.encoding_size = encoding_size
+
+    def __call__(self, observations: chex.Array) -> chex.Array:
+        observations = observations.astype(int)
+        observations = hk.Embed(128, 8)(observations)
+        observations = hk.Flatten(preserve_dims=3)(observations)
+        observations = DeepAtariTorso()(observations)
+
+        encoded_state = networks_lib.LayerNormMLP(
+            (*self.representation_layers, self.encoding_size)
+        )(observations)
+
+        return encoded_state

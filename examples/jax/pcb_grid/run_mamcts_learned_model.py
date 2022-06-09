@@ -26,7 +26,6 @@ import reverb
 from absl import app, flags
 from acme.jax import utils
 from acme.jax.networks import base
-from acme.jax.networks.atari import DeepAtariTorso
 from mctx import RecurrentFnOutput, RootFnOutput
 from pcb_mava.pcb_grid_utils import make_jax_env
 
@@ -68,22 +67,17 @@ FULLY_CONNECTED = False
 
 
 def network_factory(*args, **kwargs):
-    obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), DeepAtariTorso()])(
-        x.astype(int)
-    )
 
     return mamcts.make_default_learned_model_networks(
         num_bins=21,
-        use_v2=True,
-        channels=64,
         observation_history_size=GAME_HISTORY_SIZE,
-        output_init_scale=1.0,
         fully_connected=FULLY_CONNECTED,
-        representation_layers=(),
+        representation_layers=(256,),
+        base_layers=(256,),
         dynamics_layers=(256,),
+        reward_layers=(256,),
         prediction_layers=(256,),
         encoding_size=64,
-        representation_obs_net=obs_net_forward,
         *args,
         **kwargs,
     )
