@@ -60,7 +60,7 @@ def network_factory(*args, **kwargs):
 
     return mamcts.make_default_mamcts_networks(
         num_bins=21,
-        prediction_layers=(256, 256),
+        base_prediction_layers=(256, 256),
         *args,
         **kwargs,
     )

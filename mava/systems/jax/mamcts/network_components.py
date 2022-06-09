@@ -288,19 +288,39 @@ class EZDynamicsNet(hk.Module):
 
 
 class SimplePredictionNet(hk.Module):
-    def __init__(self, prediction_layers, num_actions, num_bins, name="prediction_net"):
+    def __init__(
+        self,
+        base_prediction_layers,
+        num_actions,
+        num_bins,
+        value_prediction_layers,
+        policy_prediction_layers,
+        name="prediction_net",
+    ):
         super(SimplePredictionNet, self).__init__(name=name)
         self._num_actions = num_actions
         self._num_bins = num_bins
-        self.prediction_layers = prediction_layers
+        self.base_prediction_layers = base_prediction_layers
+        self.value_prediction_layers = value_prediction_layers
+        self.policy_prediction_layers = policy_prediction_layers
 
     def __call__(self, states: chex.Array) -> Tuple[chex.Array, chex.Array, chex.Array]:
 
-        base_network = networks_lib.LayerNormMLP(self.prediction_layers)
-        policy_network = hk.Linear(self._num_actions)
-        value_network = hk.Linear(self._num_bins)
+        if self.base_prediction_layers:
+            base_network = networks_lib.LayerNormMLP(
+                self.base_prediction_layers, activate_final=True
+            )
+        else:
+            base_network = lambda x: x
 
         inputs = base_network(states)
+
+        policy_network = networks_lib.LayerNormMLP(
+            (*self.policy_prediction_layers, self._num_actions)
+        )
+        value_network = networks_lib.LayerNormMLP(
+            (*self.value_prediction_layers, self._num_bins)
+        )
 
         return policy_network(inputs), value_network(inputs)
 
@@ -310,7 +330,7 @@ class SimpleDynamicsNet(hk.Module):
 
     def __init__(
         self,
-        base_layers,
+        base_transition_layers,
         dynamics_layers,
         reward_layers,
         encoding_size,
@@ -321,16 +341,22 @@ class SimpleDynamicsNet(hk.Module):
         super(SimpleDynamicsNet, self).__init__(name=name)
         self._num_bins = num_bins
         self._num_actions = num_actions
-        self.base_layers = base_layers
+        self.base_layers = base_transition_layers
         self.dynamics_layers = dynamics_layers
         self.reward_layers = reward_layers
         self.encoding_size = encoding_size
 
     def __call__(self, prev_state, action) -> chex.Array:
 
+        if self.base_layers:
+            base_network = networks_lib.LayerNormMLP(
+                self.base_layers, activate_final=True
+            )
+        else:
+            base_network = lambda x: x
+
         action_one_hot = hk.one_hot(action, self._num_actions)
         inputs = jnp.concatenate([prev_state, action_one_hot], axis=-1)
-        base_network = networks_lib.LayerNormMLP(self.base_layers, activate_final=True)
 
         dynamics_network = networks_lib.LayerNormMLP(
             (*self.dynamics_layers, self.encoding_size)

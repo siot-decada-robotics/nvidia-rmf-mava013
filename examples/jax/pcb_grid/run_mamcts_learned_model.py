@@ -79,7 +79,7 @@ def network_factory(*args, **kwargs):
         base_layers=(256,),
         dynamics_layers=(256,),
         reward_layers=(256,),
-        prediction_layers=(256,),
+        base_prediction_layers=(256,),
         encoding_size=64,
         representation_obs_net=rep_obs_net,
         *args,

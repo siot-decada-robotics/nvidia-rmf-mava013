@@ -221,7 +221,7 @@ def make_mamcts_prediction_network(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
     num_bins: int,
-    prediction_layers: Sequence[int],
+    base_prediction_layers: Sequence[int],
     observation_net=utils.batch_concat,
 ) -> PredictionNetwork:
     """Create a prediction network for a non-learned model system."""
@@ -231,7 +231,7 @@ def make_mamcts_prediction_network(
     def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
         inputs = observation_net(inputs)
         policy_value_network = SimplePredictionNet(
-            prediction_layers=prediction_layers,
+            base_prediction_layers=base_prediction_layers,
             num_actions=num_actions,
             num_bins=num_bins,
         )
@@ -258,7 +258,7 @@ def make_default_mamcts_networks(
     rng_key: List[int],
     net_spec_keys: Dict[str, str] = {},
     num_bins: int = 601,
-    prediction_layers: Sequence[int] = (256,),
+    base_prediction_layers: Sequence[int] = (256,),
     observation_net=utils.batch_concat,
 ) -> Dict[str, Any]:
     """Make networks for a mamcts system"""
@@ -276,7 +276,7 @@ def make_default_mamcts_networks(
             specs[net_key],
             key=rng_key,
             num_bins=num_bins,
-            prediction_layers=prediction_layers,
+            base_prediction_layers=base_prediction_layers,
             observation_net=observation_net,
         )
 
@@ -291,7 +291,9 @@ def make_mamu_prediction_network(
     num_bins: int,
     representation_net,
     dynamics_net,
-    prediction_layers=(256, 256, 256),
+    base_prediction_layers,
+    value_prediction_layers,
+    policy_prediction_layers,
     observation_net=utils.batch_concat,
 ) -> PredictionNetwork:
     """Make a prediction network"""
@@ -301,9 +303,11 @@ def make_mamu_prediction_network(
     def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
         inputs = observation_net(inputs)
         policy_value_network = SimplePredictionNet(
-            prediction_layers=prediction_layers,
+            base_prediction_layers=base_prediction_layers,
             num_actions=num_actions,
             num_bins=num_bins,
+            value_prediction_layers=value_prediction_layers,
+            policy_prediction_layers=policy_prediction_layers,
         )
         return policy_value_network(inputs)
 
@@ -386,7 +390,7 @@ def make_mamu_dynamics_network(
     representation_net,
     num_bins: int,
     encoding_size: int,
-    base_layers: Sequence[int],
+    base_transition_layers: Sequence[int],
     dynamics_layers: Sequence[int],
     reward_layers: Sequence[int],
     observation_net,
@@ -401,7 +405,7 @@ def make_mamu_dynamics_network(
         prev_embedding = observation_net(prev_embedding)
 
         dynamics_network = SimpleDynamicsNet(
-            base_layers=base_layers,
+            base_transition_layers=base_transition_layers,
             dynamics_layers=dynamics_layers,
             reward_layers=reward_layers,
             num_bins=num_bins,
@@ -428,7 +432,7 @@ def make_mamu_dynamics_network(
     dummy_root_embedding = representation_net.forward_fn(
         representation_net.params, dummy_obs
     )
-    print(dummy_root_embedding.shape)
+
     dummy_action = jnp.ones((), int)
     dummy_action = utils.add_batch_dim(dummy_action)
 
@@ -449,10 +453,12 @@ def make_mamu_networks(
     observation_history_size,
     encoding_size,
     representation_layers,
-    base_layers,
+    base_transition_layers,
     dynamics_layers,
     reward_layers,
-    prediction_layers,
+    base_prediction_layers,
+    value_prediction_layers,
+    policy_prediction_layers,
     representation_obs_net,
     dynamics_obs_net,
     prediction_obs_net,
@@ -474,7 +480,7 @@ def make_mamu_networks(
         num_bins=num_bins,
         representation_net=representation_net,
         encoding_size=encoding_size,
-        base_layers=base_layers,
+        base_transition_layers=base_transition_layers,
         dynamics_layers=dynamics_layers,
         reward_layers=reward_layers,
         observation_net=dynamics_obs_net,
@@ -486,7 +492,9 @@ def make_mamu_networks(
         num_bins=num_bins,
         representation_net=representation_net,
         dynamics_net=dynamics_net,
-        prediction_layers=prediction_layers,
+        base_prediction_layers=base_prediction_layers,
+        value_prediction_layers=value_prediction_layers,
+        policy_prediction_layers=policy_prediction_layers,
         observation_net=prediction_obs_net,
     )
 
@@ -506,10 +514,12 @@ def make_default_mamu_networks(
     observation_history_size: int = 1,
     encoding_size: int = 100,
     representation_layers: Sequence[int] = (256, 256),
-    base_layers: Sequence[int] = (256,),
+    base_transition_layers: Sequence[int] = (256,),
     dynamics_layers: Sequence[int] = (256,),
     reward_layers: Sequence[int] = (256,),
-    prediction_layers: Sequence[int] = (256, 256),
+    base_prediction_layers: Sequence[int] = (256, 256),
+    value_prediction_layers=(16,),
+    policy_prediction_layers=(16,),
     representation_obs_net=identity,
     dynamics_obs_net=identity,
     prediction_obs_net=identity,
@@ -532,10 +542,12 @@ def make_default_mamu_networks(
             observation_history_size=observation_history_size,
             encoding_size=encoding_size,
             representation_layers=representation_layers,
-            base_layers=base_layers,
+            base_transition_layers=base_transition_layers,
             reward_layers=reward_layers,
             dynamics_layers=dynamics_layers,
-            prediction_layers=prediction_layers,
+            base_prediction_layers=base_prediction_layers,
+            value_prediction_layers=value_prediction_layers,
+            policy_prediction_layers=policy_prediction_layers,
             representation_obs_net=representation_obs_net,
             dynamics_obs_net=dynamics_obs_net,
             prediction_obs_net=prediction_obs_net,

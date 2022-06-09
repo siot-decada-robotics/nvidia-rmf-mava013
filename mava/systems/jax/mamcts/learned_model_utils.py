@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Sequence
 
 import acme.jax.utils as utils
@@ -55,15 +56,13 @@ def normalise_encoded_state(encoded_state: chex.Array, epsilon: float = 1e-5):
     return encoded_state_normalized
 
 
+@partial(jax.jit, static_argnames=["tile_shape"])
 def actions_to_tiles(
     action_array: chex.Array,
     tile_shape: Sequence[int],
     num_actions: int,
-    scale_by_actions: bool = False,
     shift_actions_by: int = 0,
 ):
-    if not scale_by_actions:
-        num_actions = 1
 
     tiled_actions = (
         jax.vmap(lambda x: jnp.full(tile_shape, x), out_axes=(-1))(action_array)
@@ -96,6 +95,7 @@ def join_flattened_observation_action_history(
     return full_history
 
 
+@jax.jit
 def join_non_flattened_observation_action_history(
     stacked_observation_history: chex.Array,
     stacked_action_history: chex.Array,
@@ -118,6 +118,7 @@ def join_non_flattened_observation_action_history(
     return full_history
 
 
+@partial(jax.jit, static_argnames=["history_size"])
 def pad_history(
     stacked_observation_history: chex.Array,
     stacked_action_history: chex.Array,

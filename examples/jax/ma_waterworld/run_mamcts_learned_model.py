@@ -75,7 +75,7 @@ def network_factory(*args, **kwargs):
         observation_history_size=GAME_HISTORY_SIZE,
         representation_layers=(),
         dynamics_layers=(16,),
-        prediction_layers=(16,),
+        base_prediction_layers=(16,),
         encoding_size=8,
         *args,
         **kwargs,
