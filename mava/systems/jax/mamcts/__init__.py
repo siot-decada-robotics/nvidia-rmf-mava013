@@ -22,26 +22,20 @@ from mava.systems.jax.mamcts.components.extra.extra_specs import (
     ExtraLearnedSearchPolicySpec,
     ExtraSearchPolicySpec,
 )
-from mava.systems.jax.mamcts.components.training.losses import (
-    MAMCTSLearnedModelLoss,
-    MAMCTSLoss,
-)
+from mava.systems.jax.mamcts.components.training.losses import MAMCTSLoss, MAMULoss
 from mava.systems.jax.mamcts.components.training.model_updating import (
-    MAMCTSLearnedModelEpochUpdate,
-    MAMCTSLearnedModelMinibatchUpdate,
     MAMCTSMinibatchUpdate,
+    MAMUBatch,
+    MAMUEpochUpdate,
+    MAMUMinibatchUpdate,
     MCTSBatch,
-    MCTSLearnedModelBatch,
 )
 from mava.systems.jax.mamcts.components.training.n_step_bootstrapped_returns import (
     NStepBootStrappedReturns,
 )
-from mava.systems.jax.mamcts.components.training.step import (
-    MAMCTSLearnedModelStep,
-    MAMCTSStep,
-)
+from mava.systems.jax.mamcts.components.training.step import MAMCTSStep, MAMUStep
 from mava.systems.jax.mamcts.networks import (
-    make_default_learned_model_networks,
-    make_environment_model_networks,
+    make_default_mamcts_networks,
+    make_default_mamu_networks,
 )
-from mava.systems.jax.mamcts.system import MAMCTSLearnedModelSystem, MAMCTSSystem
+from mava.systems.jax.mamcts.system import MAMCTSSystem, MAMUSystem

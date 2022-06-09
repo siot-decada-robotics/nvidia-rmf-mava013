@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Jax MAMCTS systems."""
+"""Jax MAMCTS and MAMU systems."""
 from typing import Any, Tuple
 
 from mava.components.jax import building, executing, training, updating
@@ -35,29 +35,22 @@ from mava.systems.jax.mamcts.components.reanalyse.reanalyze_components import (
     ReanalyseParameterClient,
     ReanalyseUpdate,
 )
-from mava.systems.jax.mamcts.components.training.losses import (
-    MAMCTSLearnedModelLoss,
-    MAMCTSLoss,
-)
+from mava.systems.jax.mamcts.components.training.losses import MAMCTSLoss, MAMULoss
 from mava.systems.jax.mamcts.components.training.model_updating import (
-    MAMCTSLearnedModelEpochUpdate,
-    MAMCTSLearnedModelMinibatchUpdate,
     MAMCTSMinibatchUpdate,
+    MAMUEpochUpdate,
+    MAMUMinibatchUpdate,
 )
 from mava.systems.jax.mamcts.components.training.n_step_bootstrapped_returns import (
     NStepBootStrappedReturns,
 )
-from mava.systems.jax.mamcts.components.training.step import (
-    MAMCTSLearnedModelStep,
-    MAMCTSStep,
-)
+from mava.systems.jax.mamcts.components.training.step import MAMCTSStep, MAMUStep
 from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig
 
 
 class MAMCTSSystem(System):
     def design(self) -> Tuple[DesignSpec, Any]:
-        """ MAMCTS System - uses environment model.
-        """
+        """MAMCTS System - uses environment model."""
 
         # Set the default configs
         default_params = MAMCTSDefaultConfig()
@@ -117,10 +110,9 @@ class MAMCTSSystem(System):
         return system, default_params
 
 
-class MAMCTSLearnedModelSystem(System):
+class MAMUSystem(System):
     def design(self) -> Tuple[DesignSpec, Any]:
-        """MAMCTS System that learns an environment model.
-        """
+        """MAMCTS System that learns an environment model."""
 
         # Set the default configs
         default_params = MAMCTSDefaultConfig()
@@ -146,10 +138,10 @@ class MAMCTSLearnedModelSystem(System):
         trainer_process = DesignSpec(
             trainer_init=training.TrainerInit,
             n_step_fn=NStepBootStrappedReturns,
-            loss=MAMCTSLearnedModelLoss,
-            epoch_update=MAMCTSLearnedModelEpochUpdate,
-            minibatch_update=MAMCTSLearnedModelMinibatchUpdate,
-            sgd_step=MAMCTSLearnedModelStep,
+            loss=MAMULoss,
+            epoch_update=MAMUEpochUpdate,
+            minibatch_update=MAMUMinibatchUpdate,
+            sgd_step=MAMUStep,
             step=training.DefaultTrainerStep,
             trainer_dataset=building.TrajectoryDataset,
         ).get()

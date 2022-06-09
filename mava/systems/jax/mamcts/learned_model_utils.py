@@ -60,12 +60,16 @@ def actions_to_tiles(
     tile_shape: Sequence[int],
     num_actions: int,
     scale_by_actions: bool = False,
-    shift_actions_by: int = 20,
+    shift_actions_by: int = 0,
 ):
     if not scale_by_actions:
         num_actions = 1
-    tiled_actions = jnp.ones((action_array.shape[0], *tile_shape, 1)) + shift_actions_by
-    tiled_actions = action_array[:, None, None, None] * tiled_actions / num_actions
+
+    tiled_actions = (
+        jax.vmap(lambda x: jnp.full(tile_shape, x), out_axes=(-1))(action_array)
+        / num_actions
+        + shift_actions_by
+    )
 
     return tiled_actions  # Batch x tile x 1
 
@@ -102,12 +106,9 @@ def join_non_flattened_observation_action_history(
         stacked_observation_history,
         axes=(*range(1, len(stacked_observation_history.shape)), 0),
     )  # expects no batch dimension
+
     stacked_action_history = actions_to_tiles(
         stacked_action_history, stacked_observation_history.shape[:-1], num_actions
-    )
-    stacked_action_history = jnp.squeeze(stacked_action_history, axis=-1)
-    stacked_action_history = jnp.transpose(
-        stacked_action_history, axes=(*range(1, len(stacked_action_history.shape)), 0)
     )
 
     full_history = jnp.concatenate(

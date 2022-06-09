@@ -127,16 +127,16 @@ class MAMCTSLoss(Loss):
 
 
 @dataclass
-class MAMCTSLearnedModelLossConfig(MAMCTSLossConfig):
+class MAMULossConfig(MAMCTSLossConfig):
     importance_sampling_exponent: float = 0.5
 
 
-class MAMCTSLearnedModelLoss(Loss):
+class MAMULoss(Loss):
     """MAMCTS Loss - essentially a decentralised AlphaZero loss"""
 
     def __init__(
         self,
-        config: MAMCTSLearnedModelLossConfig = MAMCTSLearnedModelLossConfig(),
+        config: MAMULossConfig = MAMULossConfig(),
     ):
         """_summary_
 
@@ -330,4 +330,4 @@ class MAMCTSLearnedModelLoss(Loss):
 
     @staticmethod
     def config_class() -> Callable:
-        return MAMCTSLearnedModelLossConfig
+        return MAMULossConfig

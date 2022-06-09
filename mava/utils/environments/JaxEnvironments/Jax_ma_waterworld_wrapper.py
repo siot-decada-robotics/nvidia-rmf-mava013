@@ -8,7 +8,9 @@ from dm_env import specs
 from haiku import one_hot
 
 from mava.types import OLT
-from mava.utils.environments.JaxEnvironments.JaxMAWaterworld import MultiAgentWaterWorld
+from mava.utils.environments.JaxEnvironments.jax_ma_waterworld import (
+    MultiAgentWaterWorld,
+)
 from mava.utils.id_utils import EntityId
 
 

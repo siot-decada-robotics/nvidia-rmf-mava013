@@ -6,7 +6,6 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 from acme.jax import networks as networks_lib
-from acme.jax.networks.atari import DeepAtariTorso
 
 from mava.systems.jax.mamcts.learned_model_utils import actions_to_tiles
 
@@ -359,10 +358,6 @@ class SimpleRepresentationNet(hk.Module):
         self.encoding_size = encoding_size
 
     def __call__(self, observations: chex.Array) -> chex.Array:
-        observations = observations.astype(int)
-        observations = hk.Embed(128, 8)(observations)
-        observations = hk.Flatten(preserve_dims=3)(observations)
-        observations = DeepAtariTorso()(observations)
 
         encoded_state = networks_lib.LayerNormMLP(
             (*self.representation_layers, self.encoding_size)

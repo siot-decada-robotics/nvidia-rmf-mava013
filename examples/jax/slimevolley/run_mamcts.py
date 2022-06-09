@@ -58,11 +58,8 @@ flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 def network_factory(*args, **kwargs):
 
-    return mamcts.make_environment_model_networks(
+    return mamcts.make_default_mamcts_networks(
         num_bins=21,
-        use_v2=True,
-        output_init_scale=1.0,
-        fully_connected=True,
         prediction_layers=(256, 256),
         *args,
         **kwargs,

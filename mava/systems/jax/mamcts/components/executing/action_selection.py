@@ -17,7 +17,7 @@ from mava.systems.jax.mamcts.learned_model_utils import (
     pad_history,
 )
 from mava.systems.jax.mamcts.mcts import MCTS, MaxDepth, RecurrentFn, RootFn, TreeSearch
-from mava.systems.jax.mamcts.networks import LearnedModelNetworks, PredictionNetworks
+from mava.systems.jax.mamcts.networks import MAMUNetworks, PredictionNetwork
 
 
 @dataclass
@@ -88,16 +88,11 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
 
         rng_key, executor.store.key = jax.random.split(executor.store.key)
 
-        # Add batch dimension
-        observation = utils.add_batch_dim(executor.store.observation.observation)
-
         # Get the agents action mask
         action_mask = executor.store.observation.legal_actions
 
-        # Check is an environment model has been given and the network is a LearnedModelNetwork
-        if self.config.environment_model is None and isinstance(
-            network, LearnedModelNetworks
-        ):
+        # Check is an environment model has been given and the network is a MAMUNetwork
+        if self.config.environment_model is None and isinstance(network, MAMUNetworks):
             # Add current observation to history
             executor.store.environment_state_history[agent].append(
                 executor.store.observation.observation
@@ -119,21 +114,13 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
                     self.history_size,
                 )
 
-            # Check if observations are one dimensional
-            if executor.store.fully_connected:
-                # Concatenate observation history and one hot actions
-                full_history = join_flattened_observation_action_history(
-                    stacked_observation_history,
-                    stacked_action_history,
-                    action_mask.shape[-1],
-                )
-            else:
-                full_history = join_non_flattened_observation_action_history(
-                    stacked_observation_history,
-                    stacked_action_history,
-                    action_mask.shape[-1],
-                )
-                full_history = utils.add_batch_dim(full_history)
+            full_history = join_non_flattened_observation_action_history(
+                stacked_observation_history,
+                stacked_action_history,
+                action_mask.shape[-1],
+            )
+
+            full_history = utils.add_batch_dim(full_history)
 
             (
                 executor.store.action_info,
@@ -154,8 +141,11 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
 
         # If an environment model has been given then a network needs to be a prediction network
         elif self.config.environment_model is not None and isinstance(
-            network, PredictionNetworks
+            network, PredictionNetwork
         ):
+            # Add batch dimension
+            observation = utils.add_batch_dim(executor.store.observation.observation)
+
             (
                 executor.store.action_info,
                 executor.store.policy_info,
@@ -171,7 +161,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             )
         else:
             raise NotImplementedError(
-                "Currently Monte Carlo Tree Search requires an environment model or a LearnedModelNetwork"
+                "Currently Monte Carlo Tree Search requires an environment model or a MAMUNetwork"
             )
 
     @staticmethod

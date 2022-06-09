@@ -7,7 +7,7 @@ import numpy as np
 from dm_env import specs
 
 from mava.types import OLT
-from mava.utils.environments.JaxEnvironments.JaxSlimeVolley import SlimeVolley
+from mava.utils.environments.JaxEnvironments.jax_slime_volley import SlimeVolley
 from mava.utils.id_utils import EntityId
 
 

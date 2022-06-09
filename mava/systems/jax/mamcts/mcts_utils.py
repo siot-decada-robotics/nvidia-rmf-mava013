@@ -11,13 +11,13 @@ from mava.systems.jax.mamcts.learned_model_utils import (
     inv_value_transform,
     logits_to_scalar,
 )
-from mava.systems.jax.mamcts.networks import LearnedModelNetworks, PredictionNetworks
+from mava.systems.jax.mamcts.networks import MAMUNetworks, PredictionNetwork
 from mava.utils.id_utils import EntityId
 from mava.utils.tree_utils import add_batch_dim_tree, remove_batch_dim_tree, stack_trees
 from mava.wrappers.env_wrappers import EnvironmentModelWrapper
 
 
-class LearnedModel:
+class MAMU:
     def learned_root_fn():
         """A simple root_fn to generate a root state's prior probabilities and value
 
@@ -118,7 +118,7 @@ class EnvironmentModel:
 
         def recurrent_fn(
             environment_model: EnvironmentModelWrapper,
-            forward_fn: PredictionNetworks,
+            forward_fn: PredictionNetwork,
             params,
             rng_key,
             action,

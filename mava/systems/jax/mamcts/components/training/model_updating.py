@@ -25,7 +25,7 @@ class MCTSBatch(NamedTuple):
     target_values: Any
 
 
-class MCTSLearnedModelBatch(NamedTuple):
+class MAMUBatch(NamedTuple):
     """A batch of MAMCTS data; all shapes are expected to be [B, ...]."""
 
     search_policies: Any
@@ -36,7 +36,7 @@ class MCTSLearnedModelBatch(NamedTuple):
     priorities: Any
 
 
-class MAMCTSLearnedModelEpochUpdate(EpochUpdate):
+class MAMUEpochUpdate(EpochUpdate):
     def __init__(
         self,
         config: MAPGEpochUpdateConfig = MAPGEpochUpdateConfig(),
@@ -54,10 +54,10 @@ class MAMCTSLearnedModelEpochUpdate(EpochUpdate):
         trainer.store.num_minibatches = self.config.num_minibatches
 
         def model_update_epoch(
-            carry: Tuple[KeyArray, Any, optax.OptState, MCTSLearnedModelBatch],
+            carry: Tuple[KeyArray, Any, optax.OptState, MAMUBatch],
             unused_t: Tuple[()],
         ) -> Tuple[
-            Tuple[KeyArray, Any, optax.OptState, MCTSLearnedModelBatch],
+            Tuple[KeyArray, Any, optax.OptState, MAMUBatch],
             Dict[str, jnp.ndarray],
         ]:
 
@@ -189,7 +189,7 @@ class MAMCTSMinibatchUpdate(MinibatchUpdate):
         return MAMCTSMinibatchUpdateConfig
 
 
-class MAMCTSLearnedModelMinibatchUpdate(MAMCTSMinibatchUpdate):
+class MAMUMinibatchUpdate(MAMCTSMinibatchUpdate):
     def on_training_utility_fns(self, trainer: SystemTrainer) -> None:
         """_summary_"""
 
@@ -211,7 +211,7 @@ class MAMCTSLearnedModelMinibatchUpdate(MAMCTSMinibatchUpdate):
 
         def model_update_minibatch(
             carry: Tuple[networks_lib.Params, optax.OptState],
-            minibatch: MCTSLearnedModelBatch,
+            minibatch: MAMUBatch,
         ) -> Tuple[Tuple[Any, optax.OptState], Dict[str, Any]]:
             """Performs model update for a single minibatch."""
             params, opt_states = carry

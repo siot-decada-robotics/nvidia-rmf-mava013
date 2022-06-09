@@ -14,8 +14,8 @@ from mava.components.jax.training import Step, TrainingState
 from mava.components.jax.training.step import MAPGWithTrustRegionStepConfig
 from mava.core_jax import SystemTrainer
 from mava.systems.jax.mamcts.components.training.model_updating import (
+    MAMUBatch,
     MCTSBatch,
-    MCTSLearnedModelBatch,
 )
 from mava.systems.jax.mamcts.learned_model_utils import (
     inv_value_transform,
@@ -227,14 +227,14 @@ class MAMCTSStep(Step):
 
 
 @dataclass
-class MAMCTSLearnedModelStepConfig(MAMCTSStepConfig):
+class MAMUStepConfig(MAMCTSStepConfig):
     unroll_steps: int = 5
 
 
-class MAMCTSLearnedModelStep(Step):
+class MAMUStep(Step):
     def __init__(
         self,
-        config: MAMCTSLearnedModelStepConfig = MAMCTSLearnedModelStepConfig(),
+        config: MAMUStepConfig = MAMUStepConfig(),
     ):
         """_summary_
 
@@ -444,7 +444,7 @@ class MAMCTSLearnedModelStep(Step):
                 indices,
             )
 
-            trajectories = MCTSLearnedModelBatch(
+            trajectories = MAMUBatch(
                 search_policies=search_policies,
                 target_values=target_values,
                 rewards=rewards,
@@ -561,4 +561,4 @@ class MAMCTSLearnedModelStep(Step):
 
     @staticmethod
     def config_class() -> Callable:
-        return MAMCTSLearnedModelStepConfig
+        return MAMUStepConfig

@@ -26,12 +26,13 @@ import reverb
 from absl import app, flags
 from acme.jax import utils
 from acme.jax.networks import base
+from acme.jax.networks.atari import DeepAtariTorso
 from mctx import RecurrentFnOutput, RootFnOutput
 from pcb_mava.pcb_grid_utils import make_jax_env
 
 from mava.components.jax.building.environments import ParallelExecutorEnvironmentLoop
 from mava.systems.jax import mamcts, mappo
-from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel, LearnedModel
+from mava.systems.jax.mamcts.mcts_utils import MAMU, EnvironmentModel
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
@@ -62,22 +63,25 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-GAME_HISTORY_SIZE = 1
+GAME_HISTORY_SIZE = 5
 FULLY_CONNECTED = False
 
 
 def network_factory(*args, **kwargs):
+    rep_obs_net = lambda x: hk.Sequential(
+        [hk.Embed(128, 8), hk.Flatten(preserve_dims=3), DeepAtariTorso()]
+    )(x.astype(int))
 
-    return mamcts.make_default_learned_model_networks(
+    return mamcts.make_default_mamu_networks(
         num_bins=21,
         observation_history_size=GAME_HISTORY_SIZE,
-        fully_connected=FULLY_CONNECTED,
         representation_layers=(256,),
         base_layers=(256,),
         dynamics_layers=(256,),
         reward_layers=(256,),
         prediction_layers=(256,),
         encoding_size=64,
+        representation_obs_net=rep_obs_net,
         *args,
         **kwargs,
     )
@@ -90,7 +94,7 @@ def main(_: Any) -> None:
         _ : _
     """
     # Create the system.
-    system = mamcts.MAMCTSLearnedModelSystem()
+    system = mamcts.MAMUSystem()
 
     # Environment.
     environment_factory = functools.partial(make_jax_env, rows=6, cols=6, num_agents=1)
@@ -127,15 +131,14 @@ def main(_: Any) -> None:
         num_epochs=1,
         num_executors=8,
         multi_process=True,
-        root_fn=LearnedModel.learned_root_fn(),
-        recurrent_fn=LearnedModel.learned_recurrent_fn(discount_gamma=0.997),
+        root_fn=MAMU.learned_root_fn(),
+        recurrent_fn=MAMU.learned_recurrent_fn(discount_gamma=0.997),
         search=mctx.muzero_policy,
         num_simulations=50,
         rng_seed=0,
         n_step=20,
         discount=0.997,
         history_size=GAME_HISTORY_SIZE,
-        fully_connected=FULLY_CONNECTED,
         value_cost=0.25,
         executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,  # For Jax Envs
         sequence_length=37,

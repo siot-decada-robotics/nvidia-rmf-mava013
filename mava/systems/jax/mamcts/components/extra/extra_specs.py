@@ -72,7 +72,6 @@ class ExtraSearchPolicySpec(ExtrasSpec):
 @dataclass
 class ExtraLearnedSearchPolicySpecConfig:
     history_size: int = 1
-    fully_connected: bool = False
 
 
 class ExtraLearnedSearchPolicySpec(ExtrasSpec):
@@ -88,7 +87,6 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
         self.config = config
 
     def on_building_init_start(self, builder: SystemBuilder) -> None:
-        builder.store.fully_connected = self.config.fully_connected
         builder.store.history_size = self.config.history_size
 
     def on_building_init_end(self, builder: SystemBuilder) -> None:
@@ -109,15 +107,7 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
                     shape=(spec.actions.num_values,), dtype=jnp.float32
                 ),
                 "search_values": jnp.ones(shape=(), dtype=jnp.float32),
-                "observation_history": jnp.ones(  ## For Flat envs
-                    shape=(
-                        (size + spec.actions.num_values)
-                        * int(self.config.history_size),
-                    ),
-                    dtype=spec.observations.observation.dtype,
-                )
-                if self.config.fully_connected
-                else jnp.ones(  ## For non-flat envs
+                "observation_history": jnp.ones(
                     shape=(
                         *spec.observations.observation.shape,
                         2 * int(self.config.history_size),
