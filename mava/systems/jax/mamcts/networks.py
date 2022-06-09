@@ -56,12 +56,12 @@ class PredictionNetworks:
         num_bins: int,
     ) -> None:
         """Create a PredictionNetworks object.
-        
+
         Args:
             network: an actual haiku network object.
             params: the parameters for the network object.
             num_bins: the number of bins the prediction network uses.
-            """
+        """
         self.network = network
         self.params = params
         self._num_bins = num_bins
@@ -111,6 +111,7 @@ def make_environment_model_prediction_network(
     use_v2: bool = True,
     fully_connected=False,
     prediction_layers=(256, 256, 256),
+    fully_connected_obs_net=utils.batch_concat,
 ) -> PredictionNetworks:
     """Create a prediction network for a non-learned model system."""
 
@@ -124,7 +125,7 @@ def make_environment_model_prediction_network(
             policy_network = hk.Linear(num_actions)
             value_network = hk.Linear(num_bins)
 
-            inputs = utils.batch_concat(inputs)
+            inputs = fully_connected_obs_net(inputs)
             inputs = base_network(inputs)
 
             return policy_network(inputs), value_network(inputs)
@@ -172,6 +173,7 @@ def make_prediction_network(
     dynamics_net=None,
     fully_connected=False,
     prediction_layers=(256, 256, 256),
+    fully_connected_obs_net=utils.batch_concat,
 ) -> PredictionNetworks:
     """Make a prediction network"""
 
@@ -184,7 +186,7 @@ def make_prediction_network(
             base_network = networks_lib.LayerNormMLP(prediction_layers)
             policy_network = hk.Linear(num_actions)
             value_network = hk.Linear(num_bins)
-            inputs = utils.batch_concat(inputs)
+            inputs = fully_connected_obs_net(inputs)
             inputs = base_network(inputs)
 
             return policy_network(inputs), value_network(inputs)
@@ -248,6 +250,7 @@ def make_environment_model_networks(
     use_v2: bool = True,
     fully_connected: bool = True,
     prediction_layers: Sequence[int] = (256,),
+    fully_connected_obs_net=utils.batch_concat,
 ) -> Dict[str, Any]:
     """Make networks for a non-learned model system"""
 
@@ -268,6 +271,7 @@ def make_environment_model_networks(
             use_v2=use_v2,
             fully_connected=fully_connected,
             prediction_layers=prediction_layers,
+            fully_connected_obs_net=fully_connected_obs_net,
         )
 
     return {
@@ -314,6 +318,7 @@ def make_representation_network(
     fully_connected=False,
     encoding_size=100,
     representation_layers=(256, 256, 256),
+    fully_connected_obs_net=utils.batch_concat,
 ) -> RepresentationNetwork:
     """TODO: Add description here."""
     num_actions = environment_spec.actions.num_values
@@ -327,7 +332,7 @@ def make_representation_network(
             representation_network = networks_lib.LayerNormMLP(
                 (*representation_layers, encoding_size)
             )
-            observation_history = utils.batch_concat(observation_history)
+            observation_history = fully_connected_obs_net(observation_history)
             initial_state = representation_network(observation_history)
             return initial_state
 
@@ -411,6 +416,7 @@ def make_dynamics_network(
     fully_connected=False,
     encoding_size=100,
     dynamics_layers=(256, 256, 256),
+    fully_connected_obs_net=utils.batch_concat,
 ) -> DynamicsNetwork:
     """TODO: Add description here."""
 
@@ -422,7 +428,7 @@ def make_dynamics_network(
             prev_embedding: jnp.ndarray, action: jnp.ndarray
         ) -> networks_lib.FeedForwardNetwork:
 
-            prev_embedding = utils.batch_concat(prev_embedding)
+            prev_embedding = fully_connected_obs_net(prev_embedding)
 
             action_one_hot = hk.one_hot(action, num_actions)
             inputs = jnp.concatenate([prev_embedding, action_one_hot], axis=-1)
@@ -564,6 +570,9 @@ def make_learned_model_networks(
     representation_layers=(256, 256, 256),
     dynamics_layers=(256, 256, 256),
     prediction_layers=(256, 256, 256),
+    representation_obs_net=utils.batch_concat,
+    dynamics_obs_net=utils.batch_concat,
+    prediction_obs_net=utils.batch_concat,
 ) -> LearnedModelNetworks:
     """TODO: Add description here."""
 
@@ -576,6 +585,7 @@ def make_learned_model_networks(
         fully_connected=fully_connected,
         encoding_size=encoding_size,
         representation_layers=representation_layers,
+        fully_connected_obs_net=representation_obs_net,
     )
 
     dynamics_net = make_dynamics_network(
@@ -588,6 +598,7 @@ def make_learned_model_networks(
         fully_connected=fully_connected,
         encoding_size=encoding_size,
         dynamics_layers=dynamics_layers,
+        fully_connected_obs_net=dynamics_obs_net,
     )
 
     prediction_net = make_prediction_network(
@@ -599,6 +610,7 @@ def make_learned_model_networks(
         dynamics_net=dynamics_net,
         fully_connected=fully_connected,
         prediction_layers=prediction_layers,
+        fully_connected_obs_net=prediction_obs_net,
     )
 
     return LearnedModelNetworks(
@@ -623,6 +635,9 @@ def make_default_learned_model_networks(
     representation_layers=(256, 256, 256),
     dynamics_layers=(256, 256, 256),
     prediction_layers=(256, 256, 256),
+    representation_obs_net=utils.batch_concat,
+    dynamics_obs_net=utils.batch_concat,
+    prediction_obs_net=utils.batch_concat,
 ) -> Dict[str, Any]:
     """Description here"""
 
@@ -648,6 +663,9 @@ def make_default_learned_model_networks(
             representation_layers=representation_layers,
             dynamics_layers=dynamics_layers,
             prediction_layers=prediction_layers,
+            representation_obs_net=representation_obs_net,
+            dynamics_obs_net=dynamics_obs_net,
+            prediction_obs_net=prediction_obs_net,
         )
 
     return {

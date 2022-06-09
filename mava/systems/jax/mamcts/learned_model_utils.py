@@ -1,10 +1,10 @@
 from typing import Sequence
 
+import acme.jax.utils as utils
 import chex
 import haiku as hk
 import jax
 import jax.numpy as jnp
-import acme.jax.utils as utils
 from rlax._src.transforms import (
     signed_hyperbolic,
     signed_parabolic,
@@ -56,10 +56,15 @@ def normalise_encoded_state(encoded_state: chex.Array, epsilon: float = 1e-5):
 
 
 def actions_to_tiles(
-    action_array: chex.Array, tile_shape: Sequence[int], num_actions: int
+    action_array: chex.Array,
+    tile_shape: Sequence[int],
+    num_actions: int,
+    scale_by_actions: bool = False,
+    shift_actions_by: int = 20,
 ):
-
-    tiled_actions = jnp.ones((action_array.shape[0], *tile_shape, 1))
+    if not scale_by_actions:
+        num_actions = 1
+    tiled_actions = jnp.ones((action_array.shape[0], *tile_shape, 1)) + shift_actions_by
     tiled_actions = action_array[:, None, None, None] * tiled_actions / num_actions
 
     return tiled_actions  # Batch x tile x 1
@@ -69,12 +74,11 @@ def join_flattened_observation_action_history(
     stacked_observation_history: chex.Array,
     stacked_action_history: chex.Array,
     num_actions: int,
-):  
+):
     """Process and concatenate observation and action history for single dimension observations"""
-    
+
     stacked_observation_history = utils.batch_concat(stacked_observation_history)
-    
-   
+
     stacked_action_history = hk.one_hot(stacked_action_history, num_actions)
 
     full_history = jnp.concatenate(

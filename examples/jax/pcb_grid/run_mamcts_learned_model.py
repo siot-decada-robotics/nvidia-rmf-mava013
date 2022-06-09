@@ -68,6 +68,9 @@ FULLY_CONNECTED = False
 
 
 def network_factory(*args, **kwargs):
+    obs_net_forward = lambda x: hk.Sequential([hk.Embed(128, 8), DeepAtariTorso()])(
+        x.astype(int)
+    )
 
     return mamcts.make_default_learned_model_networks(
         num_bins=21,
@@ -77,9 +80,10 @@ def network_factory(*args, **kwargs):
         output_init_scale=1.0,
         fully_connected=FULLY_CONNECTED,
         representation_layers=(),
-        dynamics_layers=(16,),
-        prediction_layers=(16,),
-        encoding_size=8,
+        dynamics_layers=(256,),
+        prediction_layers=(256,),
+        encoding_size=64,
+        representation_obs_net=obs_net_forward,
         *args,
         **kwargs,
     )
