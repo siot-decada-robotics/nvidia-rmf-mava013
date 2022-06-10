@@ -5,13 +5,32 @@ import chex
 import dm_env
 import jax
 import jax.numpy as jnp
+import numpy as np
 from chex import PRNGKey
 from dm_env import specs
+from flax.struct import dataclass
 from gym import spaces
 from jax import jit, random
+from PIL import Image, ImageDraw
 
 from mava.types import OLT
 from mava.utils.id_utils import EntityId
+
+GRAVITY = 9.82
+CART_MASS = 0.5
+POLE_MASS = 0.5
+POLE_LEN = 0.6
+FRICTION = 0.1
+FORCE_SCALING = 10.0
+DELTA_T = 0.01
+CART_X_LIMIT = 2.4
+
+SCREEN_W = 600
+SCREEN_H = 600
+CART_W = 40
+CART_H = 20
+VIZ_SCALE = 100
+WHEEL_RAD = 5
 
 
 @chex.dataclass
@@ -23,20 +42,20 @@ class State:
 
 class JaxCartPole:
     def __init__(self):
-        self.gravity = 9.8
-        self.masscart = 1.0
-        self.masspole = 0.1
-        self.total_mass = self.masspole + self.masscart
-        self.length = 0.5  # actually half the pole's length
-        self.polemass_length = self.masspole * self.length
-        self.force_mag = 10.0
-        self.tau = 0.02  # seconds between state updates
+        self.gravity = GRAVITY
+        self.masscart = CART_MASS
+        self.masspole = POLE_MASS
+        self.total_mass = POLE_MASS + CART_MASS
+        self.length = POLE_LEN  # actually half the pole's length
+        self.polemass_length = POLE_MASS * POLE_LEN
+        self.force_mag = FORCE_SCALING
+        self.tau = DELTA_T  # seconds between state updates
         self.kinematics_integrator = "euler"
         self.step_limit = 500
 
         # Angle at which to fail the episode
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
-        self.x_threshold = 2.4
+        self.x_threshold = CART_X_LIMIT
         self.random_limit = 0.05
 
         # Angle limit set to 2 * theta_threshold_radians so failing observation
@@ -202,3 +221,67 @@ class JaxCartPole:
 
     def get_observation(self, env_state: State, agent_info):
         return env_state.cartpole_data
+
+    @staticmethod
+    def render(state: State, mode="rgb_array") -> Image:
+        """Render a specified task."""
+        img = Image.new("RGB", (SCREEN_W, SCREEN_H), (255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        x, _, theta, _ = np.array(state.cartpole_data)
+        cart_y = SCREEN_H // 2 + 100
+        cart_x = x * VIZ_SCALE + SCREEN_W // 2
+        # Draw the horizon.
+        draw.line(
+            (
+                0,
+                cart_y + CART_H // 2 + WHEEL_RAD,
+                SCREEN_W,
+                cart_y + CART_H // 2 + WHEEL_RAD,
+            ),
+            fill=(0, 0, 0),
+            width=1,
+        )
+        # Draw the cart.
+        draw.rectangle(
+            (
+                cart_x - CART_W // 2,
+                cart_y - CART_H // 2,
+                cart_x + CART_W // 2,
+                cart_y + CART_H // 2,
+            ),
+            fill=(255, 0, 0),
+            outline=(0, 0, 0),
+        )
+        # Draw the wheels.
+        draw.ellipse(
+            (
+                cart_x - CART_W // 2 - WHEEL_RAD,
+                cart_y + CART_H // 2 - WHEEL_RAD,
+                cart_x - CART_W // 2 + WHEEL_RAD,
+                cart_y + CART_H // 2 + WHEEL_RAD,
+            ),
+            fill=(220, 220, 220),
+            outline=(0, 0, 0),
+        )
+        draw.ellipse(
+            (
+                cart_x + CART_W // 2 - WHEEL_RAD,
+                cart_y + CART_H // 2 - WHEEL_RAD,
+                cart_x + CART_W // 2 + WHEEL_RAD,
+                cart_y + CART_H // 2 + WHEEL_RAD,
+            ),
+            fill=(220, 220, 220),
+            outline=(0, 0, 0),
+        )
+        # Draw the pole.
+        draw.line(
+            (
+                cart_x,
+                cart_y,
+                cart_x + POLE_LEN * VIZ_SCALE * np.cos(theta - np.pi / 2),
+                cart_y + POLE_LEN * VIZ_SCALE * np.sin(theta - np.pi / 2),
+            ),
+            fill=(0, 0, 255),
+            width=6,
+        )
+        return img
