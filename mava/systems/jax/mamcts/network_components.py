@@ -1,4 +1,4 @@
-"""Credit to https://github.com/Hwhitetooth"""
+"""Credit to https://github.com/Hwhitetooth for EfficientZero network architectures"""
 from typing import Tuple
 
 import chex
@@ -151,6 +151,8 @@ class EZRepresentationNet(hk.Module):
 
 
 class EZPredictionNet(hk.Module):
+    """EfficientZero Prediction architecture."""
+
     def __init__(
         self, num_actions, num_bins, output_init_scale, use_v2, name="prediction_net"
     ):
@@ -288,6 +290,8 @@ class EZDynamicsNet(hk.Module):
 
 
 class SimplePredictionNet(hk.Module):
+    """Simple prediction architecture."""
+
     def __init__(
         self,
         base_prediction_layers,

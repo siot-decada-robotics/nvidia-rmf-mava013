@@ -208,8 +208,9 @@ class MAPGEpochUpdate(EpochUpdate):
             #     )
             # assert ...
 
+            # We should not assume all batches have observations e.g MAMU doesn't and this epoch update can be used in alot of other general algorithms
             assert (
-                list(batch.observations.values())[0].observation.shape[0]
+                list(batch.rewards.values())[0].observation.shape[0]
                 == trainer.store.full_batch_size
             )
 

@@ -168,7 +168,7 @@ class DynamicsNetwork:
 
 
 class MAMUNetworks:
-    """TODO: Add description here."""
+    """MAMU Networks class - Provides functionality and encapsulates all networks for a MAMU system"""
 
     def __init__(
         self,
@@ -222,9 +222,11 @@ def make_mamcts_prediction_network(
     key: networks_lib.PRNGKey,
     num_bins: int,
     base_prediction_layers: Sequence[int],
+    value_prediction_layers: Sequence[int],
+    policy_prediction_layers: Sequence[int],
     observation_net=utils.batch_concat,
 ) -> PredictionNetwork:
-    """Create a prediction network for a non-learned model system."""
+    """Create a prediction network for a mamcts system."""
 
     num_actions = environment_spec.actions.num_values
 
@@ -232,6 +234,8 @@ def make_mamcts_prediction_network(
         inputs = observation_net(inputs)
         policy_value_network = SimplePredictionNet(
             base_prediction_layers=base_prediction_layers,
+            value_prediction_layers=value_prediction_layers,
+            policy_prediction_layers=policy_prediction_layers,
             num_actions=num_actions,
             num_bins=num_bins,
         )
@@ -259,9 +263,11 @@ def make_default_mamcts_networks(
     net_spec_keys: Dict[str, str] = {},
     num_bins: int = 601,
     base_prediction_layers: Sequence[int] = (256,),
+    value_prediction_layers: Sequence[int] = (256,),
+    policy_prediction_layers: Sequence[int] = (256,),
     observation_net=utils.batch_concat,
 ) -> Dict[str, Any]:
-    """Make networks for a mamcts system"""
+    """Make default networks for a mamcts system"""
 
     # Create agent_type specs.
     specs = environment_spec.get_agent_specs()
@@ -277,6 +283,8 @@ def make_default_mamcts_networks(
             key=rng_key,
             num_bins=num_bins,
             base_prediction_layers=base_prediction_layers,
+            value_prediction_layers=value_prediction_layers,
+            policy_prediction_layers=policy_prediction_layers,
             observation_net=observation_net,
         )
 
@@ -296,7 +304,7 @@ def make_mamu_prediction_network(
     policy_prediction_layers,
     observation_net=utils.batch_concat,
 ) -> PredictionNetwork:
-    """Make a prediction network"""
+    """Make a mamu prediction network"""
 
     num_actions = environment_spec.actions.num_values
 
@@ -349,7 +357,7 @@ def make_mamu_representation_network(
     representation_layers: Sequence[int],
     observation_net=utils.batch_concat,
 ) -> RepresentationNetwork:
-    """TODO: Add description here."""
+    """Make a mamu representation network"""
 
     def forward_fn(
         observation_history: jnp.ndarray,
@@ -395,7 +403,7 @@ def make_mamu_dynamics_network(
     reward_layers: Sequence[int],
     observation_net,
 ) -> DynamicsNetwork:
-    """TODO: Add description here."""
+    """Make a mamu dynamics network"""
 
     num_actions = environment_spec.actions.num_values
 
@@ -463,7 +471,7 @@ def make_mamu_networks(
     dynamics_obs_net,
     prediction_obs_net,
 ) -> MAMUNetworks:
-    """TODO: Add description here."""
+    """Make all three mamu networks"""
 
     representation_net = make_mamu_representation_network(
         environment_spec=spec,
@@ -524,7 +532,7 @@ def make_default_mamu_networks(
     dynamics_obs_net=identity,
     prediction_obs_net=identity,
 ) -> Dict[str, Any]:
-    """Description here"""
+    """Make the default mamu networks"""
 
     # Create agent_type specs.
     specs = environment_spec.get_agent_specs()

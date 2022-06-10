@@ -11,7 +11,7 @@ from mava.systems.jax.mamcts.reanalyse_worker import ReanalyseWorker
 
 @dataclass
 class ReanalyseDistributorConfig(DistributorConfig):
-    num_reanalyse_workers: int = 1
+    num_reanalyse_workers: int = 0
 
 
 class ReanalyseDistributor(Distributor):

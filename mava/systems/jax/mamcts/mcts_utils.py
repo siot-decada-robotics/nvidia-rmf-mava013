@@ -14,7 +14,7 @@ from mava.systems.jax.mamcts.learned_model_utils import (
 from mava.systems.jax.mamcts.networks import MAMUNetworks, PredictionNetwork
 from mava.utils.id_utils import EntityId
 from mava.utils.tree_utils import add_batch_dim_tree, remove_batch_dim_tree, stack_trees
-from mava.wrappers.env_wrappers import EnvironmentModelWrapper
+from mava.wrappers.env_wrappers import MAMCTSWrapper
 
 
 class MAMU:
@@ -91,7 +91,7 @@ class MAMU:
         return recurrent_fn
 
 
-class EnvironmentModel:
+class MAMCTS:
     def environment_root_fn():
         """A simple root_fn to generate a root state's prior probabilities and value
 
@@ -117,7 +117,7 @@ class EnvironmentModel:
         other agents all select a default action in an individual agents tree search"""
 
         def recurrent_fn(
-            environment_model: EnvironmentModelWrapper,
+            environment_model: MAMCTSWrapper,
             forward_fn: PredictionNetwork,
             params,
             rng_key,
@@ -177,7 +177,7 @@ class EnvironmentModel:
         other agents all select random actions in an individual agents tree search"""
 
         def recurrent_fn(
-            environment_model: EnvironmentModelWrapper,
+            environment_model: MAMCTSWrapper,
             forward_fn,
             params,
             rng_key,
@@ -247,7 +247,7 @@ class EnvironmentModel:
         other agents all select the greedy action, according to the searching agent's policy, in an individual agents tree search"""
 
         def recurrent_fn(
-            environment_model: EnvironmentModelWrapper,
+            environment_model: MAMCTSWrapper,
             forward_fn,
             params,
             rng_key,

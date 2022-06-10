@@ -12,7 +12,6 @@ from mava.components.jax.executing.action_selection import (
 )
 from mava.core_jax import SystemBuilder, SystemExecutor
 from mava.systems.jax.mamcts.learned_model_utils import (
-    join_flattened_observation_action_history,
     join_non_flattened_observation_action_history,
     pad_history,
 )
@@ -120,6 +119,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
                 action_mask.shape[-1],
             )
 
+            # Add the batch dimension
             full_history = utils.add_batch_dim(full_history)
 
             (

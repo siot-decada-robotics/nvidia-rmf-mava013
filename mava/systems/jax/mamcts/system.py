@@ -17,6 +17,7 @@
 from typing import Any, Tuple
 
 from mava.components.jax import building, executing, training, updating
+from mava.components.jax.training.model_updating import MAPGEpochUpdate
 from mava.specs import DesignSpec
 from mava.systems.jax import System
 from mava.systems.jax.mamcts.components.executing.action_selection import (
@@ -38,14 +39,13 @@ from mava.systems.jax.mamcts.components.reanalyse.reanalyze_components import (
 from mava.systems.jax.mamcts.components.training.losses import MAMCTSLoss, MAMULoss
 from mava.systems.jax.mamcts.components.training.model_updating import (
     MAMCTSMinibatchUpdate,
-    MAMUEpochUpdate,
     MAMUMinibatchUpdate,
 )
 from mava.systems.jax.mamcts.components.training.n_step_bootstrapped_returns import (
     NStepBootStrappedReturns,
 )
 from mava.systems.jax.mamcts.components.training.step import MAMCTSStep, MAMUStep
-from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig
+from mava.systems.jax.mamcts.config import MAMCTSDefaultConfig, MAMUDefaultConfig
 
 
 class MAMCTSSystem(System):
@@ -115,7 +115,7 @@ class MAMUSystem(System):
         """MAMCTS System that learns an environment model."""
 
         # Set the default configs
-        default_params = MAMCTSDefaultConfig()
+        default_params = MAMUDefaultConfig()
 
         # Default system processes
         # System initialization
@@ -139,7 +139,7 @@ class MAMUSystem(System):
             trainer_init=training.TrainerInit,
             n_step_fn=NStepBootStrappedReturns,
             loss=MAMULoss,
-            epoch_update=MAMUEpochUpdate,
+            epoch_update=MAPGEpochUpdate,
             minibatch_update=MAMUMinibatchUpdate,
             sgd_step=MAMUStep,
             step=training.DefaultTrainerStep,
@@ -162,6 +162,7 @@ class MAMUSystem(System):
             trainer_parameter_client=building.TrainerParameterClient,
         ).get()
 
+        # Reanalyse Workers are not yet functional
         system = DesignSpec(
             **system_init,
             **data_server_process,

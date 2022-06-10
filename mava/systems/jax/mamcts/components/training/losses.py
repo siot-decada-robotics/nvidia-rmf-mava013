@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Tuple
 
-import distrax
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -55,8 +54,6 @@ class MAMCTSLoss(Loss):
                 agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
                 network = trainer.store.networks["networks"][agent_net_key]
 
-                # Note (dries): This is placed here to set the networks correctly in
-                # the case of non-shared weights.
                 def loss_fn(
                     params: Any,
                     observations: Any,
@@ -93,6 +90,7 @@ class MAMCTSLoss(Loss):
                         for parameter in jax.tree_leaves(params)
                     )
 
+                    # Sum losses together
                     total_loss = (
                         policy_loss
                         + value_loss * self.config.value_cost
@@ -132,7 +130,7 @@ class MAMULossConfig(MAMCTSLossConfig):
 
 
 class MAMULoss(Loss):
-    """MAMCTS Loss - essentially a decentralised AlphaZero loss"""
+    """MAMU Loss - essentially a decentralised MuZero loss"""
 
     def __init__(
         self,
@@ -246,12 +244,6 @@ class MAMULoss(Loss):
                         ),
                         axis=-1,
                     )
-                    # KL Loss
-                    # logits = distrax.Categorical(logits=logits)
-                    # search_policies = distrax.Categorical(
-                    #     probs=merge_leading_dims(search_policies, 2)
-                    # )
-                    # policy_loss = jnp.mean(search_policies.kl_divergence(logits).reshape(batch_size, -1),axis=-1)
 
                     # Compute the value loss
                     value_loss = jnp.mean(

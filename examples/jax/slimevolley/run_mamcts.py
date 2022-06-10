@@ -27,7 +27,7 @@ from acme.jax.networks.atari import DeepAtariTorso
 from mctx import RecurrentFnOutput, RootFnOutput
 
 from mava.systems.jax import mamcts
-from mava.systems.jax.mamcts.mcts_utils import EnvironmentModel
+from mava.systems.jax.mamcts.mcts_utils import MAMCTS
 from mava.utils.environments.JaxEnvironments.jax_env_utils import make_slimevolley_env
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
@@ -60,7 +60,9 @@ def network_factory(*args, **kwargs):
 
     return mamcts.make_default_mamcts_networks(
         num_bins=21,
-        base_prediction_layers=(256, 256),
+        base_prediction_layers=(256,),
+        value_prediction_layers=(256,),
+        policy_prediction_layers=(256,),
         *args,
         **kwargs,
     )
@@ -112,8 +114,8 @@ def main(_: Any) -> None:
         num_epochs=4,
         num_executors=6,
         multi_process=True,
-        root_fn=EnvironmentModel.environment_root_fn(),
-        recurrent_fn=EnvironmentModel.greedy_policy_recurrent_fn(discount_gamma=1.0),
+        root_fn=MAMCTS.environment_root_fn(),
+        recurrent_fn=MAMCTS.greedy_policy_recurrent_fn(discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
         environment_model=environment_factory(),
         num_simulations=50,

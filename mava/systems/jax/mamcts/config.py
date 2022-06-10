@@ -20,3 +20,8 @@ from dataclasses import dataclass
 @dataclass
 class MAMCTSDefaultConfig:
     pass
+
+
+@dataclass
+class MAMUDefaultConfig:
+    pass

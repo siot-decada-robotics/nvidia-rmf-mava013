@@ -32,7 +32,7 @@ from pcb_mava.pcb_grid_utils import make_jax_env
 
 from mava.components.jax.building.environments import ParallelExecutorEnvironmentLoop
 from mava.systems.jax import mamcts, mappo
-from mava.systems.jax.mamcts.mcts_utils import MAMU, EnvironmentModel
+from mava.systems.jax.mamcts.mcts_utils import MAMCTS, MAMU
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (

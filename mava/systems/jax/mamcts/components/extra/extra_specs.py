@@ -15,13 +15,11 @@
 
 """Custom components for MAMCTS system."""
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import jax.numpy as jnp
 from dm_env import specs
 
-from mava.components.jax import Component
-from mava.core_jax import SystemBuilder, SystemParameterServer
+from mava.core_jax import SystemBuilder
 from mava.systems.jax.mappo.components import ExtrasSpec
 
 
@@ -35,10 +33,10 @@ class ExtraSearchPolicySpec(ExtrasSpec):
         self,
         config: ExtraSearchPolicySpecConfig = ExtraSearchPolicySpecConfig(),
     ):
-        """_summary_
+        """Extras Spec for policy info used in training for MAMCTS.
 
         Args:
-            config : _description_.
+            config : ExtraSearchPolicySpecConfig.
         """
         self.config = config
 
@@ -79,10 +77,10 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
         self,
         config: ExtraLearnedSearchPolicySpecConfig = ExtraLearnedSearchPolicySpecConfig(),
     ):
-        """_summary_
+        """Extras Spec for policy info used in training for MAMU.
 
         Args:
-            config : _description_.
+            config : ExtraLearnedSearchPolicySpecConfig.
         """
         self.config = config
 
@@ -97,10 +95,7 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
         builder.store.extras_spec = {"policy_info": {}}
 
         for agent, spec in agent_specs.items():
-            # TODO Change obs history back
-            size = spec.observations.observation.shape[0]
-            for s in spec.observations.observation.shape[1:]:
-                size *= s
+
             # Make dummy specs
             builder.store.extras_spec["policy_info"][agent] = {
                 "search_policies": jnp.ones(

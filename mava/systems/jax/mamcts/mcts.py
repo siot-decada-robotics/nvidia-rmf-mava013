@@ -1,23 +1,12 @@
 import functools
-from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import acme.jax.utils as utils
 import chex
-import jax
 import jax.numpy as jnp
 import mctx
-import numpy as np
 from haiku import Params
 from jax import jit
-
-from mava.utils.id_utils import EntityId
-from mava.utils.tree_utils import (
-    add_batch_dim_tree,
-    apply_fun_tree,
-    remove_batch_dim_tree,
-)
-from mava.wrappers.env_wrappers import EnvironmentModelWrapper
 
 RecurrentState = Any
 RootFn = Callable[[Params, chex.PRNGKey, Any], mctx.RootFnOutput]
@@ -34,13 +23,19 @@ TreeSearch = Callable[
 
 
 class MCTS:
-    """TODO: Add description here."""
+    """Monte Carlo Search Tree Class
+
+    Provides functionality for MAMCTS and MAMU System tree searches"""
 
     def __init__(self, config) -> None:
-        """TODO: Add description here."""
+        """Initialise MCTS Class.
+
+        Args:
+            config : MCTSConfig - instantiated in the MCTSActionSelection executor"""
+
         self.config = config
 
-    def get_action(
+    def get_mamcts_action(
         self,
         forward_fn,
         params,
@@ -49,9 +44,22 @@ class MCTS:
         observation,
         agent_info,
         is_evaluator,
-        action_mask,
-    ):
-        """TODO: Add description here."""
+        root_action_mask,
+    ) -> Tuple[chex.Array, Dict[str, chex.Array]]:
+        """Performs a tree search and gets a MAMCTS agent's action and policy information.
+
+        Args:
+            forward_fn : a PredictionNetwork's forward function - takes in an observation and parameters and returns a policy and value.
+            params : the neural network parameters used in the forward_fn.
+            rng_key : a pseudo random number key
+            env_state : the current environment state
+            observation : the current agent observation
+            agent_info : the current agent's information - ID
+            is_evaluator : whether or not the current agent is an evaluator or an executor - specifies the number of simulations to use.
+            root_action_mask : the current agent's mask for legal actions
+
+        Return:
+            a selected action, dictionary containing relevant policy information for training"""
 
         num_simulations = (
             self.config.evaluator_num_simulations
@@ -72,7 +80,7 @@ class MCTS:
             observation,
             agent_info,
             num_simulations,
-            action_mask,
+            root_action_mask,
             **search_kwargs,
         )
         action = jnp.squeeze(search_out.action.astype(jnp.int32))
@@ -104,8 +112,8 @@ class MCTS:
         num_simulations,
         root_action_mask,
         **search_kwargs,
-    ):
-        """TODO: Add description here."""
+    ) -> SearchOutput:
+        """Perform the MCTS for an MAMCTS agent"""
 
         root = self.config.root_fn(forward_fn, params, rng_key, env_state, observation)
 
@@ -148,8 +156,22 @@ class MCTS:
         observation_history,
         is_evaluator,
         root_action_mask,
-    ):
-        """TODO: Add description here."""
+    ) -> Tuple[chex.Array, Dict[str, chex.Array]]:
+        """Performs a tree search and gets a MAMU agent's action and policy information.
+
+        Args:
+            representation_fn : a RepresentationNetwork's forward function - takes in an observation history and parameters and returns a initial root embedding.
+            dynamics_fn : a DynamicsNetwork's forward function - takes in an embedding, action and parameters and returns a new embedding and reward.
+            prediction_fn : a PredictionNetwork's forward function - takes in an embedding and parameters and returns a policy and value.
+            params : the neural network parameters used in the three functions.
+            rng_key : a pseudo random number key
+            env_state : the current environment state
+            observation_history : the current agent's observation history
+            is_evaluator : whether or not the current agent is an evaluator or an executor - specifies the number of simulations to use.
+            root_action_mask : the current agent's mask for legal actions
+
+        Return:
+            a selected action, dictionary containing relevant policy information for training"""
 
         num_simulations = (
             self.config.evaluator_num_simulations
@@ -210,8 +232,8 @@ class MCTS:
         num_simulations,
         root_action_mask,
         **search_kwargs,
-    ):
-        """TODO: Add description here."""
+    ) -> Tuple[SearchOutput, chex.Array]:
+        """Perform the MCTS for an MAMU agent"""
 
         root = self.config.root_fn(
             representation_fn, prediction_fn, params, rng_key, observation_history
