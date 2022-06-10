@@ -208,11 +208,11 @@ class MAPGEpochUpdate(EpochUpdate):
             #     )
             # assert ...
 
-            # We should not assume all batches have observations e.g MAMU doesn't and this epoch update can be used in alot of other general algorithms
-            assert (
-                list(batch.rewards.values())[0].observation.shape[0]
-                == trainer.store.full_batch_size
-            )
+            # We should not assume all batch objects have certain attributes e.g MAMU doesn't and this epoch update can be used in alot of other general algorithms
+            # assert (
+            #     list(batch.rewards.values())[0].observation.shape[0]
+            #     == trainer.store.full_batch_size
+            # )
 
             permutation = jax.random.permutation(subkey, trainer.store.full_batch_size)
 

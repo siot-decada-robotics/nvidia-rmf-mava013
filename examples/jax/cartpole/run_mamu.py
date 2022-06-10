@@ -13,48 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example running MAMCTS on debug MPE environments."""
+"""Example running MAMU on Jax Cartpole."""
 import functools
 from datetime import datetime
 from typing import Any
 
-import haiku as hk
-import jax
 import mctx
 import optax
 import reverb
 from absl import app, flags
 from acme.jax import utils
-from acme.jax.networks import base
-from acme.jax.networks.atari import DeepAtariTorso
-from mctx import RecurrentFnOutput, RootFnOutput
-from pcb_mava.pcb_grid_utils import make_jax_env
 
-from mava.components.jax.building.environments import ParallelExecutorEnvironmentLoop
-from mava.systems.jax import mamcts, mappo
-from mava.systems.jax.mamcts.mcts_utils import MAMCTS, MAMU
-from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
-from mava.utils.environments.JaxEnvironments.jax_env_utils import make_ma_waterworld_env
+from mava.systems.jax import mamcts
+from mava.systems.jax.mamcts.mcts_utils import MAMU
+from mava.utils.environments.JaxEnvironments.jax_env_utils import make_jax_cartpole
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
-    DetailedEpisodeStatistics,
     JAXDetailedEpisodeStatistics,
-    JAXDetailedPerAgentStatistics,
     JAXMonitorEnvironmentLoop,
 )
-from mava.wrappers.gym_env_debug import GymWrapper
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string(
-    "env_name",
-    "debug_env",
-    "Debugging environment name (str).",
-)
-flags.DEFINE_string(
-    "action_space",
-    "discrete",
-    "Environment action space type (str).",
-)
 
 flags.DEFINE_string(
     "mava_id",
@@ -65,18 +44,22 @@ flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
 GAME_HISTORY_SIZE = 1
-FULLY_CONNECTED = True
 
 
 def network_factory(*args, **kwargs):
 
-    return mamcts.make_default_mamcts_networks(
+    return mamcts.make_default_mamu_networks(
         num_bins=21,
         observation_history_size=GAME_HISTORY_SIZE,
         representation_layers=(),
+        base_transition_layers=(16,),
         dynamics_layers=(16,),
-        base_prediction_layers=(16,),
+        reward_layers=(16,),
+        base_prediction_layers=(),
+        value_prediction_layers=(16,),
+        policy_prediction_layers=(16,),
         encoding_size=8,
+        representation_obs_net=utils.batch_concat,
         *args,
         **kwargs,
     )
@@ -92,7 +75,9 @@ def main(_: Any) -> None:
     system = mamcts.MAMUSystem()
 
     # Environment.
-    environment_factory = functools.partial(make_ma_waterworld_env, num_agents=5)
+    environment_factory = functools.partial(
+        make_jax_cartpole,
+    )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
@@ -110,7 +95,10 @@ def main(_: Any) -> None:
 
     # Optimizer.
     optimizer = optax.chain(
-        optax.clip_by_global_norm(1.0), optax.scale_by_adam(), optax.scale(-1e-3)
+        optax.clip_by_global_norm(1.0),
+        optax.scale_by_adam(),
+        optax.scale(-1),
+        optax.scale_by_schedule(optax.exponential_decay(0.02, 1000, 0.8)),
     )
 
     # Build the system.
@@ -124,26 +112,27 @@ def main(_: Any) -> None:
         sample_batch_size=128,
         num_minibatches=1,
         num_epochs=1,
-        num_executors=8,
+        num_executors=1,
         multi_process=True,
         root_fn=MAMU.learned_root_fn(),
         recurrent_fn=MAMU.learned_recurrent_fn(discount_gamma=0.997),
-        search=mctx.muzero_policy,
+        search=functools.partial(mctx.muzero_policy, dirichlet_alpha=0.25),
         num_simulations=50,
         rng_seed=0,
-        n_step=20,
+        n_step=50,
         discount=0.997,
-        history_size=GAME_HISTORY_SIZE,
-        value_cost=0.25,
+        value_cost=0.5,
         executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,  # For Jax Envs
-        sequence_length=37,
-        period=37,
+        evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
+        sequence_length=20,
+        period=20,
         unroll_steps=10,
         max_size=500 * 20,
-        importance_sampling_exponent=0.3,
-        sampler=functools.partial(reverb.selectors.Prioritized, priority_exponent=0.3),
+        importance_sampling_exponent=0.5,
+        sampler=functools.partial(reverb.selectors.Prioritized, priority_exponent=0.5),
         terminal="gnome-terminal-tabs",
         num_reanalyse_workers=0,
+        executor_parameter_update_period=500,
     )
 
     # Launch the system.

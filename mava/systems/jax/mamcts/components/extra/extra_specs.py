@@ -69,7 +69,7 @@ class ExtraSearchPolicySpec(ExtrasSpec):
 
 @dataclass
 class ExtraLearnedSearchPolicySpecConfig:
-    history_size: int = 1
+    pass
 
 
 class ExtraLearnedSearchPolicySpec(ExtrasSpec):
@@ -84,8 +84,11 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
         """
         self.config = config
 
-    def on_building_init_start(self, builder: SystemBuilder) -> None:
-        builder.store.history_size = self.config.history_size
+    def on_building_init(self, builder: SystemBuilder) -> None:
+
+        builder.store.history_size = builder.store.networks["networks"][
+            list(builder.store.agent_net_keys.values())[0]
+        ].history_size
 
     def on_building_init_end(self, builder: SystemBuilder) -> None:
         """[summary]"""
@@ -105,7 +108,7 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
                 "observation_history": jnp.ones(
                     shape=(
                         *spec.observations.observation.shape,
-                        2 * int(self.config.history_size),
+                        2 * int(builder.store.history_size),
                     ),
                     dtype=spec.observations.observation.dtype,
                 ),

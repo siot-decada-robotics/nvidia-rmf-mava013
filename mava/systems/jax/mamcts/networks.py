@@ -191,6 +191,7 @@ class MAMUNetworks:
         self.prediction_fn = self.prediction_network.forward_fn
         self.dynamics_fn = self.dynamics_network.forward_fn
         self.representation_fn = self.representation_network.forward_fn
+        self.history_size = self.representation_network.observation_history_size
 
     def update_inner_params(self):
         self.prediction_network.params = self.params["prediction"]

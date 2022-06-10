@@ -13,40 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example running MAMCTS on debug MPE environments."""
+"""Example running MAMCTS on Jax Cartpole."""
 import functools
 from datetime import datetime
 from typing import Any
 
-import haiku as hk
 import mctx
 import optax
 from absl import app, flags
-from acme.jax import utils
-from acme.jax.networks.atari import DeepAtariTorso
-from mctx import RecurrentFnOutput, RootFnOutput
-from pcb_mava.pcb_grid_utils import make_jax_env
 
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import MAMCTS
+from mava.utils.environments.JaxEnvironments.jax_env_utils import make_jax_cartpole
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
     JAXDetailedEpisodeStatistics,
-    JAXDetailedPerAgentStatistics,
     JAXMonitorEnvironmentLoop,
 )
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string(
-    "env_name",
-    "debug_env",
-    "Debugging environment name (str).",
-)
-flags.DEFINE_string(
-    "action_space",
-    "discrete",
-    "Environment action space type (str).",
-)
 
 flags.DEFINE_string(
     "mava_id",
@@ -60,9 +45,9 @@ def network_factory(*args, **kwargs):
 
     return mamcts.make_default_mamcts_networks(
         num_bins=21,
-        base_prediction_layers=(256,),
-        value_prediction_layers=(256,),
-        policy_prediction_layers=(256,),
+        base_prediction_layers=(16,),
+        value_prediction_layers=(16,),
+        policy_prediction_layers=(16,),
         *args,
         **kwargs,
     )
@@ -75,7 +60,9 @@ def main(_: Any) -> None:
         _ : _
     """
     # Environment.
-    environment_factory = functools.partial(make_jax_env, rows=6, cols=6, num_agents=1)
+    environment_factory = functools.partial(
+        make_jax_cartpole,
+    )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
@@ -113,7 +100,7 @@ def main(_: Any) -> None:
         num_executors=6,
         multi_process=True,
         root_fn=MAMCTS.environment_root_fn(),
-        recurrent_fn=MAMCTS.greedy_policy_recurrent_fn(discount_gamma=1.0),
+        recurrent_fn=MAMCTS.default_action_recurrent_fn(0, discount_gamma=1.0),
         search=mctx.gumbel_muzero_policy,
         environment_model=environment_factory(),
         num_simulations=50,

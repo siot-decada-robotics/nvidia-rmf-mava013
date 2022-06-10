@@ -125,7 +125,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             (
                 executor.store.action_info,
                 executor.store.policy_info,
-            ) = self.mcts.learned_get_action(
+            ) = self.mcts.mamu_get_action(
                 network.representation_fn,
                 network.dynamics_fn,
                 network.prediction_fn,
@@ -149,7 +149,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             (
                 executor.store.action_info,
                 executor.store.policy_info,
-            ) = self.mcts.get_action(
+            ) = self.mcts.get_mamcts_action(
                 network.forward_fn,
                 network.params,
                 rng_key,

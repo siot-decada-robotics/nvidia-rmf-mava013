@@ -146,7 +146,7 @@ class MCTS:
 
         return search_output
 
-    def learned_get_action(
+    def mamu_get_action(
         self,
         representation_fn,
         dynamics_fn,

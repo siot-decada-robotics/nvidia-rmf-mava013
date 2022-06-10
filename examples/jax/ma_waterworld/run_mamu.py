@@ -34,6 +34,7 @@ from mava.components.jax.building.environments import ParallelExecutorEnvironmen
 from mava.systems.jax import mamcts, mappo
 from mava.systems.jax.mamcts.mcts_utils import MAMCTS, MAMU
 from mava.utils.debugging.environments.jax.debug_env.new_debug_env import DebugEnv
+from mava.utils.environments.JaxEnvironments.jax_env_utils import make_ma_waterworld_env
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
     DetailedEpisodeStatistics,
@@ -63,25 +64,23 @@ flags.DEFINE_string(
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
-GAME_HISTORY_SIZE = 5
-FULLY_CONNECTED = False
+GAME_HISTORY_SIZE = 1
 
 
 def network_factory(*args, **kwargs):
-    rep_obs_net = lambda x: hk.Sequential(
-        [hk.Embed(128, 8), hk.Flatten(preserve_dims=3), DeepAtariTorso()]
-    )(x.astype(int))
 
-    return mamcts.make_default_mamu_networks(
+    return mamcts.make_default_mamcts_networks(
         num_bins=21,
         observation_history_size=GAME_HISTORY_SIZE,
-        representation_layers=(256,),
-        base_layers=(256,),
-        dynamics_layers=(256,),
-        reward_layers=(256,),
-        base_prediction_layers=(256,),
-        encoding_size=64,
-        representation_obs_net=rep_obs_net,
+        representation_layers=(),
+        base_transition_layers=(16,),
+        dynamics_layers=(16,),
+        reward_layers=(16,),
+        base_prediction_layers=(),
+        value_prediction_layers=(16,),
+        policy_prediction_layers=(16,),
+        encoding_size=8,
+        representation_obs_net=utils.batch_concat,
         *args,
         **kwargs,
     )
@@ -97,7 +96,7 @@ def main(_: Any) -> None:
     system = mamcts.MAMUSystem()
 
     # Environment.
-    environment_factory = functools.partial(make_jax_env, rows=6, cols=6, num_agents=1)
+    environment_factory = functools.partial(make_ma_waterworld_env, num_agents=3)
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
@@ -138,15 +137,14 @@ def main(_: Any) -> None:
         rng_seed=0,
         n_step=20,
         discount=0.997,
-        history_size=GAME_HISTORY_SIZE,
         value_cost=0.25,
         executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,  # For Jax Envs
-        sequence_length=37,
-        period=37,
+        sequence_length=30,
+        period=30,
         unroll_steps=10,
-        max_size=500 * 20,
-        importance_sampling_exponent=0.3,
-        sampler=functools.partial(reverb.selectors.Prioritized, priority_exponent=0.3),
+        max_size=500 * 30,
+        importance_sampling_exponent=0.5,
+        sampler=functools.partial(reverb.selectors.Prioritized, priority_exponent=0.5),
         terminal="gnome-terminal-tabs",
         num_reanalyse_workers=0,
     )

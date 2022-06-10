@@ -18,13 +18,9 @@ import functools
 from datetime import datetime
 from typing import Any
 
-import haiku as hk
 import mctx
 import optax
 from absl import app, flags
-from acme.jax import utils
-from acme.jax.networks.atari import DeepAtariTorso
-from mctx import RecurrentFnOutput, RootFnOutput
 
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import MAMCTS
@@ -32,7 +28,6 @@ from mava.utils.environments.JaxEnvironments.jax_env_utils import make_slimevoll
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
     JAXDetailedEpisodeStatistics,
-    JAXDetailedPerAgentStatistics,
     JAXMonitorEnvironmentLoop,
 )
 
@@ -76,7 +71,7 @@ def main(_: Any) -> None:
     """
     # Environment.
     environment_factory = functools.partial(
-        make_slimevolley_env, is_multi_agent=True, is_cooperative=True
+        make_slimevolley_env, is_multi_agent=False, is_cooperative=False
     )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
