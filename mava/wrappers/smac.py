@@ -22,6 +22,7 @@ from acme import specs
 from smac.env import StarCraft2Env
 
 from mava import types
+from mava.utils.id_utils import EntityId
 from mava.utils.wrapper_utils import convert_np_type, parameterized_restart
 from mava.wrappers.env_wrappers import ParallelEnvWrapper
 
@@ -45,7 +46,9 @@ class SMACWrapper(ParallelEnvWrapper):
         """
         self._environment = environment
         self._return_state_info = return_state_info
-        self._agents = [f"agent_{n}" for n in range(self._environment.n_agents)]
+        self._agents = [
+            EntityId(type=0, id=n) for n in range(self._environment.n_agents)
+        ]
 
         self._reset_next_step = True
         self._done = False
@@ -247,7 +250,7 @@ class SMACWrapper(ParallelEnvWrapper):
         action_specs = {}
         for agent in self._agents:
             action_specs[agent] = specs.DiscreteArray(
-                num_values=self._environment.n_actions, dtype=int
+                num_values=self._environment.n_actions, dtype=np.int32
             )
         return action_specs
 

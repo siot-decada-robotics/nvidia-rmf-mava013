@@ -83,7 +83,7 @@ class MCTS:
             root_action_mask,
             **search_kwargs,
         )
-        action = jnp.squeeze(search_out.action.astype(jnp.int32))
+        action = jnp.squeeze(search_out.action)
         search_policy = jnp.squeeze(search_out.action_weights)
 
         return (
@@ -195,7 +195,7 @@ class MCTS:
             root_action_mask,
             **search_kwargs,
         )
-        action = jnp.squeeze(search_out.action.astype(jnp.int32))
+        action = jnp.squeeze(search_out.action)
         search_policy = jnp.squeeze(search_out.action_weights)
         search_value = jnp.squeeze(search_out.search_tree.node_values[:, 0])
 

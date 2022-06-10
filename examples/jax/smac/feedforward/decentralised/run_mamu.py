@@ -23,28 +23,16 @@ import optax
 import reverb
 from absl import app, flags
 from acme.jax import utils
+from mava.components.jax.building.environments import ParallelExecutorEnvironmentLoop
 
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import MAMU
 from mava.utils.environments.JaxEnvironments.jax_env_utils import make_slimevolley_env
 from mava.utils.loggers import logger_utils
-from mava.wrappers.environment_loop_wrappers import (
-    JAXDetailedEpisodeStatistics,
-    JAXMonitorEnvironmentLoop,
-)
-from mava.wrappers.gym_env_debug import GymWrapper
+from mava.wrappers.environment_loop_wrappers import JAXDetailedEpisodeStatistics
+from mava.utils.environments.smac_utils import make_environment
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string(
-    "env_name",
-    "debug_env",
-    "Debugging environment name (str).",
-)
-flags.DEFINE_string(
-    "action_space",
-    "discrete",
-    "Environment action space type (str).",
-)
 
 flags.DEFINE_string(
     "mava_id",
@@ -59,17 +47,17 @@ GAME_HISTORY_SIZE = 1
 
 def network_factory(*args, **kwargs):
 
-    return mamcts.make_default_mamcts_networks(
+    return mamcts.make_default_mamu_networks(
         num_bins=21,
         observation_history_size=GAME_HISTORY_SIZE,
-        representation_layers=(),
-        base_transition_layers=(16,),
-        dynamics_layers=(16,),
-        reward_layers=(16,),
-        base_prediction_layers=(),
-        value_prediction_layers=(16,),
-        policy_prediction_layers=(16,),
-        encoding_size=8,
+        representation_layers=(256,),
+        base_transition_layers=(256,),
+        dynamics_layers=(256,),
+        reward_layers=(256,),
+        base_prediction_layers=(256,),
+        value_prediction_layers=(256,),
+        policy_prediction_layers=(256,),
+        encoding_size=64,
         representation_obs_net=utils.batch_concat,
         *args,
         **kwargs,
@@ -87,7 +75,7 @@ def main(_: Any) -> None:
 
     # Environment.
     environment_factory = functools.partial(
-        make_slimevolley_env,
+        make_environment,
     )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
@@ -106,9 +94,9 @@ def main(_: Any) -> None:
 
     # Optimizer.
     optimizer = optax.chain(
-        optax.clip_by_global_norm(1.0), optax.scale_by_adam(), optax.scale(-1e-3)
+        optax.clip_by_global_norm(1.0), optax.scale_by_adam(), optax.scale(-1), optax.scale_by_schedule(optax.exponential_decay(1e-2,5000,0.8,end_value=1e-5))
     )
-
+    system.update(ParallelExecutorEnvironmentLoop)
     # Build the system.
     system.build(
         environment_factory=environment_factory,
@@ -130,8 +118,6 @@ def main(_: Any) -> None:
         n_step=20,
         discount=0.997,
         value_cost=0.25,
-        executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,  # For Jax Envs
-        evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
         sequence_length=30,
         period=30,
         unroll_steps=10,

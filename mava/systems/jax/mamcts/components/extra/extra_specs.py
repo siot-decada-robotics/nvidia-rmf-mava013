@@ -84,14 +84,11 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
         """
         self.config = config
 
-    def on_building_init(self, builder: SystemBuilder) -> None:
-
+    def on_building_init_end(self, builder: SystemBuilder) -> None:
+        """[summary]"""
         builder.store.history_size = builder.store.networks["networks"][
             list(builder.store.agent_net_keys.values())[0]
         ].history_size
-
-    def on_building_init_end(self, builder: SystemBuilder) -> None:
-        """[summary]"""
 
         agent_specs = builder.store.environment_spec.get_agent_specs()
 

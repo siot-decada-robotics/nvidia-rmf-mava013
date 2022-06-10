@@ -64,6 +64,12 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
         except:
             self.history_size = 0
 
+    def on_building_init_end(self, builder: SystemBuilder) -> None:
+        try:
+            self.history_size = builder.store.history_size
+        except:
+            self.history_size = 0
+
     def on_execution_observe_first_end(self, executor: SystemExecutor) -> None:
 
         executor.store.environment_state_history = {
@@ -84,6 +90,9 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
         network = executor.store.networks["networks"][
             executor.store.agent_net_keys[agent]
         ]
+
+        # Get environment action dtype
+        action_dtype = executor.store.environment_spec._specs[agent].actions.dtype
 
         rng_key, executor.store.key = jax.random.split(executor.store.key)
 
@@ -106,7 +115,7 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
             stacked_action_history = jnp.stack(executor.store.action_history[agent], 0)
 
             # Pad observations and actions if necessary
-            if stacked_observation_history.shape[0] < self.config.history_size:
+            if stacked_observation_history.shape[0] < self.history_size:
                 stacked_observation_history, stacked_action_history = pad_history(
                     stacked_observation_history,
                     stacked_action_history,
@@ -136,6 +145,8 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
                 action_mask,
             )
 
+            executor.store.action_info = executor.store.action_info.astype(action_dtype)
+
             # Add action to history
             executor.store.action_history[agent].append(executor.store.action_info)
 
@@ -159,6 +170,9 @@ class MCTSFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
                 executor.store.is_evaluator,
                 action_mask,
             )
+
+            executor.store.action_info = executor.store.action_info.astype(action_dtype)
+
         else:
             raise NotImplementedError(
                 "Currently Monte Carlo Tree Search requires an environment model or a MAMUNetwork"

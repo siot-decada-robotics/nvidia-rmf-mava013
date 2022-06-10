@@ -14,8 +14,8 @@ from mava.utils.environments.JaxEnvironments.jax_slime_volley_wrapper import (
 def make_slimevolley_env(
     evaluation: bool = False,
     max_steps: int = 3000,
-    is_multi_agent: bool = True,
-    is_cooperative: bool = True,
+    is_multi_agent: bool = False,
+    is_cooperative: bool = False,
 ):
     return SlimeVolleyWrapper(
         SlimeVolley(max_steps=max_steps),

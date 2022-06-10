@@ -13,18 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example running MAMCTS on debug MPE environments."""
+"""Example running MAMCTS on MA waterworld"""
 import functools
 from datetime import datetime
 from typing import Any
 
-import haiku as hk
 import mctx
 import optax
 from absl import app, flags
-from acme.jax import utils
-from acme.jax.networks.atari import DeepAtariTorso
-from mctx import RecurrentFnOutput, RootFnOutput
 
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import MAMCTS
@@ -32,21 +28,10 @@ from mava.utils.environments.JaxEnvironments.jax_env_utils import make_ma_waterw
 from mava.utils.loggers import logger_utils
 from mava.wrappers.environment_loop_wrappers import (
     JAXDetailedEpisodeStatistics,
-    JAXDetailedPerAgentStatistics,
     JAXMonitorEnvironmentLoop,
 )
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string(
-    "env_name",
-    "debug_env",
-    "Debugging environment name (str).",
-)
-flags.DEFINE_string(
-    "action_space",
-    "discrete",
-    "Environment action space type (str).",
-)
 
 flags.DEFINE_string(
     "mava_id",
