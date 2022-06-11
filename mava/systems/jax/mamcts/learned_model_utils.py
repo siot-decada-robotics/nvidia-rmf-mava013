@@ -108,11 +108,13 @@ def normalise_encoded_state(
     return encoded_state_normalized
 
 
-@partial(jax.jit, static_argnames=["tile_shape"])
+@partial(jax.jit, static_argnames=["tile_shape","normalise"])
 def actions_to_tiles(
     action_array: chex.Array,
     tile_shape: Sequence[int],
     num_actions: int,
+    normalise : bool = False,
+    shift_actions_by : int = 20
 ) -> chex.Array:
     """Converts an array of actions into planes and normalises them.
 
@@ -124,10 +126,10 @@ def actions_to_tiles(
     Returns:
         returns the tiled actions in the shape [tile,batch]
     """
-
+    num_actions = jax.lax.cond(normalise, lambda : num_actions+shift_actions_by, lambda : 1)
+    
     tiled_actions = (
-        jax.vmap(lambda x: jnp.full(tile_shape, x), out_axes=(-1))(action_array)
-        / num_actions
+        jax.vmap(lambda x: jnp.full(tile_shape, x), out_axes=(-1))(action_array) + shift_actions_by / num_actions 
     )
 
     return tiled_actions
