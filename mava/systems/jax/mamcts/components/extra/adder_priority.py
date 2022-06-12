@@ -1,4 +1,7 @@
+from functools import partial
+
 import chex
+import jax
 import jax.numpy as jnp
 
 from mava.components.jax.building.adders import AdderPriority
@@ -8,6 +11,7 @@ from mava.core_jax import SystemBuilder
 class MuzeroAdderPriority(AdderPriority):
     """Muzero adder priority. Sets up the priority function when adding new data to the replay buffer."""
 
+    @partial(jax.jit, static_argnames=["self"])
     def muzero_priority(self, step) -> chex.Array:
         """Calculates the sequence priority.
 
