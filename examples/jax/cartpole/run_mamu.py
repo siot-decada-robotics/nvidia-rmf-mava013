@@ -18,12 +18,14 @@ import functools
 from datetime import datetime
 from typing import Any
 
+import gym
 import mctx
 import optax
 import reverb
 from absl import app, flags
 from acme.jax import utils
 
+from mava.components.jax.building.environments import ParallelExecutorEnvironmentLoop
 from mava.systems.jax import mamcts
 from mava.systems.jax.mamcts.mcts_utils import MAMU
 from mava.utils.environments.JaxEnvironments.jax_env_utils import make_jax_cartpole
@@ -32,6 +34,7 @@ from mava.wrappers.environment_loop_wrappers import (
     JAXDetailedEpisodeStatistics,
     JAXMonitorEnvironmentLoop,
 )
+from mava.wrappers.gym_env_debug import GymWrapper
 
 FLAGS = flags.FLAGS
 
@@ -52,7 +55,7 @@ def network_factory(*args, **kwargs):
         num_bins=21,
         observation_history_size=GAME_HISTORY_SIZE,
         representation_layers=[],
-        base_transition_layers=[16],
+        base_transition_layers=[],
         dynamics_layers=[16],
         reward_layers=[16],
         base_prediction_layers=[],
@@ -63,6 +66,10 @@ def network_factory(*args, **kwargs):
         *args,
         **kwargs,
     )
+
+
+def make_gym_cartpole(evaluation: bool = False):
+    return GymWrapper(gym.make("CartPole-v1"))
 
 
 def main(_: Any) -> None:
@@ -76,7 +83,7 @@ def main(_: Any) -> None:
 
     # Environment.
     environment_factory = functools.partial(
-        make_jax_cartpole,
+        make_gym_cartpole,
     )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
@@ -101,6 +108,8 @@ def main(_: Any) -> None:
         optax.scale_by_schedule(optax.exponential_decay(0.02, 1000, 0.8)),
     )
 
+    system.update(ParallelExecutorEnvironmentLoop)
+
     # Build the system.
     system.build(
         environment_factory=environment_factory,
@@ -122,14 +131,14 @@ def main(_: Any) -> None:
         n_step=50,
         discount=0.997,
         value_cost=0.5,
-        executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,  # For Jax Envs
-        evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
+        # executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,  # For Jax Envs
+        # evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
         sequence_length=20,
         period=20,
         unroll_steps=10,
-        max_size=500 * 20,
-        importance_sampling_exponent=0.5,
-        sampler=functools.partial(reverb.selectors.Prioritized, priority_exponent=0.5),
+        max_size=1000 * 20,
+        importance_sampling_exponent=0.0,
+        sampler=functools.partial(reverb.selectors.Prioritized, priority_exponent=0.0),
         terminal="gnome-terminal-tabs",
         num_reanalyse_workers=0,
         executor_parameter_update_period=500,

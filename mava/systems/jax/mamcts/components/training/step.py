@@ -368,26 +368,16 @@ class MAMUStep(Step):
             )
 
             def get_start_indices(rng_key, termination, probabilities):
-                last_valid_index = jnp.squeeze(
-                    jnp.argwhere(
-                        termination == 0, size=1, fill_value=termination.shape[-1]
-                    )
-                )
 
-                probabilities = probabilities * jnp.concatenate(
-                    (jnp.array([1.0]), termination[:-1])
-                )
+                termination = jnp.concatenate((jnp.array([1.0]), termination[:-1]))
+
+                probabilities = probabilities * termination
 
                 # Sample a state according to priorities
                 sampled_state_index = jnp.squeeze(
                     jax.random.categorical(rng_key, probabilities, axis=-1, shape=())
                 )
-                sampled_state_index = jax.lax.cond(
-                    sampled_state_index + self.config.unroll_steps
-                    > last_valid_index + 1,
-                    lambda: last_valid_index - self.config.unroll_steps + 1,
-                    lambda: sampled_state_index,
-                )
+
                 return sampled_state_index
 
             def cut_trajectory(field, start_index):

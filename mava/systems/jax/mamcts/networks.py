@@ -364,6 +364,7 @@ def make_mamu_representation_network(
         observation_history: jnp.ndarray,
     ) -> networks_lib.FeedForwardNetwork:
         observation_history = observation_net(observation_history)
+        observation_history = jax.nn.elu(observation_history)
         representation_network = SimpleRepresentationNet(
             representation_layers=representation_layers, encoding_size=encoding_size
         )

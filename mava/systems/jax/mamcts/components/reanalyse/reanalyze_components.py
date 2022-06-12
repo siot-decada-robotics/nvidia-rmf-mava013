@@ -244,39 +244,30 @@ class ReanalyseUpdate(ReanalyseComponent):
             reanalyse_worker.store.data_server_client.mutate_priorities(
                 table=table_key, deletes=keys
             )
+
         return
-        with reanalyse_worker.store.data_server_client.trajectory_writer(
-            num_keep_alive_refs=3
-        ) as writer:
-            for batch_index in range(
-                reanalyse_worker.store.reanalyse_sample_batch_size
-            ):
-                for sequence_index in range(reanalyse_worker.store.sequence_length):
-                    observation = index_stacked_tree(
-                        sample.data.observations, (batch_index, sequence_index)
-                    )
-                    action = index_stacked_tree(
-                        sample.data.actions, (batch_index, sequence_index)
-                    )
-                    reward = index_stacked_tree(
-                        sample.data.rewards, (batch_index, sequence_index)
-                    )
-                    discount = index_stacked_tree(
-                        sample.data.discounts, (batch_index, sequence_index)
-                    )
-                    extras = index_stacked_tree(
-                        sample.data.extras, (batch_index, sequence_index)
-                    )
-                    for agent in extras["policy_info"].keys():
-                        extras["policy_info"][agent][
-                            "search_policies"
-                        ] = updated_search_policies[agent]
-                        extras["policy_info"][agent][
-                            "search_values"
-                        ] = updated_search_values[agent]
-                        extras["policy_info"][agent][
-                            "predicted_values"
-                        ] = updated_predicted_root_values[agent]
+        for batch_index in range(reanalyse_worker.store.reanalyse_sample_batch_size):
+
+            observation = index_stacked_tree(sample.data.observations, batch_index)
+
+            action = index_stacked_tree(sample.data.actions, batch_index)
+
+            reward = index_stacked_tree(sample.data.rewards, batch_index)
+
+            discount = index_stacked_tree(sample.data.discounts, batch_index)
+
+            extras = index_stacked_tree(sample.data.extras, batch_index)
+
+            for agent in extras["policy_info"].keys():
+                extras["policy_info"][agent][
+                    "search_policies"
+                ] = updated_search_policies[agent]
+                extras["policy_info"][agent]["search_values"] = updated_search_values[
+                    agent
+                ]
+                extras["policy_info"][agent][
+                    "predicted_values"
+                ] = updated_predicted_root_values[agent]
 
     @staticmethod
     def name() -> str:
