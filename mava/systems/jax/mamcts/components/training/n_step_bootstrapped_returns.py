@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Trainer components for advantage calculations."""
+"""Trainer components for n-step bootstrapped returns."""
 
 from dataclasses import dataclass
 from typing import Callable, Union

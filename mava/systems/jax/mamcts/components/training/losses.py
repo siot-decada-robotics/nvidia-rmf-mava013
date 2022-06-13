@@ -24,7 +24,7 @@ class MAMCTSLossConfig:
 
 
 class MAMCTSLoss(Loss):
-    """MAMCTS Loss - essentially a decentralised AlphaZero loss"""
+    """MAMCTS Loss - essentially a decentralised independant AlphaZero loss"""
 
     def __init__(
         self,
@@ -130,7 +130,7 @@ class MAMULossConfig(MAMCTSLossConfig):
 
 
 class MAMULoss(Loss):
-    """MAMU Loss - essentially a decentralised MuZero loss"""
+    """MAMU Loss - essentially a decentralised independant MuZero loss"""
 
     def __init__(
         self,

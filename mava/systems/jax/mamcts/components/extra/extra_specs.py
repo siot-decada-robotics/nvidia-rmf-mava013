@@ -33,7 +33,7 @@ class ExtraSearchPolicySpec(ExtrasSpec):
         self,
         config: ExtraSearchPolicySpecConfig = ExtraSearchPolicySpecConfig(),
     ):
-        """Extras Spec for policy info used in training for MAMCTS.
+        """Extras Spec for policy info used in training for MAMCTS. Stores the improved search policies.
 
         Args:
             config : ExtraSearchPolicySpecConfig.
@@ -77,7 +77,8 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
         self,
         config: ExtraLearnedSearchPolicySpecConfig = ExtraLearnedSearchPolicySpecConfig(),
     ):
-        """Extras Spec for policy info used in training for MAMU.
+        """Extras Spec for policy info used in training for MAMU. 
+        Stores the improved search policies, search values, observation history, and predicted root values.
 
         Args:
             config : ExtraLearnedSearchPolicySpecConfig.

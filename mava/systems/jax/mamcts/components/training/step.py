@@ -315,6 +315,7 @@ class MAMUStep(Step):
                 for key in agent_nets.keys()
             }
 
+            # Either use search values or predicted values...
             bootstrap_values = {key: search_values[key] for key in agent_nets.keys()}
 
             # Vmap over batch dimension
