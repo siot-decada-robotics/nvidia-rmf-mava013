@@ -15,12 +15,11 @@
 
 """Jax MAMCTS and MAMU system networks."""
 import dataclasses
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Sequence, Tuple
 
 import haiku as hk  # type: ignore
 import jax
 import jax.numpy as jnp
-import numpy as np
 from acme import specs
 from acme.jax import networks as networks_lib
 from acme.jax import utils
@@ -74,7 +73,15 @@ class PredictionNetwork:
             params: Dict[str, jnp.ndarray],
             observations: networks_lib.Observation,
         ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-            """PredictionNetwork forward function - returns the logits and value logits of an input"""
+            """PredictionNetwork forward function - returns the logits and value logits of an input.
+
+            Args:
+                params : neural network parameters.
+                observations : observation or latent state representation.
+
+            Returns:
+                logits and value logits.
+            """
             # The parameters of the network might change. So it has to
             # be fed into the jitted function.
             logits, value_logits = self.network.apply(params, observations)
@@ -84,13 +91,27 @@ class PredictionNetwork:
         self.forward_fn = forward_fn
 
     def get_logits(self, observations: networks_lib.Observation) -> jnp.ndarray:
-        """Get only the logits of an input"""
+        """Get the predicted policy logits
+
+        Args:
+            observations : the observation or latent state representation.
+
+        Returns:
+            the policy logits.
+        """
         logits, _ = self.forward_fn(self.params, observations)
 
         return logits
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:
-        """Get only the value of an input and convert it to a scalar value"""
+        """Get only the value of an input and convert it to a scalar value.
+
+        Args:
+            observations : the observation or latent state representation.
+
+        Returns:
+            the predicted scalar value.
+        """
         _, value_logits = self.forward_fn(self.params, observations)
         value = logits_to_scalar(value_logits)
         value = inv_value_transform(value)
@@ -99,7 +120,14 @@ class PredictionNetwork:
     def get_logits_and_value(
         self, observations: networks_lib.Observation
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-        """Get both the logits and scalar value prediction of an input"""
+        """Get both the logits and scalar value prediction of an input.
+
+        Args:
+            observations : the observation or latent state representation.
+
+        Returns:
+            the policy logits and scalar value.
+        """
         logits, value_logits = self.forward_fn(self.params, observations)
         value = logits_to_scalar(value_logits)
         value = inv_value_transform(value)
@@ -126,7 +154,17 @@ class RepresentationNetwork:
             params: Dict[str, jnp.ndarray],
             observation_history: networks_lib.Observation,
         ) -> jnp.ndarray:
-            """TODO: Add description here."""
+            """The representation network forward function.
+
+            Encodes an observation history into a root latent state embedding.
+
+            Args:
+                params : neural network parameters.
+                observation_history : the agent's observation history.
+
+            Returns:
+                the root latent state embedding.
+            """
             # The parameters of the network might change. So it has to
             # be fed into the jitted function.
             root_embedding = self.network.apply(params, observation_history)
@@ -138,14 +176,20 @@ class RepresentationNetwork:
 
 @dataclasses.dataclass
 class DynamicsNetwork:
-    """TODO: Add description here."""
+    """The environment dynamics network used by MAMU."""
 
     def __init__(
         self,
         network: networks_lib.FeedForwardNetwork,
         params: networks_lib.Params,
     ) -> None:
-        """TODO: Add description here."""
+        """Create a DynamicsNetwork
+
+        Args:
+            network : the network.
+            params : the neural network parameters.
+
+        """
         self.network = network
         self.params = params
 
@@ -155,7 +199,20 @@ class DynamicsNetwork:
             previous_embedding: networks_lib.NetworkOutput,
             action: networks_lib.Action,
         ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-            """TODO: Add description here."""
+            """The DynamicsNetwork forward function.
+
+            Takes in a previous latent state representation
+            and an action and returns the next latent state representation
+            and reward.
+
+            Args:
+                params : neural network parameters.
+                previous_embedding : previous latent state representation.
+                action : agent's action.
+
+            Returns:
+                the next latent state representation and reward logits.
+            """
             # The parameters of the network might change. So it has to
             # be fed into the jitted function.
             embedding, reward_logits = self.network.apply(
@@ -168,7 +225,9 @@ class DynamicsNetwork:
 
 
 class MAMUNetworks:
-    """MAMU Networks class - Provides functionality and encapsulates all networks for a MAMU system"""
+    """MAMU Networks class
+
+    Provides functionality and encapsulates all networks for a MAMU system"""
 
     def __init__(
         self,
@@ -176,7 +235,13 @@ class MAMUNetworks:
         dynamics_network: DynamicsNetwork,
         representation_network: RepresentationNetwork,
     ) -> None:
-        """TODO: Add description here."""
+        """Create a MAMUNetworks object. Wraps the three networks required for the MAMU system.
+
+        Args:
+            prediction_network : the PredictionNetwork object.
+            dynamics_network : the DynamicsNetwork object.
+            representation_network : the RepresentationNetwork object.
+        """
         self._num_bins = prediction_network._num_bins
 
         self.prediction_network = prediction_network
@@ -193,7 +258,8 @@ class MAMUNetworks:
         self.representation_fn = self.representation_network.forward_fn
         self.history_size = self.representation_network.observation_history_size
 
-    def update_inner_params(self):
+    def update_inner_params(self) -> None:
+        """Update the inner networks parameters."""
         self.prediction_network.params = self.params["prediction"]
         self.dynamics_network.params = self.params["dynamics"]
         self.representation_network.params = self.params["representation"]
@@ -201,6 +267,14 @@ class MAMUNetworks:
     def get_policy_value(
         self, embedding: jnp.ndarray
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Get the policy logits and the scalar value.
+
+        Args:
+            embedding : the environment latent state representation.
+
+        Returns:
+            policy logits and scalar value.
+        """
         logits, value_logits = self.prediction_fn(self.params["prediction"], embedding)
         value = logits_to_scalar(value_logits)
         value = inv_value_transform(value)
@@ -209,6 +283,16 @@ class MAMUNetworks:
     def get_next_state_and_reward(
         self, embedding: jnp.ndarray, action: jnp.ndarray
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """Given a latent state representation and action,
+        get the next state representation and scalar reward.
+
+        Args:
+            embedding : latent state representation.
+            action : An agent's action.
+
+        Returns:
+            the next latent state representation and scalar reward.
+        """
         next_state, reward_logits = self.dynamics_fn(
             self.params["dynamics"], embedding, action
         )
@@ -217,6 +301,15 @@ class MAMUNetworks:
         return next_state, reward
 
     def get_root_state(self, observation_history: jnp.ndarray) -> jnp.ndarray:
+        """Get the root latent state representation.
+
+        Args:
+            observation_history : the agents history of observations and actions
+            to be encoded.
+
+        Returns:
+            the root latent state representation.
+        """
         return self.representation_fn(
             self.params["representation"], observation_history
         )
@@ -231,7 +324,22 @@ def make_mamcts_prediction_network(
     policy_prediction_layers: Sequence[int],
     observation_net: Callable = utils.batch_concat,
 ) -> PredictionNetwork:
-    """Create a prediction network for a mamcts system."""
+    """Create a prediction network for a mamcts system.
+
+    Args:
+        environment_spec : the environment spec.
+        key : a pseudo random number key.
+        num_bins : the number of bins used in the reward and value prediction.
+        base_prediction_layers : the layers in the shared policy and value network.
+        value_prediction_layers : the layers for the value network
+            that is not shared by the policy network.
+        policy_prediction_layers : the layers for the policy network
+            that is not shared by the value network.
+        observation_net : the observation network applied before the base linear layers.
+
+    Returns:
+        a PredictionNetwork object.
+    """
 
     num_actions = environment_spec.actions.num_values
 
@@ -272,7 +380,27 @@ def make_default_mamcts_networks(
     policy_prediction_layers: Sequence[int] = [256],
     observation_net: Callable = utils.batch_concat,
 ) -> Dict[str, Any]:
-    """Make default networks for a mamcts system"""
+    """Make default networks for a mamcts system
+
+    Args:
+        environment_spec : the environment spec.
+        agent_net_keys : the agent net keys.
+        rng_key : a pseudo random number key.
+        net_spec_keys : the net spec keys.
+        num_bins : the number of bins used in the reward and value
+            prediction.
+        base_prediction_layers : the layers in the shared policy
+            and value network.
+        value_prediction_layers : the layers for the value network that
+            is not shared by the policy network.
+        policy_prediction_layers : the layers for the policy network that
+            is not shared by the value network.
+        observation_net : the observation network applied before the
+            base linear layers.
+
+    Returns:
+        a dictionary containing the networks for each agent.
+    """
 
     # Create agent_type specs.
     specs = environment_spec.get_agent_specs()
@@ -309,7 +437,29 @@ def make_mamu_prediction_network(
     policy_prediction_layers: Sequence[int],
     observation_net: Callable = utils.batch_concat,
 ) -> PredictionNetwork:
-    """Make a mamu prediction network"""
+    """Make a mamu prediction network
+
+    Args:
+        environment_spec : the environment spec.
+        key : a pseudo random number key.
+        num_bins : the number of bins used in the reward and value prediction.
+        representation_net : the representation network being used. This is to infer
+            input sizes.
+        dynamics_net : the dyanmics network being used. This is to infer
+            input sizes.
+        base_prediction_layers : the layers in the shared policy and value
+            network.
+        value_prediction_layers : the layers for the value network that
+            is not shared by the policy network.
+        policy_prediction_layers : the layers for the policy network that
+            is not shared by the value network.
+        observation_net : the observation network applied before the base
+            linear layers.
+
+
+    Returns:
+        a PredictionNetwork object.
+    """
 
     num_actions = environment_spec.actions.num_values
 
@@ -362,7 +512,20 @@ def make_mamu_representation_network(
     representation_layers: Sequence[int],
     observation_net: Callable = utils.batch_concat,
 ) -> RepresentationNetwork:
-    """Make a mamu representation network"""
+    """Make a mamu representation network
+
+    Args:
+        environment_spec : the environment spec.
+        key : a pseudo random number key.
+        observation_history_size : size of the observation history.
+        encoding_size : size of the state encoding.
+        representation_layers : the layer sizes of the representation network.
+        observation_net : the observation network applied before the representation
+            linear layers.
+
+    Returns:
+        a RepresentationNetwork object.
+    """
 
     def forward_fn(
         observation_history: jnp.ndarray,
@@ -409,7 +572,27 @@ def make_mamu_dynamics_network(
     reward_layers: Sequence[int],
     observation_net: Callable,
 ) -> DynamicsNetwork:
-    """Make a mamu dynamics network"""
+    """Make a mamu dynamics network
+
+    Args:
+        environment_spec : the environment spec.
+        key : a pseudo random number key.
+        representation_net : the representation network being used. This
+            is to infer input sizes.
+        num_bins : the number of bins for the reward output.
+        encoding_size : the size of the state representation.
+        base_transition_layers : the layer sizes for the shared network of dynamics
+            and rewards.
+        dynamics_layers : the layers sizes for the dynamics after the
+            shared base layers.
+        reward_layers : the layers sizes for the reward after the
+            shared base layers.
+        observation_net : the observation network applied before the
+            base linear layers.
+
+    Returns:
+        a DynamicsNetwork object.
+    """
 
     num_actions = environment_spec.actions.num_values
 
@@ -451,7 +634,9 @@ def make_mamu_dynamics_network(
     dummy_action = utils.add_batch_dim(dummy_action)
 
     network_key, key = jax.random.split(key)
-    params = forward_fn.init(network_key, dummy_root_embedding, dummy_action)  # type: ignore
+    params = forward_fn.init(
+        network_key, dummy_root_embedding, dummy_action
+    )  # type: ignore
 
     # Create DynamicsNetwork to add functionality required by the agent.
     return DynamicsNetwork(
@@ -477,7 +662,28 @@ def make_mamu_networks(
     dynamics_obs_net: Callable,
     prediction_obs_net: Callable,
 ) -> MAMUNetworks:
-    """Make all three mamu networks"""
+    """Make all three mamu networks
+
+    Args:
+        spec : the environment spec.
+        key : a pseudo random number key.
+        num_bins : the number of bins used for the reward and value.
+        observation_history_size : the size of the observation history.
+        encoding_size : the size of the latent state representation.
+        representation_layers : the layer sizes for the representation network.
+        base_transition_layers : the base layer sizes for the dynamics network.
+        dynamics_layers : the additional layer sizes for the dynamics head.
+        reward_layers : the additional layer sizes for the rewards head.
+        base_prediction_layers : the base layer sizes for the prediction network.
+        value_prediction_layers : the additional layer sizes for the value head.
+        policy_prediction_layers : the additional layer sizes for the policy head.
+        representation_obs_net : the representation network observation network.
+        dynamics_obs_net : the dynamics network observation network.
+        prediction_obs_net : the prediction network observation network.
+
+    Returns:
+        a MAMUNetworks object.
+    """
 
     representation_net = make_mamu_representation_network(
         environment_spec=spec,
@@ -538,7 +744,30 @@ def make_default_mamu_networks(
     dynamics_obs_net: Callable = identity,
     prediction_obs_net: Callable = identity,
 ) -> Dict[str, Any]:
-    """Make the default mamu networks"""
+    """Make the default mamu networks.
+
+    Args:
+        environment_spec : the environment spec.
+        agent_net_keys : the agent net keys.
+        rng_key : a pseudo random number key.
+        net_spec_keys : the net spec keys..
+        num_bins : the number of bins used for the reward and value..
+        observation_history_size : the size of the observation history..
+        encoding_size : the size of the latent state representation..
+        representation_layers : the layer sizes for the representation network.
+        base_transition_layers : the base layer sizes for the dynamics network.
+        dynamics_layers : the additional layer sizes for the dynamics head.
+        reward_layers : the additional layer sizes for the rewards head.
+        base_prediction_layers : the base layer sizes for the prediction network.
+        value_prediction_layers : the additional layer sizes for the value head.
+        policy_prediction_layers : the additional layer sizes for the policy head.
+        representation_obs_net : the representation network observation network.
+        dynamics_obs_net : the dynamics network observation network.
+        prediction_obs_net : the prediction network observation network.
+
+    Returns:
+        a dictionary containing the networks for each agent.
+    """
 
     # Create agent_type specs.
     specs = environment_spec.get_agent_specs()
