@@ -54,8 +54,8 @@ class ReanalyseWorker(ReanalyseWorkerHookMixin):
 
     def __init__(
         self,
-        reanalyse_id,
-        trainer_id,
+        reanalyse_id: int,
+        trainer_id: int,
         data_server,
         parameter_server,
         config: SimpleNamespace,

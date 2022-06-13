@@ -31,7 +31,7 @@ from mava.systems.jax.mamcts.components.extra.extra_specs import (
 from mava.systems.jax.mamcts.components.reanalyse.distributor import (
     ReanalyseDistributor,
 )
-from mava.systems.jax.mamcts.components.reanalyse.reanalyze_components import (
+from mava.systems.jax.mamcts.components.reanalyse.reanalyse_components import (
     ReanalyseDataset,
     ReanalyseParameterClient,
     ReanalyseUpdate,

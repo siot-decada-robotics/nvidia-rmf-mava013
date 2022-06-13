@@ -125,7 +125,7 @@ class RepresentationNetwork:
         def forward_fn(
             params: Dict[str, jnp.ndarray],
             observation_history: networks_lib.Observation,
-        ) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        ) -> jnp.ndarray:
             """TODO: Add description here."""
             # The parameters of the network might change. So it has to
             # be fed into the jitted function.
@@ -198,13 +198,17 @@ class MAMUNetworks:
         self.dynamics_network.params = self.params["dynamics"]
         self.representation_network.params = self.params["representation"]
 
-    def get_policy_value(self, embedding):
+    def get_policy_value(
+        self, embedding: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         logits, value_logits = self.prediction_fn(self.params["prediction"], embedding)
         value = logits_to_scalar(value_logits)
         value = inv_value_transform(value)
         return logits, value
 
-    def get_next_state_and_reward(self, embedding, action):
+    def get_next_state_and_reward(
+        self, embedding: jnp.ndarray, action: jnp.ndarray
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         next_state, reward_logits = self.dynamics_fn(
             self.params["dynamics"], embedding, action
         )
@@ -212,7 +216,7 @@ class MAMUNetworks:
         reward = inv_value_transform(reward)
         return next_state, reward
 
-    def get_root_state(self, observation_history):
+    def get_root_state(self, observation_history: jnp.ndarray) -> jnp.ndarray:
         return self.representation_fn(
             self.params["representation"], observation_history
         )
@@ -225,7 +229,7 @@ def make_mamcts_prediction_network(
     base_prediction_layers: Sequence[int],
     value_prediction_layers: Sequence[int],
     policy_prediction_layers: Sequence[int],
-    observation_net=utils.batch_concat,
+    observation_net: Callable = utils.batch_concat,
 ) -> PredictionNetwork:
     """Create a prediction network for a mamcts system."""
 
@@ -266,7 +270,7 @@ def make_default_mamcts_networks(
     base_prediction_layers: Sequence[int] = [256],
     value_prediction_layers: Sequence[int] = [256],
     policy_prediction_layers: Sequence[int] = [256],
-    observation_net=utils.batch_concat,
+    observation_net: Callable = utils.batch_concat,
 ) -> Dict[str, Any]:
     """Make default networks for a mamcts system"""
 
@@ -298,12 +302,12 @@ def make_mamu_prediction_network(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
     num_bins: int,
-    representation_net,
-    dynamics_net,
-    base_prediction_layers,
-    value_prediction_layers,
-    policy_prediction_layers,
-    observation_net=utils.batch_concat,
+    representation_net: RepresentationNetwork,
+    dynamics_net: DynamicsNetwork,
+    base_prediction_layers: Sequence[int],
+    value_prediction_layers: Sequence[int],
+    policy_prediction_layers: Sequence[int],
+    observation_net: Callable = utils.batch_concat,
 ) -> PredictionNetwork:
     """Make a mamu prediction network"""
 
@@ -356,7 +360,7 @@ def make_mamu_representation_network(
     observation_history_size: int,
     encoding_size: int,
     representation_layers: Sequence[int],
-    observation_net=utils.batch_concat,
+    observation_net: Callable = utils.batch_concat,
 ) -> RepresentationNetwork:
     """Make a mamu representation network"""
 
@@ -397,13 +401,13 @@ def make_mamu_representation_network(
 def make_mamu_dynamics_network(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
-    representation_net,
+    representation_net: RepresentationNetwork,
     num_bins: int,
     encoding_size: int,
     base_transition_layers: Sequence[int],
     dynamics_layers: Sequence[int],
     reward_layers: Sequence[int],
-    observation_net,
+    observation_net: Callable,
 ) -> DynamicsNetwork:
     """Make a mamu dynamics network"""
 
@@ -460,18 +464,18 @@ def make_mamu_networks(
     spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
     num_bins: int,
-    observation_history_size,
-    encoding_size,
-    representation_layers,
-    base_transition_layers,
-    dynamics_layers,
-    reward_layers,
-    base_prediction_layers,
-    value_prediction_layers,
-    policy_prediction_layers,
-    representation_obs_net,
-    dynamics_obs_net,
-    prediction_obs_net,
+    observation_history_size: int,
+    encoding_size: int,
+    representation_layers: Sequence[int],
+    base_transition_layers: Sequence[int],
+    dynamics_layers: Sequence[int],
+    reward_layers: Sequence[int],
+    base_prediction_layers: Sequence[int],
+    value_prediction_layers: Sequence[int],
+    policy_prediction_layers: Sequence[int],
+    representation_obs_net: Callable,
+    dynamics_obs_net: Callable,
+    prediction_obs_net: Callable,
 ) -> MAMUNetworks:
     """Make all three mamu networks"""
 
@@ -528,11 +532,11 @@ def make_default_mamu_networks(
     dynamics_layers: Sequence[int] = [256],
     reward_layers: Sequence[int] = [256],
     base_prediction_layers: Sequence[int] = (256, 256),
-    value_prediction_layers=[16],
-    policy_prediction_layers=[16],
-    representation_obs_net=identity,
-    dynamics_obs_net=identity,
-    prediction_obs_net=identity,
+    value_prediction_layers: Sequence[int] = [16],
+    policy_prediction_layers: Sequence[int] = [16],
+    representation_obs_net: Callable = identity,
+    dynamics_obs_net: Callable = identity,
+    prediction_obs_net: Callable = identity,
 ) -> Dict[str, Any]:
     """Make the default mamu networks"""
 

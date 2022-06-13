@@ -3,10 +3,13 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import acme.jax.utils as utils
 import chex
+import haiku
 import jax.numpy as jnp
 import mctx
 from haiku import Params
 from jax import jit
+
+from mava.utils.id_utils import EntityId
 
 RecurrentState = Any
 RootFn = Callable[[Params, chex.PRNGKey, Any], mctx.RootFnOutput]
@@ -37,14 +40,14 @@ class MCTS:
 
     def get_mamcts_action(
         self,
-        forward_fn,
-        params,
-        rng_key,
-        env_state,
-        observation,
-        agent_info,
-        is_evaluator,
-        root_action_mask,
+        forward_fn: Callable,
+        params: Params,
+        rng_key: chex.PRNGKey,
+        env_state: Any,
+        observation: chex.Array,
+        agent_info: Union[EntityId, str],
+        is_evaluator: bool,
+        root_action_mask: chex.Array,
     ) -> Tuple[chex.Array, Dict[str, chex.Array]]:
         """Performs a tree search and gets a MAMCTS agent's action and policy information.
 
@@ -103,14 +106,14 @@ class MCTS:
     )
     def environment_model_search(
         self,
-        forward_fn,
-        params,
-        rng_key,
-        env_state,
-        observation,
-        agent_info,
-        num_simulations,
-        root_action_mask,
+        forward_fn: Callable,
+        params: Params,
+        rng_key: chex.PRNGKey,
+        env_state: Any,
+        observation: chex.Array,
+        agent_info: Union[EntityId, str],
+        num_simulations: int,
+        root_action_mask: chex.Array,
         **search_kwargs,
     ) -> SearchOutput:
         """Perform the MCTS for an MAMCTS agent"""
@@ -148,14 +151,14 @@ class MCTS:
 
     def mamu_get_action(
         self,
-        representation_fn,
-        dynamics_fn,
-        prediction_fn,
-        params,
-        rng_key,
-        observation_history,
-        is_evaluator,
-        root_action_mask,
+        representation_fn: Callable,
+        dynamics_fn: Callable,
+        prediction_fn: Callable,
+        params: Params,
+        rng_key: chex.PRNGKey,
+        observation_history: chex.Array,
+        is_evaluator: bool,
+        root_action_mask: chex.Array,
     ) -> Tuple[chex.Array, Dict[str, chex.Array]]:
         """Performs a tree search and gets a MAMU agent's action and policy information.
 
@@ -223,14 +226,14 @@ class MCTS:
     @functools.partial(chex.assert_max_traces, n=4)
     def learned_model_search(
         self,
-        representation_fn,
-        dynamics_fn,
-        prediction_fn,
-        params,
-        rng_key,
-        observation_history,
-        num_simulations,
-        root_action_mask,
+        representation_fn: Callable,
+        dynamics_fn: Callable,
+        prediction_fn: Callable,
+        params: Params,
+        rng_key: chex.PRNGKey,
+        observation_history: chex.Array,
+        num_simulations: int,
+        root_action_mask: chex.Array,
         **search_kwargs,
     ) -> Tuple[SearchOutput, chex.Array]:
         """Perform the MCTS for an MAMU agent"""

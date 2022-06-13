@@ -18,7 +18,7 @@ from mava.wrappers.env_wrappers import MAMCTSWrapper
 
 
 class MAMU:
-    def learned_root_fn():
+    def learned_root_fn() -> Callable:
         """A simple root_fn to generate a root state's prior probabilities and value
 
         Return:
@@ -47,7 +47,7 @@ class MAMU:
 
         return root_fn
 
-    def learned_recurrent_fn(discount_gamma=1.0) -> Callable:
+    def learned_recurrent_fn(discount_gamma: float = 1.0) -> Callable:
         """Creates a recurrent function used by the MCTS component - this setting makes
         other agents all select a default action in an individual agents tree search"""
 
@@ -92,7 +92,7 @@ class MAMU:
 
 
 class MAMCTS:
-    def environment_root_fn():
+    def environment_root_fn() -> Callable:
         """A simple root_fn to generate a root state's prior probabilities and value
 
         Return:
@@ -112,7 +112,9 @@ class MAMCTS:
 
         return root_fn
 
-    def default_action_recurrent_fn(default_action, discount_gamma=0.99) -> Callable:
+    def default_action_recurrent_fn(
+        default_action: int, discount_gamma: float = 0.99
+    ) -> Callable:
         """Creates a recurrent function used by the MCTS component - this setting makes
         other agents all select a default action in an individual agents tree search"""
 
@@ -172,7 +174,7 @@ class MAMCTS:
 
         return recurrent_fn
 
-    def random_action_recurrent_fn(discount_gamma=0.99) -> Callable:
+    def random_action_recurrent_fn(discount_gamma: float = 0.99) -> Callable:
         """Creates a recurrent function used by the MCTS component - this setting makes
         other agents all select random actions in an individual agents tree search"""
 
@@ -242,7 +244,7 @@ class MAMCTS:
 
         return recurrent_fn
 
-    def greedy_policy_recurrent_fn(discount_gamma=0.99) -> Callable:
+    def greedy_policy_recurrent_fn(discount_gamma: float = 0.99) -> Callable:
         """Creates a recurrent function used by the MCTS component - this setting makes
         other agents all select the greedy action, according to the searching agent's policy, in an individual agents tree search"""
 
