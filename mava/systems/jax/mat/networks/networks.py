@@ -63,43 +63,25 @@ class MatNetworks:
 
         self.forward_fn = forward_fn
 
-    def get_actions(
+    def get_action(
         self,
-        observations: networks_lib.Observation,
+        encoded_observation: networks_lib.Observation,
+        previous_actions: jnp.ndarray,
         key: networks_lib.PRNGKey,
         mask: chex.Array = None,
     ) -> Tuple[np.ndarray, Dict]:
         """Gets the actions for all agents in an auto-regressive manner"""
-        batch_size, num_agents, action_dim = observations.shape
 
-        # setting up initial token for no actions
-        shifted_action = jnp.zeros((batch_size, num_agents, action_dim + 1))
-        shifted_action[:, 0, 0] = 1
+        dist = self.decoder.apply(
+            self.decoder_params, (encoded_observation, previous_actions)
+        )
+        if mask is not None:
+            dist = action_mask_categorical_policies(dist, mask)
 
-        output_action = jnp.zeros((batch_size, num_agents, 1))
-        output_logp = jnp.zeros_like(output_action)
+        action = dist.sample(seed=key)
+        logp = dist.log_prob(action)
 
-        obs_rep, _ = self.encoder.apply(self.encoder_params, observations)
-
-        for i in range(len(observations)):
-            dist = self.decoder.apply(
-                self.decoder_params, (observations, shifted_action)
-            )
-            if mask is not None:
-                dist = action_mask_categorical_policies(dist, mask)
-
-            action = dist.sample(seed=key)
-            logp = dist.log_prob(action)
-
-            output_action[:, i, :] = action
-            output_logp[:, i, :] = logp
-            if i + 1 < num_agents:
-                # TODO (sasha): should we feed this in or the raw distribution?
-                shifted_action[:, i + 1, 1:] = jax.nn.one_hot(
-                    action, num_classes=action_dim
-                )
-
-        return output_action, {"log_prob": output_logp}
+        return action, {"log_prob": logp}
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:
         """TODO: Add description here."""
