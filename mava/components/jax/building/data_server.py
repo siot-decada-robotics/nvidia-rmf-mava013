@@ -167,9 +167,11 @@ class PrioritySampler(Sampler):
         """
         self.config = config
 
+    def on_building_init(self, builder: SystemBuilder) -> None:
+        builder.store.priority_exponent = self.config.priority_exponent
+
     def on_building_data_server_start(self, builder: SystemBuilder) -> None:
         """_summary_"""
-        builder.store.priority_exponent = self.config.priority_exponent
 
         def sampler_fn() -> reverb.selectors:
             return reverb.selectors.Prioritized(self.config.priority_exponent)
@@ -288,13 +290,13 @@ class OffPolicyDataServer(DataServer):
         else:
             signature = builder.store.adder_signature_fn(environment_spec, extras_spec)
 
-        if not hasattr(builder.store, "data_server_sampler"):
+        if not hasattr(builder.store, "sampler_fn"):
             builder.store.sampler_fn = reverb.selectors.Uniform
             warnings.warn(
                 "Sampler has not been expicitly chosen - defaults to uniform sampler."
             )
 
-        if not hasattr(builder.store, "data_server_remover"):
+        if not hasattr(builder.store, "remover_fn"):
             builder.store.remover_fn = reverb.selectors.Fifo
             warnings.warn(
                 "Remover has not been expicitly chosen - defaults to FIFO remover."
