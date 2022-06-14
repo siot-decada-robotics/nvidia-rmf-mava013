@@ -17,6 +17,7 @@
 from typing import Any, Tuple
 
 from mava.components.jax import building, executing, training, updating
+from mava.components.jax.building.data_server import PrioritySampler
 from mava.components.jax.training.model_updating import MAPGEpochUpdate
 from mava.specs import DesignSpec
 from mava.systems.jax import System
@@ -150,6 +151,7 @@ class MAMUSystem(System):
         data_server_process = DesignSpec(
             adder_priority=MuzeroAdderPriority,
             extras_spec=ExtraLearnedSearchPolicySpec,
+            data_server_sampler=PrioritySampler,
             rate_limiter=building.SampleToInsertRateLimiter,
             data_server=building.OffPolicyDataServer,
             data_server_adder_signature=building.ParallelSequenceAdderSignature,

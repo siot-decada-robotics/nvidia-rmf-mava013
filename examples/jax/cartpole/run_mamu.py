@@ -138,10 +138,10 @@ def main(_: Any) -> None:
         unroll_steps=10,
         max_size=1000 * 20,
         importance_sampling_exponent=0.0,
-        sampler=functools.partial(reverb.selectors.Prioritized, priority_exponent=0.0),
+        priority_exponent=0.0,
         terminal="gnome-terminal-tabs",
         num_reanalyse_workers=0,
-        executor_parameter_update_period=500,
+        executor_parameter_update_period=300,
     )
 
     # Launch the system.

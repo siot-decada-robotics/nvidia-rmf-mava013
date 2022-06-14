@@ -246,6 +246,7 @@ class MAMUStep(Step):
     def on_training_init_start(self, trainer: SystemTrainer) -> None:
         # Note (dries): Assuming the batch and sequence dimensions are flattened.
         trainer.store.full_batch_size = trainer.store.sample_batch_size
+        
 
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
@@ -368,11 +369,12 @@ class MAMUStep(Step):
                 target_values,
             )
 
-            def get_start_indices(rng_key, termination, probabilities):
+            def get_start_indices(rng_key, termination, priorities):
 
                 termination = jnp.concatenate((jnp.array([1.0]), termination[:-1]))
 
-                probabilities = probabilities * termination
+                priorities = priorities * termination
+                probabilities = (priorities**trainer.store.priority_exponent)/jnp.sum(priorities**trainer.store.priority_exponent)
 
                 # Sample a state according to priorities
                 sampled_state_index = jnp.squeeze(
