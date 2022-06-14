@@ -301,7 +301,7 @@ class OffPolicyDataServer(DataServer):
             )
 
         table = reverb.Table(
-            name=f"{self.config.data_server_name}_{table_key}",
+            name=table_key,
             sampler=builder.store.sampler_fn(),
             remover=builder.store.remover_fn(),
             max_size=self.config.max_size,
