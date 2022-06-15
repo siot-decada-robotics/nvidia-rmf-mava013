@@ -4,6 +4,7 @@
 
 from typing import Optional
 
+from acme.jax.networks import CategoricalHead
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -25,7 +26,9 @@ class CausalSelfAttention(hk.MultiHeadAttention):
 
         # TODO (sasha): remove? Useful check but this is slow
         if query.ndim != 3:
-            raise ValueError(f"Expect queries of shape [B, T, D]. Got {query.ndim} ({query.shape})")
+            raise ValueError(
+                f"Expect queries of shape [B, T, D]. Got {query.ndim} ({query.shape})"
+            )
 
         seq_len = query.shape[1]
         causal_mask = np.tril(np.ones((1, 1, seq_len, seq_len)))
@@ -222,7 +225,7 @@ class Decoder(hk.Module):
                 hk.Linear(act_obs_attn.shape[-1]),
                 jax.nn.gelu,
                 layer_norm,
-                hk.Linear(self.n_actions),
+                CategoricalHead(self.n_actions)
             ]
         )
 

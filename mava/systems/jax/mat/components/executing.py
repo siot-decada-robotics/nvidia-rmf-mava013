@@ -1,4 +1,7 @@
+from typing import List
+
 import jax
+import jax.numpy as jnp
 from acme.jax import utils
 
 from mava.components.jax.executing.action_selection import (
@@ -6,6 +9,8 @@ from mava.components.jax.executing.action_selection import (
     ExecutorSelectActionConfig,
 )
 from mava.core_jax import SystemExecutor
+from mava.types import OLT
+from mava.utils.jax_tree_utils import stack_trees, index_stacked_tree
 
 
 class MatExecutorActionSelection(ExecutorSelectAction):
@@ -15,21 +20,42 @@ class MatExecutorActionSelection(ExecutorSelectAction):
         super().__init__(config)
 
     def on_execution_select_actions(self, executor: SystemExecutor) -> None:
+        # TODO (sasha): do this once and put it in the store
+        agent_spec = list(executor.store.environment_spec.get_agent_specs().values())[0]
+
         executor.store.actions_info = {}
         executor.store.policies_info = {}
 
-        # todo (sasha): do this as in the paper impl (shifted_action)
-        executor.store.previous_actions = []
+        batch_size = 1
+        num_agents = len(executor.store.observations)
+        # only works for discrete action spaces
+        action_dim = agent_spec.actions.num_values
 
-        encoded_observations = utils.add_batch_dim(
-            get_obs_encoder(executor)(
-                stack_observations(list(executor.store.observations.values()))
-            )
+        # setting up initial token for no actions
+        executor.store.previous_actions = jnp.zeros(
+            (batch_size, num_agents, action_dim + 1)
+        )
+        # for every agent's action in the batch, set initial action to 1
+        # TODO (sasha): 1 seems like a bad value as it is an actual action
+        #  ---------------------------------------------------------------
+        #  why does it only set at agent=0 action=0, but when setting current action, it sets from
+        #  1:end for all agent dims?
+        executor.store.previous_actions.at[:, 0, 0].set(1)
+
+        # TODO (sasha): this only allows for shared actions
+        network = executor.store.networks["networks"]["network_agent"]
+
+        stacked_obs = stack_observations(list(executor.store.observations.values()))
+        _, encoded_obs = network.encode_observations(
+            utils.add_batch_dim(stacked_obs.observation)
+        )
+        stacked_encoded_obs = OLT(
+            encoded_obs, stacked_obs.legal_actions, stacked_obs.terminal
         )
 
         for agent in executor.store.observations.keys():
             action_info, policy_info = executor.select_action(
-                agent, encoded_observations
+                agent, stacked_encoded_obs
             )
             executor.store.actions_info[agent] = action_info
             executor.store.policies_info[agent] = policy_info
@@ -37,27 +63,29 @@ class MatExecutorActionSelection(ExecutorSelectAction):
     def on_execution_select_action_compute(self, executor: SystemExecutor) -> None:
         # TODO (sasha): assert that you are only using shared weights and the same net
         #  for all agents
-        network = executor.store.networks["decoder"]
+        rng_key, executor.store.key = jax.random.split(executor.store.key)
+        network = executor.store.networks["networks"]["network_agent"]
+        agent_ind = int(executor.store.agent.split("_")[1])
+
+        # TODO (sasha): do this once and put it in the store
+        agent_spec = list(executor.store.environment_spec.get_agent_specs().values())[0]
+        action_dim = agent_spec.actions.num_values
 
         observation = executor.store.observation.observation
-        rng_key, executor.store.key = jax.random.split(executor.store.key)
+        legals = index_stacked_tree(executor.store.observation, agent_ind).legal_actions
 
         executor.store.action_info, executor.store.policy_info = network.get_action(
             observation,
             executor.store.previous_actions,
+            agent_ind,
             rng_key,
-            executor.store.observation.legal_actions[executor.store.agent],
+            legals,
         )
 
-        # todo (sasha): do this as in the paper impl (shifted_action)
-        executor.store.previous_actions.append(executor.store.action_info)
+        # TODO (sasha): why only set from 1:?
+        action = jax.nn.one_hot(executor.store.action_info, action_dim)
+        executor.store.previous_actions.at[:, agent_ind + 1, 1:].set(action)
 
 
-def stack_observations(observations):
-    # Stack inside an OLT
-    pass
-
-
-def get_obs_encoder(executor: SystemExecutor):
-    # TODO (sasha): make networks store like this
-    return executor.store.networks["networks"].encoder
+def stack_observations(observations: List[OLT]):
+    return stack_trees(observations)

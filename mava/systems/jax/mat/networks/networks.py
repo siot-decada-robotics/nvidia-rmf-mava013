@@ -1,4 +1,5 @@
 import dataclasses
+import math
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 import chex
@@ -14,6 +15,7 @@ from jax import jit
 
 from mava import specs as mava_specs
 from mava.utils.jax_training_utils import action_mask_categorical_policies
+from mava.systems.jax.mat.networks.transformer import Encoder, Decoder
 
 Array = dm_specs.Array
 BoundedArray = dm_specs.BoundedArray
@@ -22,64 +24,105 @@ EntropyFn = Callable[[Any], jnp.ndarray]
 
 
 @dataclasses.dataclass
-class MatNetworks:
-    """TODO: Add description here."""
-
+class MatEncoderNetwork:
     def __init__(
         self,
-        encoder,
-        decoder,
-        encoder_params: networks_lib.Params,
-        decoder_params: networks_lib.Params,
-        log_prob: Optional[networks_lib.LogProbFn] = None,
-        entropy: Optional[EntropyFn] = None,
-        sample: Optional[networks_lib.SampleFn] = None,
-    ) -> None:
-        """TODO: Add description here."""
-        self.encoder = encoder
-        self.decoder = decoder
-
-        self.encoder_params = encoder_params
-        self.decoder_params = decoder_params
+        network: networks_lib.FeedForwardNetwork,
+        params: networks_lib.Params,
+    ):
+        self.network = network
+        self.params = params
 
         @jit
         def forward_fn(
             params: Dict[str, jnp.ndarray],
             observations: networks_lib.Observation,
-            key: networks_lib.PRNGKey,
-            mask: chex.Array = None,
-        ) -> Tuple[jnp.ndarray, jnp.ndarray]:
-            """TODO: Add description here."""
-            # The parameters of the network might change. So it has to
-            # be fed into the jitted function.
-            distribution, _ = self.network.apply(params, observations)
-            if mask is not None:
-                distribution = action_mask_categorical_policies(distribution, mask)
-
-            actions = jax.numpy.squeeze(distribution.sample(seed=key))
-            log_prob = distribution.log_prob(actions)
-
-            return actions, log_prob
+        ):
+            """
+            Encoder forward function - performs attention over all agents observations and
+            returns the attended state and value of each state
+            """
+            values, encoded_state = self.network.apply(params, observations)
+            return values, encoded_state
 
         self.forward_fn = forward_fn
 
+
+@dataclasses.dataclass
+class MatDecoderNetwork:
+    def __init__(
+        self,
+        network: networks_lib.FeedForwardNetwork,
+        params: networks_lib.Params,
+    ):
+        self.network = network
+        self.params = params
+
+        @jit
+        def forward_fn(
+            params,
+            encoded_observations: networks_lib.Observation,
+            previous_actions: jnp.ndarray,
+            agent_ind: int,
+            key: networks_lib.PRNGKey,
+            mask: chex.Array = None,
+        ):
+            """
+            Encoder forward function - performs attention over all agents observations and
+            returns the attended state and value of each state
+            """
+            action_dist = self.network.apply(
+                params, previous_actions, encoded_observations
+            )
+            # decoder produces sequence of actions for all agents, so must select the action for
+            # only the current agent
+            action_dist._logits = action_dist.logits[:, agent_ind, :]
+
+            if mask is not None:
+                action_dist = action_mask_categorical_policies(action_dist, mask)
+
+            action = jax.numpy.squeeze(action_dist.sample(seed=key))
+            log_prob = action_dist.log_prob(action)
+
+            # TODO (sasha): might want to return action distrib to append to previous actions
+            return action, log_prob
+
+        self.forward_fn = forward_fn
+
+
+@dataclasses.dataclass
+class MatNetworks:
+    """TODO: Add description here."""
+
+    def __init__(self, encoder: MatEncoderNetwork, decoder: MatDecoderNetwork) -> None:
+        """TODO: Add description here."""
+        self.encoder = encoder
+        self.decoder = decoder
+
+        # TODO (sasha): custom trainer to work with dict of params (from mamu)
+        self.params = {"encoder": encoder.params, "decoder": decoder.params}
+        # mamu minibatch update step?
+        # mamu sgd step
+        # mamu loss fn
+
     def get_action(
         self,
-        encoded_observation: networks_lib.Observation,
+        encoded_observations: networks_lib.Observation,
         previous_actions: jnp.ndarray,
+        agent_ind: int,
         key: networks_lib.PRNGKey,
         mask: chex.Array = None,
     ) -> Tuple[np.ndarray, Dict]:
         """Gets the actions for all agents in an auto-regressive manner"""
 
-        dist = self.decoder.apply(
-            self.decoder_params, (encoded_observation, previous_actions)
+        action, logp = self.decoder.forward_fn(
+            self.decoder.params,
+            encoded_observations,
+            previous_actions,
+            agent_ind,
+            key,
+            mask,
         )
-        if mask is not None:
-            dist = action_mask_categorical_policies(dist, mask)
-
-        action = dist.sample(seed=key)
-        logp = dist.log_prob(action)
 
         return action, {"log_prob": logp}
 
@@ -88,9 +131,62 @@ class MatNetworks:
         _, value = self.encoder.apply(self.encoder_params, observations)
         return value
 
+    def encode_observations(self, observations: networks_lib.Observation):
+        """TODO: Add description here."""
+        encoded_obs = self.encoder.forward_fn(self.encoder.params, observations)
+        return encoded_obs
 
-class Decoder(hk.Module):
-    def __init__(self, n_block, n_emb, n_head, n_agent):
-        super().__init__(name="decoder")
-        # TODO (sasha): initialize as done in repo
-        hk.Linear(n_emb, with_bias=False)
+
+def make_network(spec, n_agents, rng_key):
+    dummy_batch_size = 10
+    action_len = spec.actions.num_values
+    obs_shape = spec.observations.observation.shape
+
+    dummy_obs = jnp.zeros((dummy_batch_size, n_agents, *obs_shape))
+    # +1 to action dim because it of initial token to indicate start of step
+    dummy_prev_actions = jnp.zeros((dummy_batch_size, n_agents, action_len + 1))
+
+    enc = lambda x: Encoder(1, 1)(x)
+    enc_forward = hk.without_apply_rng(hk.transform(enc))
+
+    enc_params = enc_forward.init(rng_key, dummy_obs)
+
+    v, dummy_obs_rep = enc_forward.apply(enc_params, dummy_obs)
+
+    # TODO (sasha): is flat obs shape correct here?
+    dec = lambda act, obs: Decoder(1, *obs_shape, 1, action_len)(act, obs)
+    dec_forward = hk.without_apply_rng(hk.transform(dec))
+    dec_params = dec_forward.init(rng_key, dummy_prev_actions, dummy_obs_rep)
+
+    return MatNetworks(
+        encoder=MatEncoderNetwork(network=enc_forward, params=enc_params),
+        decoder=MatDecoderNetwork(network=dec_forward, params=dec_params),
+    )
+
+
+def make_default_networks(
+    environment_spec: mava_specs.MAEnvironmentSpec,
+    agent_net_keys: Dict[str, str],
+    rng_key: List[int],
+    net_spec_keys: Dict[str, str] = {},
+):
+    specs = environment_spec.get_agent_specs()
+    if not net_spec_keys:
+        specs = {agent_net_keys[key]: specs[key] for key in specs.keys()}
+    else:
+        specs = {net_key: specs[value] for net_key, value in net_spec_keys.items()}
+
+    n_agents = len(specs)
+
+    networks = {
+        net_key: make_network(
+            specs[net_key],
+            n_agents,
+            rng_key=rng_key,
+        )
+        for net_key in specs.keys()
+    }
+
+    return {
+        "networks": networks,
+    }
