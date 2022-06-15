@@ -10,7 +10,7 @@ from mava.components.jax.component import Component
 from mava.core_jax import SystemBuilder
 
 @dataclass
-class ReanalyseOffPolicyDataServer(OffPolicyDataServerConfig):
+class ReanalyseOffPolicyDataServerConfig(OffPolicyDataServerConfig):
     reanalyse_max_size: int = 100000
     reanalyse_max_times_sampled: int = 1
 
@@ -64,7 +64,7 @@ class ReanalyseOffPolicyDataServer(OffPolicyDataServer):
         Returns:
             config class/dataclass for component.
         """
-        return ReanalyseOffPolicyDataServer
+        return ReanalyseOffPolicyDataServerConfig
     
 
 class ReanalyseSampler(Sampler):
