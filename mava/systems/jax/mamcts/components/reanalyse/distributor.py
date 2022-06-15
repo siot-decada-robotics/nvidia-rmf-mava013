@@ -22,6 +22,9 @@ class ReanalyseDistributor(Distributor):
             config.nodes_on_gpu = [config.nodes_on_gpu]
         self.config = config
 
+    def on_building_init_start(self, builder: SystemBuilder) -> None:
+        builder.store.num_reanalyse_workers = self.config.num_reanalyse_workers
+
     def on_building_program_nodes(self, builder: SystemBuilder) -> None:
         """_summary_
 

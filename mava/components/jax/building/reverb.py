@@ -164,9 +164,11 @@ class PrioritySampler(Sampler):
         """
         self.config = config
 
+    def on_building_start(self, builder: SystemBuilder) -> None:
+        builder.store.priority_exponent = self.config.priority_exponent
+
     def on_building_data_server_start(self, builder: SystemBuilder) -> None:
         """_summary_"""
-        builder.store.priority_exponent = self.config.priority_exponent
 
         def sampler_fn() -> reverb.selectors:
             return reverb.selectors.Prioritized(self.config.priority_exponent)

@@ -17,8 +17,13 @@
 from typing import Any, Tuple
 
 from mava.components.jax import building, executing, training, updating
-from mava.components.jax.building.data_server import PrioritySampler
+from mava.components.jax.building.reverb import (
+    FIFORemover,
+    PrioritySampler,
+    UniformSampler,
+)
 from mava.components.jax.training.model_updating import MAPGEpochUpdate
+from mava.components.jax.training.step import DefaultTrainerStep
 from mava.specs import DesignSpec
 from mava.systems.jax import System
 from mava.systems.jax.mamcts.components.executing.action_selection import (
@@ -29,11 +34,20 @@ from mava.systems.jax.mamcts.components.extra.extra_specs import (
     ExtraLearnedSearchPolicySpec,
     ExtraSearchPolicySpec,
 )
+from mava.systems.jax.mamcts.components.reanalyse.data_server import (
+    FIFOReanalyseRemover,
+    LIFOReanalyseSampler,
+    ReanalyseOffPolicyDataServer,
+    UniformReanalyseSampler,
+)
+from mava.systems.jax.mamcts.components.reanalyse.datasets import (
+    ReanalyseActorDataset,
+    ReanalyseTrainerTrajectoryDataset,
+)
 from mava.systems.jax.mamcts.components.reanalyse.distributor import (
     ReanalyseDistributor,
 )
 from mava.systems.jax.mamcts.components.reanalyse.reanalyse_components import (
-    ReanalyseDataset,
     ReanalyseParameterClient,
     ReanalyseUpdate,
 )
@@ -143,8 +157,8 @@ class MAMUSystem(System):
             epoch_update=MAPGEpochUpdate,
             minibatch_update=MAMUMinibatchUpdate,
             sgd_step=MAMUStep,
-            step=training.DefaultTrainerStep,
-            trainer_dataset=building.TrajectoryDataset,
+            step=DefaultTrainerStep,
+            trainer_dataset=ReanalyseTrainerTrajectoryDataset,
         ).get()
 
         # Data Server
@@ -152,8 +166,11 @@ class MAMUSystem(System):
             adder_priority=MuzeroAdderPriority,
             extras_spec=ExtraLearnedSearchPolicySpec,
             data_server_sampler=PrioritySampler,
-            rate_limiter=building.SampleToInsertRateLimiter,
-            data_server=building.OffPolicyDataServer,
+            data_server_remover=FIFORemover,
+            data_server_reanalyse_sampler=LIFOReanalyseSampler,
+            data_server_reanalyse_remover=FIFOReanalyseRemover,
+            rate_limiter=building.MinSizeRateLimiter,
+            data_server=ReanalyseOffPolicyDataServer,
             data_server_adder_signature=building.ParallelSequenceAdderSignature,
         ).get()
 
@@ -172,7 +189,7 @@ class MAMUSystem(System):
             **executor_process,
             **trainer_process,
             reanalyse_update=ReanalyseUpdate,
-            reanalyse_dataset=ReanalyseDataset,
+            reanalyse_dataset=ReanalyseActorDataset,
             reanalyse_parameter_client=ReanalyseParameterClient,
             distributor=ReanalyseDistributor,
             logger=building.Logger,

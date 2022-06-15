@@ -118,7 +118,7 @@ def main(_: Any) -> None:
         checkpoint_subpath=checkpoint_subpath,
         optimizer=optimizer,
         run_evaluator=True,
-        sample_batch_size=128,
+        sample_batch_size=64,
         num_minibatches=1,
         num_epochs=1,
         num_executors=1,
@@ -140,8 +140,7 @@ def main(_: Any) -> None:
         importance_sampling_exponent=0.0,
         priority_exponent=0.0,
         terminal="gnome-terminal-tabs",
-        num_reanalyse_workers=0,
-        executor_parameter_update_period=300,
+        num_reanalyse_workers=1,
     )
 
     # Launch the system.

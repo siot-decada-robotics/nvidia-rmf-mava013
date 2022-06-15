@@ -95,59 +95,6 @@ class ReanalyseParameterClient(ReanalyseComponent, BaseParameterClient):
 
 
 @dataclass
-class ReanalyseDatasetConfig:
-    reanalyse_sample_batch_size: int = 32
-    reanalyse_max_in_flight_samples_per_worker: int = 512
-    reanalyse_num_workers_per_iterator: int = -1
-    reanalyse_max_samples_per_stream: int = -1
-    reanalyse_rate_limiter_timeout_ms: int = -1
-    reanalyse_get_signature_timeout_secs: Optional[int] = None
-
-
-class ReanalyseDataset(ReanalyseComponent):
-    def __init__(
-        self, config: ReanalyseDatasetConfig = ReanalyseDatasetConfig()
-    ) -> None:
-        self.config = config
-
-    def on_reanalyse_worker_init_start(self, reanalyse_worker: ReanalyseWorker) -> None:
-
-        dataset = reverb.TrajectoryDataset.from_table_signature(
-            server_address=reanalyse_worker.store.data_server_client.server_address,
-            table=reanalyse_worker.store.trainer_id,
-            max_in_flight_samples_per_worker=2
-            * self.config.reanalyse_sample_batch_size,
-            num_workers_per_iterator=self.config.reanalyse_num_workers_per_iterator,
-            max_samples_per_stream=self.config.reanalyse_max_samples_per_stream,
-            rate_limiter_timeout_ms=self.config.reanalyse_rate_limiter_timeout_ms,
-            get_signature_timeout_secs=self.config.reanalyse_get_signature_timeout_secs,
-        )
-
-        # Add batch dimension.
-        dataset = dataset.batch(
-            self.config.reanalyse_sample_batch_size, drop_remainder=True
-        )
-        reanalyse_worker.store.reanalyse_sample_batch_size = (
-            self.config.reanalyse_sample_batch_size
-        )
-
-        reanalyse_worker.store.dataset_iterator = dataset.as_numpy_iterator()
-
-    @staticmethod
-    def name() -> str:
-        """Static method that returns component name."""
-        return "reanalyse_dataset"
-
-    @staticmethod
-    def config_class() -> Optional[Callable]:
-        """
-        Optional class which specifies the
-        dataclass/config object for the component.
-        """
-        return ReanalyseDatasetConfig
-
-
-@dataclass
 class ReanalyseUpdateConfig:
     pass
 
@@ -387,7 +334,7 @@ class ReanalyseUpdate(ReanalyseComponent):
                     )
 
                     writer.create_item(
-                        table=table_key,
+                        table=f"{table_key}_reanalyse",
                         priority=table_priorities[table_key],
                         trajectory=trajectory,
                     )
