@@ -246,7 +246,6 @@ class MAMUStep(Step):
     def on_training_init_start(self, trainer: SystemTrainer) -> None:
         # Note (dries): Assuming the batch and sequence dimensions are flattened.
         trainer.store.full_batch_size = trainer.store.sample_batch_size
-        
 
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
@@ -277,6 +276,7 @@ class MAMUStep(Step):
             search_policies = {}
             search_values = {}
             observation_history = {}
+            reanalysed = {}
             for agent_key in extra["policy_info"].keys():
                 search_policies[agent_key] = extra["policy_info"][agent_key][
                     "search_policies"
@@ -287,6 +287,11 @@ class MAMUStep(Step):
                 observation_history[agent_key] = extra["policy_info"][agent_key][
                     "observation_history"
                 ]
+                reanalysed[agent_key] = extra["policy_info"][agent_key]["reanalysed"]
+
+            reanalysed = jnp.array(list(reanalysed.values())[0])[
+                :, :-1
+            ]  # batch x sequence
 
             agent_nets = trainer.store.trainer_agent_net_keys
             networks = trainer.store.networks["networks"]
@@ -363,6 +368,8 @@ class MAMUStep(Step):
                     self.config.lambda_t,
                 )
 
+            # target_values = jax.tree_map(lambda search_value_seq, target_seq : jnp.where(reanalysed,search_value_seq,target_seq),bootstrap_values, target_values)
+
             state_priorities = jax.tree_map(
                 lambda pred_val, target_val: jnp.abs(pred_val - target_val),
                 predicted_values,
@@ -374,7 +381,9 @@ class MAMUStep(Step):
                 termination = jnp.concatenate((jnp.array([1.0]), termination[:-1]))
 
                 priorities = priorities * termination
-                probabilities = (priorities**trainer.store.priority_exponent)/jnp.sum(priorities**trainer.store.priority_exponent)
+                probabilities = (
+                    priorities**trainer.store.priority_exponent
+                ) / jnp.sum(priorities**trainer.store.priority_exponent)
 
                 # Sample a state according to priorities
                 sampled_state_index = jnp.squeeze(
@@ -462,16 +471,14 @@ class MAMUStep(Step):
             assert len(agent_0_t_vals) >= 1
             num_sequences = agent_0_t_vals.shape[0]
             batch_size = num_sequences
-            assert batch_size % trainer.store.num_minibatches == 0, (
-                "Num minibatches must divide batch size. Got batch_size={}"
-                " num_minibatches={}."
-            ).format(batch_size, trainer.store.num_minibatches)
 
-            (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
-                trainer.store.epoch_update_fn,
-                (new_key, states.params, states.opt_states, trajectories),
-                (),
-                length=trainer.store.num_epochs,
+            (
+                new_key,
+                new_params,
+                new_opt_states,
+                _,
+            ), metrics = trainer.store.update_fn(
+                (new_key, states.params, states.opt_states, trajectories)
             )
 
             priorities = None
@@ -530,6 +537,8 @@ class MAMUStep(Step):
             priority_updates = dict(zip(keys, priorities))
 
             for table_key in trainer.store.table_network_config.keys():
+                if table_key.split("_")[-1] == "reanalyse":
+                    continue
                 trainer.store.data_server_client.mutate_priorities(
                     table=table_key, updates=priority_updates
                 )

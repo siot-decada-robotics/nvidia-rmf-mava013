@@ -7,10 +7,9 @@ import optax
 from acme.jax import networks as networks_lib
 from jax.random import KeyArray
 
+from mava.components.jax.component import Component
 from mava.components.jax.training import Utility
 from mava.components.jax.training.model_updating import (
-    EpochUpdate,
-    MAPGEpochUpdateConfig,
     MAPGMinibatchUpdateConfig,
     MinibatchUpdate,
 )
@@ -114,7 +113,23 @@ class MAMCTSMinibatchUpdate(MinibatchUpdate):
         return MAMCTSMinibatchUpdateConfig
 
 
-class MAMUMinibatchUpdate(MAMCTSMinibatchUpdate):
+@dataclass
+class MAMUUpdateConfig(MAPGMinibatchUpdateConfig):
+    pass
+
+
+class MAMUUpdate(Component):
+    def __init__(
+        self,
+        config: MAMUUpdateConfig = MAMUUpdateConfig(),
+    ):
+        """_summary_
+
+        Args:
+            config : _description_.
+        """
+        self.config = config
+
     def on_training_utility_fns(self, trainer: SystemTrainer) -> None:
         """_summary_"""
 
@@ -134,22 +149,27 @@ class MAMUMinibatchUpdate(MAMCTSMinibatchUpdate):
                 trainer.store.networks["networks"][net_key].params
             )  # pytype: disable=attribute-error
 
-        def model_update_minibatch(
-            carry: Tuple[networks_lib.Params, optax.OptState],
-            minibatch: MAMUBatch,
-        ) -> Tuple[Tuple[Any, optax.OptState], Dict[str, Any]]:
-            """Performs model update for a single minibatch."""
-            params, opt_states = carry
+        def model_update(
+            carry: Tuple[KeyArray, Any, optax.OptState, MAMUBatch]
+        ) -> Tuple[
+            Tuple[KeyArray, Any, optax.OptState, MAMUBatch],
+            Dict[str, jnp.ndarray],
+        ]:
+
+            """Performs model updates based on one sample of data."""
+            key, params, opt_states, batch = carry
+
+            new_key, subkey = jax.random.split(key)
 
             # Calculate the gradients and agent metrics.
             gradients, agent_metrics = trainer.store.grad_fn(
                 params,
-                minibatch.search_policies,
-                minibatch.target_values,
-                minibatch.rewards,
-                minibatch.actions,
-                minibatch.observation_history,
-                minibatch.priorities,
+                batch.search_policies,
+                batch.target_values,
+                batch.rewards,
+                batch.actions,
+                batch.observation_history,
+                batch.priorities,
             )
 
             # Update the networks and optimizors.
@@ -171,6 +191,21 @@ class MAMUMinibatchUpdate(MAMCTSMinibatchUpdate):
                 )
                 agent_metrics[agent_key]["norm_updates"] = optax.global_norm(updates)
                 metrics[agent_key] = agent_metrics
-            return (params, opt_states), metrics
 
-        trainer.store.minibatch_update_fn = model_update_minibatch
+            return (new_key, params, opt_states, batch), metrics
+
+        trainer.store.update_fn = model_update
+
+    @staticmethod
+    def name() -> str:
+        """Static method that returns component name."""
+        return "model_update"
+
+    @staticmethod
+    def config_class() -> Optional[Callable]:
+        """Config class used for component.
+
+        Returns:
+            config class/dataclass for component.
+        """
+        return MAMUUpdateConfig

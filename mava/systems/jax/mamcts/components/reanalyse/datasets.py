@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+import numpy as np
 import reverb
 import tensorflow as tf
 from pygame import init
@@ -27,6 +28,8 @@ class ReanalyseTrainerTrajectoryDataset(TrajectoryDataset):
             builder : _description_
         """
 
+        self.config.reanalyse_fraction = np.clip(self.config.reanalyse_fraction, 0, 1)
+
         actor_dataset = reverb.TrajectoryDataset.from_table_signature(
             server_address=builder.store.data_server_client.server_address,
             table=builder.store.trainer_id,
@@ -37,34 +40,43 @@ class ReanalyseTrainerTrajectoryDataset(TrajectoryDataset):
             get_signature_timeout_secs=self.config.get_signature_timeout_secs,
             # max_samples=self.config.max_samples,
         )
-        reanalyse_dataset = reverb.TrajectoryDataset.from_table_signature(
-            server_address=builder.store.data_server_client.server_address,
-            table=f"{builder.store.trainer_id}_reanalyse",
-            max_in_flight_samples_per_worker=2 * self.config.sample_batch_size,
-            num_workers_per_iterator=self.config.num_workers_per_iterator,
-            max_samples_per_stream=self.config.max_samples_per_stream,
-            rate_limiter_timeout_ms=self.config.rate_limiter_timeout_ms,
-            get_signature_timeout_secs=self.config.get_signature_timeout_secs,
-            # max_samples=self.config.max_samples,
-        )
+        if builder.store.num_reanalyse_workers > 0:
+            reanalyse_dataset = reverb.TrajectoryDataset.from_table_signature(
+                server_address=builder.store.data_server_client.server_address,
+                table=f"{builder.store.trainer_id}_reanalyse",
+                max_in_flight_samples_per_worker=2 * self.config.sample_batch_size,
+                num_workers_per_iterator=self.config.num_workers_per_iterator,
+                max_samples_per_stream=self.config.max_samples_per_stream,
+                rate_limiter_timeout_ms=self.config.rate_limiter_timeout_ms,
+                get_signature_timeout_secs=self.config.get_signature_timeout_secs,
+                # max_samples=self.config.max_samples,
+            )
+            reanalyse_dataset = reanalyse_dataset.batch(
+                self.config.sample_batch_size, drop_remainder=True
+            )
+        else:
+            self.config.reanalyse_fraction == 0
 
         # Add batch dimension.
         actor_dataset = actor_dataset.batch(
             self.config.sample_batch_size, drop_remainder=True
         )
-        reanalyse_dataset = reanalyse_dataset.batch(
-            self.config.sample_batch_size, drop_remainder=True
-        )
 
-        dataset = tf.data.Dataset.sample_from_datasets(
-            datasets=[actor_dataset, reanalyse_dataset],
-            weights=[
-                1 - self.config.reanalyse_fraction,
-                self.config.reanalyse_fraction,
-            ],
-            seed=None,
-            stop_on_empty_dataset=False,
-        )
+        if self.config.reanalyse_fraction > 0 and self.config.reanalyse_fraction < 1:
+            dataset = tf.data.Dataset.sample_from_datasets(
+                datasets=[actor_dataset, reanalyse_dataset],
+                weights=[
+                    1 - self.config.reanalyse_fraction,
+                    self.config.reanalyse_fraction,
+                ],
+                seed=None,
+                stop_on_empty_dataset=False,
+            )
+
+        elif self.config.reanalyse_fraction == 0:
+            dataset = actor_dataset
+        else:
+            dataset = reanalyse_dataset
 
         builder.store.sample_batch_size = self.config.sample_batch_size
 
@@ -82,7 +94,7 @@ class ReanalyseTrainerTrajectoryDataset(TrajectoryDataset):
 
 @dataclass
 class ReanalyseActorDatasetConfig:
-    reanalyse_sample_batch_size: int = 64
+    reanalyse_sample_batch_size: int = 32
     reanalyse_max_in_flight_samples_per_worker: int = 512
     reanalyse_num_workers_per_iterator: int = -1
     reanalyse_max_samples_per_stream: int = -1
@@ -132,7 +144,7 @@ class ReanalyseActorDataset(ReanalyseComponent):
             self.config.reanalyse_sample_batch_size
         )
 
-        reanalyse_worker.store.dataset_iterator = dataset.as_numpy_iterator()
+        reanalyse_worker.store.actor_dataset_iterator = dataset.as_numpy_iterator()
 
     @staticmethod
     def name() -> str:

@@ -54,7 +54,7 @@ from mava.systems.jax.mamcts.components.reanalyse.reanalyse_components import (
 from mava.systems.jax.mamcts.components.training.losses import MAMCTSLoss, MAMULoss
 from mava.systems.jax.mamcts.components.training.model_updating import (
     MAMCTSMinibatchUpdate,
-    MAMUMinibatchUpdate,
+    MAMUUpdate,
 )
 from mava.systems.jax.mamcts.components.training.n_step_bootstrapped_returns import (
     NStepBootStrappedReturns,
@@ -154,8 +154,7 @@ class MAMUSystem(System):
             trainer_init=training.TrainerInit,
             n_step_fn=NStepBootStrappedReturns,
             loss=MAMULoss,
-            epoch_update=MAPGEpochUpdate,
-            minibatch_update=MAMUMinibatchUpdate,
+            model_update=MAMUUpdate,
             sgd_step=MAMUStep,
             step=DefaultTrainerStep,
             trainer_dataset=ReanalyseTrainerTrajectoryDataset,

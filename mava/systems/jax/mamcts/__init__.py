@@ -26,7 +26,6 @@ from mava.systems.jax.mamcts.components.training.losses import MAMCTSLoss, MAMUL
 from mava.systems.jax.mamcts.components.training.model_updating import (
     MAMCTSMinibatchUpdate,
     MAMUBatch,
-    MAMUMinibatchUpdate,
     MCTSBatch,
 )
 from mava.systems.jax.mamcts.components.training.n_step_bootstrapped_returns import (

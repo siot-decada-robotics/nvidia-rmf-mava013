@@ -209,6 +209,7 @@ class MCTS:
                 "search_values": search_value,
                 "observation_history": jnp.squeeze(observation_history, 0),
                 "predicted_values": jnp.squeeze(predicted_root_value),
+                "reanalysed": False,
             },
         )
 

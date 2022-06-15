@@ -215,9 +215,8 @@ class ReanalyseUpdate(ReanalyseComponent):
 
     def on_reanalyse_worker_step(self, reanalyse_worker: ReanalyseWorker) -> None:
         # TODO mask values updated values after discounts
-        sample = next(reanalyse_worker.store.dataset_iterator)
+        sample = next(reanalyse_worker.store.actor_dataset_iterator)
 
-        keys, _, *_ = sample.info
         rng_key, reanalyse_worker.store.key = jax.random.split(
             reanalyse_worker.store.key
         )
@@ -226,11 +225,6 @@ class ReanalyseUpdate(ReanalyseComponent):
             updated_search_values,
             updated_predicted_root_values,
         ) = self.reanalyse_data(sample, rng_key)
-
-        for table_key in reanalyse_worker.store.table_network_config.keys():
-            reanalyse_worker.store.data_server_client.mutate_priorities(
-                table=table_key, deletes=keys
-            )
 
         termination_mask = jax.tree_map(
             lambda discount: jnp.concatenate(
@@ -309,6 +303,7 @@ class ReanalyseUpdate(ReanalyseComponent):
                         extras["policy_info"][agent][
                             "predicted_values"
                         ] = indexed_updated_predicted_root_values[agent]
+                        extras["policy_info"][agent]["reanalysed"] = True
 
                     trajectory_step = {
                         "observations": observations,

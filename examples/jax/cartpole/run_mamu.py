@@ -118,9 +118,7 @@ def main(_: Any) -> None:
         checkpoint_subpath=checkpoint_subpath,
         optimizer=optimizer,
         run_evaluator=True,
-        sample_batch_size=64,
-        num_minibatches=1,
-        num_epochs=1,
+        sample_batch_size=128,
         num_executors=1,
         multi_process=True,
         root_fn=MAMU.learned_root_fn(),
@@ -137,10 +135,10 @@ def main(_: Any) -> None:
         period=20,
         unroll_steps=10,
         max_size=1000 * 20,
-        importance_sampling_exponent=0.0,
-        priority_exponent=0.0,
+        importance_sampling_exponent=0.5,
+        priority_exponent=0.5,
         terminal="gnome-terminal-tabs",
-        num_reanalyse_workers=1,
+        executor_parameter_update_period=500,
     )
 
     # Launch the system.

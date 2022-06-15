@@ -77,7 +77,7 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
         self,
         config: ExtraLearnedSearchPolicySpecConfig = ExtraLearnedSearchPolicySpecConfig(),
     ):
-        """Extras Spec for policy info used in training for MAMU. 
+        """Extras Spec for policy info used in training for MAMU.
         Stores the improved search policies, search values, observation history, and predicted root values.
 
         Args:
@@ -111,6 +111,7 @@ class ExtraLearnedSearchPolicySpec(ExtrasSpec):
                     dtype=spec.observations.observation.dtype,
                 ),
                 "predicted_values": jnp.ones(shape=(), dtype=jnp.float32),
+                "reanalysed": jnp.bool_(False),
             }
 
         # Add the networks keys to extras.
