@@ -102,8 +102,6 @@ def main(_: Any) -> None:
         optimizer=optimizer,
         run_evaluator=True,
         sample_batch_size=128,
-        num_minibatches=1,
-        num_epochs=1,
         num_executors=8,
         multi_process=True,
         root_fn=MAMU.learned_root_fn(),
@@ -120,7 +118,7 @@ def main(_: Any) -> None:
         unroll_steps=10,
         max_size=500 * 30,
         importance_sampling_exponent=0.5,
-        sampler=functools.partial(reverb.selectors.Prioritized, priority_exponent=0.5),
+        priority_exponent=0.5,
         terminal="gnome-terminal-tabs",
         num_reanalyse_workers=0,
     )

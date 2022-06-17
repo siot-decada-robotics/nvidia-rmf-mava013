@@ -113,8 +113,8 @@ def actions_to_tiles(
     action_array: chex.Array,
     tile_shape: Sequence[int],
     num_actions: int,
-    normalise: bool = False,
-    shift_actions_by: int = 20,
+    normalise: bool = True,
+    shift_actions_by: int = 0,
 ) -> chex.Array:
     """Converts an array of actions into planes and normalises them.
 
@@ -127,12 +127,11 @@ def actions_to_tiles(
         returns the tiled actions in the shape [tile,batch]
     """
     num_actions = jax.lax.cond(
-        normalise, lambda: num_actions + shift_actions_by, lambda: 1
+        normalise, lambda: num_actions, lambda: 1
     )
 
     tiled_actions = (
-        jax.vmap(lambda x: jnp.full(tile_shape, x), out_axes=(-1))(action_array)
-        + shift_actions_by / num_actions
+        jax.vmap(lambda x: jnp.full(tile_shape, x), out_axes=(-1))(action_array) / num_actions + shift_actions_by
     )
 
     return tiled_actions
