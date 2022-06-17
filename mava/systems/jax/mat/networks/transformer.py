@@ -122,6 +122,8 @@ class EncodeBlock(hk.Module):
         self.init_scale = 2.0 / self.n_layers
 
     def __call__(self, raw_obs, mask=None):
+        # TODO (sasha): remove flatten obs dim
+        raw_obs = jnp.reshape(raw_obs, (raw_obs.shape[0], raw_obs.shape[1], -1))
         # attention over actions
         action_attn = CausalSelfAttention(
             num_heads=self.n_head,
@@ -200,17 +202,16 @@ class Encoder(hk.Module):
 
 
 class Decoder(hk.Module):
-    def __init__(self, n_heads, n_embd, n_blocks, n_actions):
+    def __init__(self, n_heads, n_blocks, n_actions):
         super().__init__()
         self.n_heads = n_heads
-        self.n_embd = n_embd
         self.n_blocks = n_blocks
         self.n_actions = n_actions
 
     def __call__(self, actions, obs_rep):
-        # todo (sasha): in official implementation this linear is made without bias?
+        # TODO (sasha): in official implementation this linear is made without bias?
         action_encoder = hk.Sequential(
-            [layer_norm, jax.nn.gelu, hk.Linear(self.n_embd)]
+            [layer_norm, jax.nn.gelu, hk.Linear(obs_rep.shape[-1])]
         )
         encoded_actions = action_encoder(actions)
 
@@ -225,7 +226,7 @@ class Decoder(hk.Module):
                 hk.Linear(act_obs_attn.shape[-1]),
                 jax.nn.gelu,
                 layer_norm,
-                CategoricalHead(self.n_actions)
+                CategoricalHead(self.n_actions, dtype=jnp.int64),
             ]
         )
 

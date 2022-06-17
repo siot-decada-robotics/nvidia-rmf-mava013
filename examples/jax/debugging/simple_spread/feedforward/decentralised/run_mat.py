@@ -18,14 +18,19 @@ import functools
 from datetime import datetime
 from typing import Any
 
+import jax.numpy as jnp
+import haiku as hk
 import optax
 from absl import app, flags
+from acme.jax.networks.atari import DeepAtariTorso
 
 from mava.systems.jax import mat
-from mava.systems.jax import mappo
 
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
+
+from pcb_mava import pcb_grid_utils
+
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -53,12 +58,30 @@ def main(_: Any) -> None:
     Args:
         _ : _
     """
-    # Environment.
-    environment_factory = functools.partial(
-        debugging_utils.make_environment,
-        env_name=FLAGS.env_name,
-        action_space=FLAGS.action_space,
+    env_factory = functools.partial(
+        pcb_grid_utils.make_environment, size=8, num_agents=3, mava=True
     )
+
+    env = env_factory()
+
+    def network_factory(*args, **kwargs):
+        def obs_net_forward(x):
+            orig_shape = x.shape
+            x = jnp.reshape(x, (-1, *orig_shape[2:]))
+            x = hk.Embed(128, 8)(jnp.int32(x))
+            x = DeepAtariTorso()(x)
+            x = jnp.reshape(x, (*orig_shape[:2], -1))
+
+            return x
+
+        # obs_net_forward = lambda x: DeepAtariTorso()(
+        #     hk.Embed(128, 8)(jnp.reshape(x, (-1, *x.shape[2:])))
+        # )
+        return mat.make_default_networks(
+            *args,
+            obs_net=obs_net_forward,
+            **kwargs,
+        )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
@@ -84,8 +107,8 @@ def main(_: Any) -> None:
 
     # Build the system.
     system.build(
-        environment_factory=environment_factory,
-        network_factory=mat.make_default_networks,
+        environment_factory=env_factory,
+        network_factory=network_factory,
         logger_factory=logger_factory,
         checkpoint_subpath=checkpoint_subpath,
         optimizer=optimizer,

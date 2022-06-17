@@ -1,4 +1,5 @@
 import dataclasses
+import functools
 import math
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
@@ -81,7 +82,7 @@ class MatDecoderNetwork:
             if mask is not None:
                 action_dist = action_mask_categorical_policies(action_dist, mask)
 
-            action = jax.numpy.squeeze(action_dist.sample(seed=key))
+            action = jnp.int64(jnp.squeeze(action_dist.sample(seed=key)))
             log_prob = action_dist.log_prob(action)
 
             # TODO (sasha): might want to return action distrib to append to previous actions
@@ -124,7 +125,7 @@ class MatNetworks:
             mask,
         )
 
-        return action, {"log_prob": logp}
+        return action, {"log_prob": jnp.squeeze(logp)}
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:
         """TODO: Add description here."""
@@ -137,7 +138,7 @@ class MatNetworks:
         return encoded_obs
 
 
-def make_network(spec, n_agents, rng_key):
+def make_network(spec, n_agents, obs_net, rng_key):
     dummy_batch_size = 10
     action_len = spec.actions.num_values
     obs_shape = spec.observations.observation.shape
@@ -146,17 +147,15 @@ def make_network(spec, n_agents, rng_key):
     # +1 to action dim because it of initial token to indicate start of step
     dummy_prev_actions = jnp.zeros((dummy_batch_size, n_agents, action_len + 1))
 
-    enc = lambda x: Encoder(1, 1)(x)
+    enc = lambda x: Encoder(1, 1)(obs_net(x))
     enc_forward = hk.without_apply_rng(hk.transform(enc))
-
     enc_params = enc_forward.init(rng_key, dummy_obs)
+    v, dummy_encoded_obs = enc_forward.apply(enc_params, dummy_obs)
 
-    v, dummy_obs_rep = enc_forward.apply(enc_params, dummy_obs)
-
-    # TODO (sasha): is flat obs shape correct here?
-    dec = lambda act, obs: Decoder(1, *obs_shape, 1, action_len)(act, obs)
+    # TODO (sasha): n blocks and n heads as params
+    dec = lambda act, obs: Decoder(1, 1, action_len)(act, obs)
     dec_forward = hk.without_apply_rng(hk.transform(dec))
-    dec_params = dec_forward.init(rng_key, dummy_prev_actions, dummy_obs_rep)
+    dec_params = dec_forward.init(rng_key, dummy_prev_actions, dummy_encoded_obs)
 
     return MatNetworks(
         encoder=MatEncoderNetwork(network=enc_forward, params=enc_params),
@@ -169,19 +168,21 @@ def make_default_networks(
     agent_net_keys: Dict[str, str],
     rng_key: List[int],
     net_spec_keys: Dict[str, str] = {},
+    obs_net=functools.partial(utils.batch_concat, num_batch_dims=2),
 ):
     specs = environment_spec.get_agent_specs()
+    n_agents = len(specs)
+
     if not net_spec_keys:
         specs = {agent_net_keys[key]: specs[key] for key in specs.keys()}
     else:
         specs = {net_key: specs[value] for net_key, value in net_spec_keys.items()}
 
-    n_agents = len(specs)
-
     networks = {
         net_key: make_network(
             specs[net_key],
             n_agents,
+            obs_net,
             rng_key=rng_key,
         )
         for net_key in specs.keys()

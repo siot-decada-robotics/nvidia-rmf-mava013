@@ -7,7 +7,6 @@ def action_mask_categorical_policies(
     distribution: tfd.Categorical, mask: Array
 ) -> tfd.Categorical:
     """TODO Add description"""
-    print(f"mask:{mask.shape}|logits:{distribution.logits.shape}")
     masked_logits = jnp.where(
         mask.astype(bool),
         distribution.logits,
