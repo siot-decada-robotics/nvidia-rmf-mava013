@@ -289,7 +289,7 @@ class MAMUStep(Step):
                 ]
                 reanalysed[agent_key] = extra["policy_info"][agent_key]["reanalysed"]
 
-            reanalysed = jnp.array(list(reanalysed.values())[0])[
+            is_reanalysed = jnp.array(list(reanalysed.values())[0])[
                 :, :-1
             ]  # batch x sequence
 
@@ -368,7 +368,16 @@ class MAMUStep(Step):
                     self.config.lambda_t,
                 )
 
-            # target_values = jax.tree_map(lambda search_value_seq, target_seq : jnp.where(reanalysed,search_value_seq,target_seq),bootstrap_values, target_values)
+            zero_step_targets = {key: search_values[key] for key in agent_nets.keys()}
+
+            zero_step_targets = jax.tree_map(lambda x: x[:, :-1], zero_step_targets)
+            target_values = jax.tree_map(
+                lambda search_value_seq, target_seq: jnp.where(
+                    is_reanalysed, search_value_seq, target_seq
+                ),
+                zero_step_targets,
+                target_values,
+            )
 
             state_priorities = jax.tree_map(
                 lambda pred_val, target_val: jnp.abs(pred_val - target_val),
@@ -515,7 +524,8 @@ class MAMUStep(Step):
             new_states = TrainingState(
                 params=new_params, opt_states=new_opt_states, random_key=new_key
             )
-            return new_states, metrics, keys, priorities
+
+            return new_states, metrics, priorities, keys, is_reanalysed
 
         def step(sample: reverb.ReplaySample) -> Tuple[Dict[str, jnp.ndarray]]:
 
@@ -529,16 +539,22 @@ class MAMUStep(Step):
             states = TrainingState(
                 params=params, opt_states=opt_states, random_key=random_key
             )
-            new_states, metrics, keys, priorities = sgd_step(states, sample)
+            new_states, metrics, priorities, keys, is_reanalysed = sgd_step(
+                states, sample
+            )
 
             keys, priorities = tree.map_structure(
                 utils.fetch_devicearray, (keys, jnp.squeeze(priorities))
             )
+
             priority_updates = dict(zip(keys, priorities))
 
             for table_key in trainer.store.table_network_config.keys():
                 if table_key.split("_")[-1] == "reanalyse":
                     continue
+                if is_reanalysed[0, 0]:
+                    table_key = f"{table_key}_reanalyse"
+
                 trainer.store.data_server_client.mutate_priorities(
                     table=table_key, updates=priority_updates
                 )

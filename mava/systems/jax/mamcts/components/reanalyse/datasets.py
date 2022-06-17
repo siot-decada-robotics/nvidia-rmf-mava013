@@ -33,7 +33,7 @@ class ReanalyseTrainerTrajectoryDataset(TrajectoryDataset):
         actor_dataset = reverb.TrajectoryDataset.from_table_signature(
             server_address=builder.store.data_server_client.server_address,
             table=builder.store.trainer_id,
-            max_in_flight_samples_per_worker=2 * self.config.sample_batch_size,
+            max_in_flight_samples_per_worker=3 * self.config.sample_batch_size,
             num_workers_per_iterator=self.config.num_workers_per_iterator,
             max_samples_per_stream=self.config.max_samples_per_stream,
             rate_limiter_timeout_ms=self.config.rate_limiter_timeout_ms,
@@ -44,7 +44,7 @@ class ReanalyseTrainerTrajectoryDataset(TrajectoryDataset):
             reanalyse_dataset = reverb.TrajectoryDataset.from_table_signature(
                 server_address=builder.store.data_server_client.server_address,
                 table=f"{builder.store.trainer_id}_reanalyse",
-                max_in_flight_samples_per_worker=2 * self.config.sample_batch_size,
+                max_in_flight_samples_per_worker=3 * self.config.sample_batch_size,
                 num_workers_per_iterator=self.config.num_workers_per_iterator,
                 max_samples_per_stream=self.config.max_samples_per_stream,
                 rate_limiter_timeout_ms=self.config.rate_limiter_timeout_ms,
@@ -94,8 +94,8 @@ class ReanalyseTrainerTrajectoryDataset(TrajectoryDataset):
 
 @dataclass
 class ReanalyseActorDatasetConfig:
-    reanalyse_sample_batch_size: int = 32
-    reanalyse_max_in_flight_samples_per_worker: int = 512
+    reanalyse_sample_batch_size: int = 64
+    reanalyse_max_in_flight_samples_per_worker: int = 1024
     reanalyse_num_workers_per_iterator: int = -1
     reanalyse_max_samples_per_stream: int = -1
     reanalyse_rate_limiter_timeout_ms: int = -1
@@ -128,7 +128,7 @@ class ReanalyseActorDataset(ReanalyseComponent):
         dataset = reverb.TrajectoryDataset.from_table_signature(
             server_address=reanalyse_worker.store.data_server_client.server_address,
             table=reanalyse_worker.store.trainer_id,
-            max_in_flight_samples_per_worker=2
+            max_in_flight_samples_per_worker=3
             * self.config.reanalyse_sample_batch_size,
             num_workers_per_iterator=self.config.reanalyse_num_workers_per_iterator,
             max_samples_per_stream=self.config.reanalyse_max_samples_per_stream,

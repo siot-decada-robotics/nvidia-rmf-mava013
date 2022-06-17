@@ -12,6 +12,7 @@ from mava.systems.jax.mamcts.reanalyse_worker import ReanalyseWorker
 @dataclass
 class ReanalyseDistributorConfig(DistributorConfig):
     num_reanalyse_workers: int = 0
+    reanalyse_on_gpu: bool = False
 
 
 class ReanalyseDistributor(Distributor):
@@ -20,6 +21,9 @@ class ReanalyseDistributor(Distributor):
     ):
         if isinstance(config.nodes_on_gpu, str):
             config.nodes_on_gpu = [config.nodes_on_gpu]
+        if config.reanalyse_on_gpu:
+            config.nodes_on_gpu.append("reanalyse_worker")
+
         self.config = config
 
     def on_building_init_start(self, builder: SystemBuilder) -> None:

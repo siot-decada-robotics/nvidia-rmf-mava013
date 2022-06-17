@@ -107,7 +107,7 @@ def main(_: Any) -> None:
         optax.clip_by_global_norm(1.0),
         optax.scale_by_adam(),
         optax.scale(-1),
-        optax.scale_by_schedule(optax.exponential_decay(0.01, 1000, 0.8)),
+        optax.scale_by_schedule(optax.exponential_decay(0.02, 1000, 0.8)),
     )
 
     system.update(ParallelExecutorEnvironmentLoop)
@@ -121,26 +121,26 @@ def main(_: Any) -> None:
         optimizer=optimizer,
         run_evaluator=True,
         sample_batch_size=128,
-        num_executors=1,
+        num_executors=4,
         multi_process=True,
         root_fn=MAMU.learned_root_fn(),
         recurrent_fn=MAMU.learned_recurrent_fn(discount_gamma=0.997),
         search=functools.partial(mctx.muzero_policy, dirichlet_alpha=0.25),
         num_simulations=50,
         rng_seed=0,
-        n_step=30,
+        n_step=20,
         discount=0.997,
-        value_cost=0.5,
+        value_cost=1.0,
         # executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,  # For Jax Envs
         # evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
-        sequence_length=50,
-        period=50,
+        sequence_length=20,
+        period=20,
         unroll_steps=10,
-        max_size=500 * 50,
+        max_size=5000000,
         importance_sampling_exponent=0.5,
         priority_exponent=0.5,
         terminal="gnome-terminal-tabs",
-        executor_parameter_update_period=500,
+        executor_parameter_update_period=300,
     )
 
     # Launch the system.

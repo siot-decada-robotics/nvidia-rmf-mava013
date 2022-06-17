@@ -167,7 +167,7 @@ class MAMUSystem(System):
             extras_spec=ExtraLearnedSearchPolicySpec,
             data_server_sampler=PrioritySampler,
             data_server_remover=FIFORemover,
-            data_server_reanalyse_sampler=FIFOReanalyseSampler,
+            data_server_reanalyse_sampler=LIFOReanalyseSampler,
             data_server_reanalyse_remover=FIFOReanalyseRemover,
             rate_limiter=building.MinSizeRateLimiter,
             data_server=ReanalyseOffPolicyDataServer,
