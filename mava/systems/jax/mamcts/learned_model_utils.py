@@ -113,8 +113,8 @@ def actions_to_tiles(
     action_array: chex.Array,
     tile_shape: Sequence[int],
     num_actions: int,
-    normalise: bool = False,
-    shift_actions_by: int = 15,
+    normalise: bool = True,
+    shift_actions_by: int = 0,
 ) -> chex.Array:
     """Converts an array of actions into planes and normalises them.
 
