@@ -140,6 +140,16 @@ class OffPolicyDataServer(DataServer):
             )
         else:
             signature = builder.store.adder_signature_fn(environment_spec, extras_spec)
+            
+        if not hasattr(builder.store, "sampler_fn"):
+            raise ValueError(
+                "A sampler component for the dataserver has not been given"
+            )
+
+        if not hasattr(builder.store, "remover_fn"):
+            raise ValueError(
+                "A remover component for the dataserver has not been given"
+            )
 
         table = reverb.Table(
             name=table_key,

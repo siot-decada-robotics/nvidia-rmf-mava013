@@ -55,10 +55,10 @@ def network_factory(*args, **kwargs):
         num_bins=21,
         observation_history_size=GAME_HISTORY_SIZE,
         representation_layers=[16],
-        base_transition_layers=[16],
+        base_transition_layers=[],
         dynamics_layers=[16],
         reward_layers=[16],
-        base_prediction_layers=[16],
+        base_prediction_layers=[],
         value_prediction_layers=[16],
         policy_prediction_layers=[16],
         encoding_size=8,
@@ -107,7 +107,7 @@ def main(_: Any) -> None:
         optax.clip_by_global_norm(1.0),
         optax.scale_by_adam(),
         optax.scale(-1),
-        optax.scale_by_schedule(optax.exponential_decay(0.02, 1000, 0.8)),
+        optax.scale_by_schedule(optax.exponential_decay(0.01, 1000, 0.8,end_value=5e-4)),
     )
 
     system.update(ParallelExecutorEnvironmentLoop)
@@ -120,8 +120,8 @@ def main(_: Any) -> None:
         checkpoint_subpath=checkpoint_subpath,
         optimizer=optimizer,
         run_evaluator=True,
-        sample_batch_size=128,
-        num_executors=4,
+        sample_batch_size=256,
+        num_executors=8,
         multi_process=True,
         root_fn=MAMU.learned_root_fn(),
         recurrent_fn=MAMU.learned_recurrent_fn(discount_gamma=0.997),
@@ -130,17 +130,16 @@ def main(_: Any) -> None:
         rng_seed=0,
         n_step=20,
         discount=0.997,
-        value_cost=1.0,
+        value_cost=0.25,
         # executor_stats_wrapper_class=JAXDetailedEpisodeStatistics,  # For Jax Envs
         # evaluator_stats_wrapper_class=JAXMonitorEnvironmentLoop,
-        sequence_length=20,
-        period=20,
-        unroll_steps=10,
-        max_size=5000000,
-        importance_sampling_exponent=0.5,
-        priority_exponent=0.5,
-        terminal="gnome-terminal-tabs",
-        executor_parameter_update_period=300,
+        sequence_length=30,
+        period=30,
+        unroll_steps=5,
+        max_size=1000*30,
+        importance_sampling_exponent=0.0,
+        priority_exponent=0.0,
+        terminal="gnome-terminal-tabs"
     )
 
     # Launch the system.
