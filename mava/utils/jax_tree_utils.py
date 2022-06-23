@@ -19,6 +19,6 @@ def index_stacked_tree(tree: Any, index: int) -> Any:
     return jax.tree_map(lambda leaf: leaf[index], tree)
 
 
-def stack_trees(trees: List) -> Any:
+def stack_trees(trees: List, axis=0) -> Any:
     """_description_"""
-    return jax.tree_map(lambda *leaves: jnp.stack(leaves), *trees)
+    return jax.tree_map(lambda *leaves: jnp.stack(leaves, axis=axis), *trees)

@@ -23,6 +23,7 @@ from mava.systems.jax.mappo.components import ExtrasLogProbSpec
 from mava.systems.jax.mappo.config import MAPPODefaultConfig
 from mava.systems.jax.mat.components import executing as mat_exec
 
+from mava.systems.jax.mat.components import training as mat_training
 
 class MatSystem(System):
     def design(self) -> Tuple[DesignSpec, Any]:
@@ -57,7 +58,7 @@ class MatSystem(System):
             loss=training.MAPGWithTrustRegionClippingLoss,
             epoch_update=training.MAPGEpochUpdate,
             minibatch_update=training.MAPGMinibatchUpdate,
-            sgd_step=training.MAPGWithTrustRegionStep,
+            sgd_step=mat_training.MatStep,
             step=training.DefaultTrainerStep,
             trainer_dataset=building.TrajectoryDataset,
         ).get()

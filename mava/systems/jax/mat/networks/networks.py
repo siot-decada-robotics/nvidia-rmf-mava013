@@ -82,7 +82,7 @@ class MatDecoderNetwork:
             if mask is not None:
                 action_dist = action_mask_categorical_policies(action_dist, mask)
 
-            action = jnp.int64(jnp.squeeze(action_dist.sample(seed=key)))
+            action = jnp.squeeze(action_dist.sample(seed=key))
             log_prob = action_dist.log_prob(action)
 
             # TODO (sasha): might want to return action distrib to append to previous actions
@@ -129,12 +129,12 @@ class MatNetworks:
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:
         """TODO: Add description here."""
-        _, value = self.encoder.apply(self.encoder_params, observations)
+        _, value = self.encoder.network.apply(self.params["encoder"], observations)
         return value
 
     def encode_observations(self, observations: networks_lib.Observation):
         """TODO: Add description here."""
-        encoded_obs = self.encoder.forward_fn(self.encoder.params, observations)
+        _, encoded_obs = self.encoder.forward_fn(self.params["encoder"], observations)
         return encoded_obs
 
 

@@ -2,6 +2,7 @@ from typing import List
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from acme.jax import utils
 
 from mava.components.jax.executing.action_selection import (
@@ -36,7 +37,8 @@ class MatExecutorActionSelection(ExecutorSelectAction):
             (batch_size, num_agents, action_dim + 1)
         )
         # for every agent's action in the batch, set initial action to 1
-        # TODO (sasha): 1 seems like a bad value as it is an actual action
+        # TODO (sasha): 1 seems like a bad value as it is an actual action -
+        #  except that this is an extra dim, so
         #  ---------------------------------------------------------------
         #  why does it only set at agent=0 action=0, but when setting current action, it sets from
         #  1:end for all agent dims?
@@ -45,8 +47,10 @@ class MatExecutorActionSelection(ExecutorSelectAction):
         # TODO (sasha): this only allows for shared actions
         network = executor.store.networks["networks"]["network_agent"]
 
+        # [idea] TODO (sasha): should I stack this on the last dim because want agents to be
+        #         treated as channels? (what about embedding then?)
         stacked_obs = stack_observations(list(executor.store.observations.values()))
-        _, encoded_obs = network.encode_observations(
+        encoded_obs = network.encode_observations(
             utils.add_batch_dim(stacked_obs.observation)
         )
         stacked_encoded_obs = OLT(
@@ -57,7 +61,9 @@ class MatExecutorActionSelection(ExecutorSelectAction):
             action_info, policy_info = executor.select_action(
                 agent, stacked_encoded_obs
             )
-            executor.store.actions_info[agent] = action_info
+            # TODO (sasha): ideally this shouldn't be here but otherwise everything complains
+            #  that actions are int32's and reverb wants int64
+            executor.store.actions_info[agent] = np.int64(action_info)
             executor.store.policies_info[agent] = policy_info
 
     def on_execution_select_action_compute(self, executor: SystemExecutor) -> None:
