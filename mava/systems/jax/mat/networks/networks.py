@@ -78,7 +78,6 @@ class MatDecoderNetwork:
             # decoder produces sequence of actions for all agents, so must select the action for
             # only the current agent
             action_dist._logits = action_dist.logits[:, agent_ind, :]
-
             if mask is not None:
                 action_dist = action_mask_categorical_policies(action_dist, mask)
 
@@ -95,16 +94,24 @@ class MatDecoderNetwork:
 class MatNetworks:
     """TODO: Add description here."""
 
-    def __init__(self, encoder: MatEncoderNetwork, decoder: MatDecoderNetwork) -> None:
+    def __init__(
+        self,
+        encoder: MatEncoderNetwork,
+        decoder: MatDecoderNetwork,
+        log_prob: networks_lib.LogProbFn = lambda dist, act: dist.log_prob(act),
+        entropy: Optional[EntropyFn] = None,
+        # sample: Optional[networks_lib.SampleFn] = None,
+    ) -> None:
         """TODO: Add description here."""
         self.encoder = encoder
         self.decoder = decoder
 
         # TODO (sasha): custom trainer to work with dict of params (from mamu)
         self.params = {"encoder": encoder.params, "decoder": decoder.params}
-        # mamu minibatch update step?
-        # mamu sgd step
-        # mamu loss fn
+
+        # TODO (sasha): make defaults + use in trainer and decoder
+        self.log_prob = log_prob
+        self.entropy = entropy
 
     def get_action(
         self,
@@ -129,7 +136,7 @@ class MatNetworks:
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:
         """TODO: Add description here."""
-        _, value = self.encoder.network.apply(self.params["encoder"], observations)
+        value, _ = self.encoder.network.apply(self.params["encoder"], observations)
         return value
 
     def encode_observations(self, observations: networks_lib.Observation):

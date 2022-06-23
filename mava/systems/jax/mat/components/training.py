@@ -8,41 +8,23 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 import reverb
+import rlax
 import tree
 from acme.jax import utils
 from jax import jit
+from haiku._src.basic import merge_leading_dims
+from jax.random import KeyArray
 
-from mava.components.jax.training import Batch, Step, TrainingState
+from mava.components.jax.training import Batch, Step, TrainingState, Loss
+from mava.components.jax.training.losses import MAPGTrustRegionClippingLossConfig
+from mava.components.jax.training.model_updating import (
+    MAPGEpochUpdateConfig,
+    EpochUpdate,
+)
 from mava.components.jax.training.step import MAPGWithTrustRegionStepConfig
 from mava.core_jax import SystemTrainer
 from mava.types import OLT
 from mava.utils.jax_tree_utils import stack_trees
-
-
-def _interleave_arrays(arrays: List[np.ndarray]):
-    """Utility method to interleave arrays generalized from:
-    https://stackoverflow.com/questions/5347065/interweaving-two-numpy-arrays
-
-    Given: [[1,3,5], [2,4,6]]
-    Output: [1,2,3,4,5,6]
-
-    Args:
-        arrays: list of numpy arrays to interleave
-
-    Returns: Values from array interleaved
-    """
-    n_arrays = len(arrays)
-    array_shape = arrays[0].shape
-    array_dtype = arrays[0].dtype
-
-    interleaved = jnp.empty(
-        (array_shape[0] * n_arrays, *array_shape[1:]), dtype=array_dtype
-    )
-    for i, array in enumerate(arrays):
-        # set every n_arrays'th element to a value from array
-        interleaved.at[i::n_arrays].set(array)
-
-    return interleaved
 
 
 class MatStep(Step):
@@ -56,6 +38,14 @@ class MatStep(Step):
             config : _description_.
         """
         self.config = config
+
+    def on_training_init_start(self, trainer: SystemTrainer) -> None:
+        # Note (dries): Assuming the batch and sequence dimensions are flattened.
+        trainer.store.full_batch_size = trainer.store.sample_batch_size * (
+            trainer.store.sequence_length - 1
+        )
+
+        # TODO: surely some of the asserts for batch size can be done in here
 
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
@@ -88,9 +78,7 @@ class MatStep(Step):
                 net_key: Any, observation: Any
             ) -> Tuple[jnp.ndarray, jnp.ndarray]:
                 batch_size, num_sequences = observation.shape[:2]
-                o = jax.tree_map(
-                    lambda x: jnp.reshape(x, [-1] + list(x.shape[2:])), observation
-                )
+                o = jax.tree_map(lambda x: merge_leading_dims(x, 2), observation)
 
                 behavior_values, encoded_obs = networks[net_key].encoder.forward_fn(
                     states.params[net_key]["encoder"], o
@@ -103,14 +91,14 @@ class MatStep(Step):
                 encoded_obs = jnp.reshape(
                     encoded_obs, (batch_size, num_sequences, *encoded_obs.shape[1:])
                 )
-                return encoded_obs, behavior_values
+                return encoded_obs, jnp.squeeze(behavior_values)
 
             # TODO (sasha): I don't know why it is necessary to explicitely convert observations to
             #  OLTs (they should already be) but if I don't I get a type mismatch with:
             #  'tensorflow.python.saved_model.nested_structure_coder.OLT'
             olts = map(lambda olt: OLT(**olt._asdict()), list(observations.values()))
             observations = stack_trees(
-                olts, axis=-1
+                olts, axis=2
             )  # (batch, sequence, agents, obs...)
             # TODO (sasha): dict.values might be returning different order for each of these, get
             #  order once and then get values as [d[key] for key in keys]
@@ -129,21 +117,24 @@ class MatStep(Step):
             encoded_obs, behavior_values = get_values_and_encode_obs(
                 list(agent_nets.values())[0], observations.observation
             )
-            # # TODO (sasha): there has to be a cleaner way to do this
-            # encoded_obs = [values_and_obs[key][0] for key in agent_nets.keys()]
-            # behavior_values = {key: values_and_obs[key][1] for key in agent_nets.keys()}
+            print(behavior_values.shape)
+            print(observations.observation.shape)
 
             # Vmap over batch dimension
             # TODO (sasha): also vmap over agent dim?
             #  swap agent dim to front and double vmap
-            batch_gae_advantages = jax.vmap(trainer.store.gae_fn, in_axes=0)
-            advantages = {}
-            target_values = {}
-            for i in range(n_agents):
-                # shape of rewards is 3!? Want it to be 20
-                batch_gae_advantages(
-                    rewards[i], discounts[i], behavior_values[i]
-                )
+            batch_gae_advantages = jax.vmap(jax.vmap(trainer.store.gae_fn, in_axes=0))
+            # need to transpose to (batch, agents, sequence) so that the vmap performs gae over
+            # sequence dim
+            advantages, target_values = batch_gae_advantages(
+                jnp.transpose(rewards, (0, 2, 1)),
+                jnp.transpose(discounts, (0, 2, 1)),
+                jnp.transpose(behavior_values, (0, 2, 1)),
+            )
+
+            # transpose back to standard (batch, sequence, agents) view
+            advantages = jnp.transpose(advantages, (0, 2, 1))
+            target_values = jnp.transpose(target_values, (0, 2, 1))
 
             # Exclude the last step - it was only used for bootstrapping.
             # The shape is [num_sequences, num_steps, ..]
@@ -163,17 +154,21 @@ class MatStep(Step):
 
             # Concatenate all trajectories. Reshape from [num_sequences, num_steps,..]
             # to [num_sequences * num_steps,..]
-            agent_0_t_vals = list(target_values.values())[0]
-            assert len(agent_0_t_vals) > 1
-            num_sequences = agent_0_t_vals.shape[0]
-            num_steps = agent_0_t_vals.shape[1]
-            batch_size = num_sequences * num_steps
+            batch = jax.tree_map(lambda x: merge_leading_dims(x, 2), trajectories)
+            batch_size = batch.actions.shape[0]
+            # TODO (sasha): surely we can calculate this once and not do it every trainer update?
             assert batch_size % trainer.store.num_minibatches == 0, (
-                "Num minibatches must divide batch size. Got batch_size={}"
-                " num_minibatches={}."
-            ).format(batch_size, trainer.store.num_minibatches)
-            batch = jax.tree_map(
-                lambda x: x.reshape((batch_size,) + x.shape[2:]), trajectories
+                f"Num minibatches must divide batch size. Got batch_size={batch_size}"
+                f" num_minibatches={trainer.store.num_minibatches}."
+            )
+
+            print(
+                f"o:{batch.observations.observation.shape}\n"
+                f"a:{batch.actions.shape}\n"
+                f"logp:{batch.behavior_log_probs.shape}\n"
+                f"vals:{batch.behavior_values.shape}\n"
+                f"adv:{batch.advantages.shape}\n"
+                f"tvals:{batch.target_values.shape}"
             )
 
             (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
@@ -258,3 +253,232 @@ class MatStep(Step):
             config class/dataclass for component.
         """
         return MAPGWithTrustRegionStepConfig
+
+
+# TODO probably put in own file
+@dataclass
+class MatLossConfig(MAPGTrustRegionClippingLossConfig):
+    num_actions: int = 5  # TODO better way to get this
+
+
+class MatLoss(Loss):
+    def __init__(
+        self,
+        config: MatLossConfig = MatLossConfig(),
+    ):
+        """_summary_
+
+        Args:
+            config : _description_.
+        """
+        self.config = config
+
+    def on_training_loss_fns(self, trainer: SystemTrainer) -> None:
+        """_summary_"""
+
+        def loss_grad_fn(
+            params: Any,
+            observations: Any,
+            actions: Dict[str, jnp.ndarray],
+            behaviour_log_probs: Dict[str, jnp.ndarray],
+            target_values: Dict[str, jnp.ndarray],
+            advantages: Dict[str, jnp.ndarray],
+            behavior_values: Dict[str, jnp.ndarray],
+        ) -> Tuple[Dict[str, jnp.ndarray], Dict[str, Dict[str, jnp.ndarray]]]:
+            """Surrogate loss using clipped probability ratios."""
+
+            grads = {}
+            loss_info = {}
+
+            agent_key = trainer.store.trainer_agents[0]
+            agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
+            network = trainer.store.networks["networks"][agent_net_key]
+
+            def loss_fn(
+                params: Any,
+                observations: Any,
+                actions: jnp.ndarray,
+                behaviour_log_probs: jnp.ndarray,
+                target_values: jnp.ndarray,
+                advantages: jnp.ndarray,
+                behavior_values: jnp.ndarray,
+            ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
+
+                # setting up actions to be passed through model as previous actions
+                prev_action_shape = (*actions.shape, self.config.num_actions + 1)
+                one_hot_actions = jax.nn.one_hot(actions, self.config.num_actions)
+                prev_actions = jnp.zeros(prev_action_shape)
+                prev_actions.at[:, 0, 0].set(1)
+                prev_actions.at[:, :, 1:].set(one_hot_actions)
+
+                # [idea] TODO (sasha): how would it work if we used the old encoded observation
+                #         which were calculated in the step fn when calculating behaviour vals
+                values, encoded_obs = network.encoder.network.apply(
+                    params["encoder"], observations
+                )
+                values = jnp.squeeze(values)
+
+                distribution_params = network.decoder.network.apply(
+                    params["decoder"], prev_actions, encoded_obs
+                )
+
+                # copy ppo logp + entropy funcs
+                log_probs = distribution_params.log_prob(actions)
+                # log_probs = network.log_prob(distribution_params, actions)
+                # entropy = network.entropy(distribution_params)
+                entropy = distribution_params.entropy()
+                # Compute importance sampling weights:
+                # current policy / behavior policy.
+                print(f"logp:{log_probs.shape}")
+                rhos = jnp.exp(log_probs - behaviour_log_probs)
+                clipping_epsilon = self.config.clipping_epsilon
+
+                batch_pg_loss = jax.vmap(
+                    rlax.clipped_surrogate_pg_loss, in_axes=(1, 1, None)
+                )
+                policy_loss = batch_pg_loss(rhos, advantages, clipping_epsilon)
+
+                # Value function loss. Exclude the bootstrap value
+                print(f"pol loss:{policy_loss.shape}")
+                unclipped_value_error = target_values - values
+                unclipped_value_loss = unclipped_value_error**2
+
+                if self.config.clip_value:
+                    # Clip values to reduce variablility during critic training.
+                    clipped_values = behavior_values + jnp.clip(
+                        values - behavior_values,
+                        -clipping_epsilon,
+                        clipping_epsilon,
+                    )
+                    clipped_value_error = target_values - clipped_values
+                    clipped_value_loss = clipped_value_error**2
+                    value_loss = jnp.mean(
+                        jnp.fmax(unclipped_value_loss, clipped_value_loss), axis=0
+                    )
+                else:
+                    value_loss = jnp.mean(unclipped_value_loss, axis=0)
+
+                # Entropy regulariser.
+                entropy_loss = -jnp.mean(entropy, axis=0)
+
+                total_loss = (
+                    policy_loss
+                    + value_loss * self.config.value_cost
+                    + entropy_loss * self.config.entropy_cost
+                )
+
+                loss_info = {
+                    "loss_total": total_loss,
+                    "loss_policy": policy_loss,
+                    "loss_value": value_loss,
+                    "loss_entropy": entropy_loss,
+                }
+                print(f"value loss:{value_loss.shape}")
+                print(f"ent loss:{entropy_loss.shape}")
+                print(f"tls {total_loss.shape}")
+
+                return jnp.mean(total_loss), jax.tree_map(jnp.mean, loss_info)
+
+            # TODO (sasha): this is not the correct solution, it's going to apply the avg loss
+            #  3 times. Better to remake the update class and do it once.
+            grad, info = jax.grad(loss_fn, has_aux=True)(
+                params[agent_net_key],
+                observations.observation,
+                actions,
+                behaviour_log_probs,
+                target_values,
+                advantages,
+                behavior_values,
+            )
+
+            for agent_key in trainer.store.trainer_agents:
+                grads[agent_key], loss_info[agent_key] = grad, info
+
+            return grads, loss_info
+
+        # Save the gradient function.
+        trainer.store.grad_fn = loss_grad_fn
+
+    @staticmethod
+    def config_class() -> Optional[Callable]:
+        """Config class used for component.
+
+        Returns:
+            config class/dataclass for component.
+        """
+        return MatLossConfig
+
+
+class MatEpochUpdate(EpochUpdate):
+    def __init__(
+        self,
+        config: MAPGEpochUpdateConfig = MAPGEpochUpdateConfig(),
+    ):
+        """_summary_
+
+        Args:
+            config : _description_.
+        """
+        self.config = config
+
+    def on_training_utility_fns(self, trainer: SystemTrainer) -> None:
+        """_summary_"""
+        trainer.store.num_epochs = self.config.num_epochs
+        trainer.store.num_minibatches = self.config.num_minibatches
+
+        def model_update_epoch(
+            carry: Tuple[KeyArray, Any, optax.OptState, Batch],
+            unused_t: Tuple[()],
+        ) -> Tuple[
+            Tuple[KeyArray, Any, optax.OptState, Batch],
+            Dict[str, jnp.ndarray],
+        ]:
+            """Performs model updates based on one epoch of data."""
+            key, params, opt_states, batch = carry
+
+            new_key, subkey = jax.random.split(key)
+
+            # TODO (dries): This assert is ugly. Is there a better way to do this check?
+            # Maybe using a tree map of some sort?
+            # shapes = jax.tree_map(
+            #         lambda x: x.shape[0]==trainer.store.full_batch_size, batch
+            #     )
+            # assert ...
+            # TODO (sasha): I shouldn't have to duplicate this class, the only thing that doesn't
+            #  work is this assert
+            assert (
+                batch.observations.observation[:, :, 0].shape[0]
+                == trainer.store.full_batch_size
+            )
+
+            permutation = jax.random.permutation(subkey, trainer.store.full_batch_size)
+
+            shuffled_batch = jax.tree_map(
+                lambda x: jnp.take(x, permutation, axis=0), batch
+            )
+            minibatches = jax.tree_map(
+                lambda x: jnp.reshape(
+                    x, [self.config.num_minibatches, -1] + list(x.shape[1:])
+                ),
+                shuffled_batch,
+            )
+
+            (new_params, new_opt_states), metrics = jax.lax.scan(
+                trainer.store.minibatch_update_fn,
+                (params, opt_states),
+                minibatches,
+                length=self.config.num_minibatches,
+            )
+
+            return (new_key, new_params, new_opt_states, batch), metrics
+
+        trainer.store.epoch_update_fn = model_update_epoch
+
+    @staticmethod
+    def config_class() -> Optional[Callable]:
+        """Config class used for component.
+
+        Returns:
+            config class/dataclass for component.
+        """
+        return MAPGEpochUpdateConfig

@@ -19,6 +19,7 @@ import abc
 from dataclasses import dataclass
 
 import jax
+import numpy as np
 from acme.jax import utils
 
 from mava.components.jax import Component
@@ -84,7 +85,7 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
         executor.store.policies_info = {}
         for agent, observation in executor.store.observations.items():
             action_info, policy_info = executor.select_action(agent, observation)
-            executor.store.actions_info[agent] = action_info
+            executor.store.actions_info[agent] = np.int32(action_info)
             executor.store.policies_info[agent] = policy_info
 
     # Select action

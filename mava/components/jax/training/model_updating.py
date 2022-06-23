@@ -112,7 +112,7 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
                 minibatch.behavior_values,
             )
 
-            # Update the networks and optimizors.
+            # Update the networks and optimizers.
             metrics = {}
             for agent_key in trainer.store.trainer_agents:
                 agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]

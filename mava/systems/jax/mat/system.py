@@ -55,8 +55,8 @@ class MatSystem(System):
         trainer_process = DesignSpec(
             trainer_init=training.TrainerInit,
             gae_fn=training.GAE,
-            loss=training.MAPGWithTrustRegionClippingLoss,
-            epoch_update=training.MAPGEpochUpdate,
+            loss=mat_training.MatLoss,
+            epoch_update=mat_training.MatEpochUpdate,  # TODO (sasha): use default
             minibatch_update=training.MAPGMinibatchUpdate,
             sgd_step=mat_training.MatStep,
             step=training.DefaultTrainerStep,

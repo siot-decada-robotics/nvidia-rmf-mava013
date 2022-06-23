@@ -57,8 +57,6 @@ class GAE(Utility):
             max_abs_reward = self.config.max_abs_reward
             rewards = jnp.clip(rewards, -max_abs_reward, max_abs_reward)
 
-            print(f"rewards:{rewards.shape}")
-
             advantages = rlax.truncated_generalized_advantage_estimation(
                 rewards[:-1], discounts[:-1], self.config.gae_lambda, values
             )
