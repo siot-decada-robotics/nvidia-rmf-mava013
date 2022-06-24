@@ -50,7 +50,7 @@ class MatStep(Step):
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
 
-        # @jit
+        @jit
         def sgd_step(
             states: TrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
@@ -63,8 +63,6 @@ class MatStep(Step):
                 sample.data.discounts,
                 sample.data.extras,
             )
-
-            n_agents = len(observations)
 
             discounts = tree.map_structure(
                 lambda x: x * self.config.discount, termination
@@ -96,16 +94,21 @@ class MatStep(Step):
             # TODO (sasha): I don't know why it is necessary to explicitely convert observations to
             #  OLTs (they should already be) but if I don't I get a type mismatch with:
             #  'tensorflow.python.saved_model.nested_structure_coder.OLT'
-            olts = map(lambda olt: OLT(**olt._asdict()), list(observations.values()))
-            observations = stack_trees(
-                olts, axis=2
-            )  # (batch, sequence, agents, obs...)
+            agent_keys = trainer.store.trainer_agents
+            olts = map(
+                lambda olt: OLT(**olt._asdict()),
+                [observations[key] for key in agent_keys],
+            )
+            # (batch, sequence, agents, obs...)
+            observations = stack_trees(olts, axis=2)
             # TODO (sasha): dict.values might be returning different order for each of these, get
             #  order once and then get values as [d[key] for key in keys]
-            actions = stack_trees(list(actions.values()), axis=-1)
-            discounts = stack_trees(list(discounts.values()), axis=-1)
-            rewards = stack_trees(list(rewards.values()), axis=-1)
-            behavior_log_probs = stack_trees(list(behavior_log_probs.values()), axis=-1)
+            actions = stack_trees([actions[key] for key in agent_keys], axis=-1)
+            discounts = stack_trees([discounts[key] for key in agent_keys], axis=-1)
+            rewards = stack_trees([rewards[key] for key in agent_keys], axis=-1)
+            behavior_log_probs = stack_trees(
+                [behavior_log_probs[key] for key in agent_keys], axis=-1
+            )
 
             # Need to stack observations here because need each agent in order to perform
             # inference
@@ -117,9 +120,7 @@ class MatStep(Step):
                 list(agent_nets.values())[0], observations.observation
             )
 
-            # Vmap over batch dimension
-            # TODO (sasha): also vmap over agent dim?
-            #  swap agent dim to front and double vmap
+            # Vmap over batch and agent dimension
             batch_gae_advantages = jax.vmap(jax.vmap(trainer.store.gae_fn, in_axes=0))
             # need to transpose to (batch, agents, sequence) so that the vmap performs gae over
             # sequence dim
@@ -375,6 +376,7 @@ class MatLoss(Loss):
                 #  [ ] sum and apply once
                 #  [x] index and apply 3 times - learnt, but not well -0.9
                 #  [ ] flatten and apply once
+                #  [ ] put grads in a dict {"encoder":grad,"decoder":grad} for optax.update
                 return total_loss[agent_ind], index_stacked_tree(loss_info, i)
 
             # TODO (sasha): this is not the correct solution, it's going to apply the avg loss
@@ -388,7 +390,7 @@ class MatLoss(Loss):
                     target_values,
                     advantages,
                     behavior_values,
-                    i,
+                    int(agent_key.split("_")[1]),
                 )
                 grads[agent_key], loss_info[agent_key] = grad, info
 
