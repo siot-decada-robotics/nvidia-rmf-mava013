@@ -24,7 +24,7 @@ from mava.components.jax.training.model_updating import (
 from mava.components.jax.training.step import MAPGWithTrustRegionStepConfig
 from mava.core_jax import SystemTrainer
 from mava.types import OLT
-from mava.utils.jax_tree_utils import stack_trees
+from mava.utils.jax_tree_utils import stack_trees, index_stacked_tree
 
 
 class MatStep(Step):
@@ -106,7 +106,6 @@ class MatStep(Step):
             discounts = stack_trees(list(discounts.values()), axis=-1)
             rewards = stack_trees(list(rewards.values()), axis=-1)
             behavior_log_probs = stack_trees(list(behavior_log_probs.values()), axis=-1)
-            print(f"actions:{actions.shape}")
 
             # Need to stack observations here because need each agent in order to perform
             # inference
@@ -117,8 +116,6 @@ class MatStep(Step):
             encoded_obs, behavior_values = get_values_and_encode_obs(
                 list(agent_nets.values())[0], observations.observation
             )
-            print(behavior_values.shape)
-            print(observations.observation.shape)
 
             # Vmap over batch dimension
             # TODO (sasha): also vmap over agent dim?
@@ -162,14 +159,14 @@ class MatStep(Step):
                 f" num_minibatches={trainer.store.num_minibatches}."
             )
 
-            print(
-                f"o:{batch.observations.observation.shape}\n"
-                f"a:{batch.actions.shape}\n"
-                f"logp:{batch.behavior_log_probs.shape}\n"
-                f"vals:{batch.behavior_values.shape}\n"
-                f"adv:{batch.advantages.shape}\n"
-                f"tvals:{batch.target_values.shape}"
-            )
+            # print(
+            #     f"o:{batch.observations.observation.shape}\n"
+            #     f"a:{batch.actions.shape}\n"
+            #     f"logp:{batch.behavior_log_probs.shape}\n"
+            #     f"vals:{batch.behavior_values.shape}\n"
+            #     f"adv:{batch.advantages.shape}\n"
+            #     f"tvals:{batch.target_values.shape}"
+            # )
 
             (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
                 trainer.store.epoch_update_fn,
@@ -302,6 +299,7 @@ class MatLoss(Loss):
                 target_values: jnp.ndarray,
                 advantages: jnp.ndarray,
                 behavior_values: jnp.ndarray,
+                agent_ind: int,
             ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
 
                 # setting up actions to be passed through model as previous actions
@@ -324,12 +322,9 @@ class MatLoss(Loss):
 
                 # copy ppo logp + entropy funcs
                 log_probs = distribution_params.log_prob(actions)
-                # log_probs = network.log_prob(distribution_params, actions)
-                # entropy = network.entropy(distribution_params)
                 entropy = distribution_params.entropy()
                 # Compute importance sampling weights:
                 # current policy / behavior policy.
-                print(f"logp:{log_probs.shape}")
                 rhos = jnp.exp(log_probs - behaviour_log_probs)
                 clipping_epsilon = self.config.clipping_epsilon
 
@@ -339,7 +334,6 @@ class MatLoss(Loss):
                 policy_loss = batch_pg_loss(rhos, advantages, clipping_epsilon)
 
                 # Value function loss. Exclude the bootstrap value
-                print(f"pol loss:{policy_loss.shape}")
                 unclipped_value_error = target_values - values
                 unclipped_value_loss = unclipped_value_error**2
 
@@ -373,25 +367,29 @@ class MatLoss(Loss):
                     "loss_value": value_loss,
                     "loss_entropy": entropy_loss,
                 }
-                print(f"value loss:{value_loss.shape}")
-                print(f"ent loss:{entropy_loss.shape}")
-                print(f"tls {total_loss.shape}")
 
-                return jnp.mean(total_loss), jax.tree_map(jnp.mean, loss_info)
+                # loss = (num_agents,) therefore need to reduce it
+                # TODO (sasha): Options:
+                #  [x] mean and apply 3 times - didn't learn -1.5
+                #  [ ] mean and apply once
+                #  [ ] sum and apply once
+                #  [x] index and apply 3 times - learnt, but not well -0.9
+                #  [ ] flatten and apply once
+                return total_loss[agent_ind], index_stacked_tree(loss_info, i)
 
             # TODO (sasha): this is not the correct solution, it's going to apply the avg loss
             #  3 times. Better to remake the update class and do it once.
-            grad, info = jax.grad(loss_fn, has_aux=True)(
-                params[agent_net_key],
-                observations.observation,
-                actions,
-                behaviour_log_probs,
-                target_values,
-                advantages,
-                behavior_values,
-            )
-
-            for agent_key in trainer.store.trainer_agents:
+            for i, agent_key in enumerate(trainer.store.trainer_agents):
+                grad, info = jax.grad(loss_fn, has_aux=True)(
+                    params[agent_net_key],
+                    observations.observation,
+                    actions,
+                    behaviour_log_probs,
+                    target_values,
+                    advantages,
+                    behavior_values,
+                    i,
+                )
                 grads[agent_key], loss_info[agent_key] = grad, info
 
             return grads, loss_info
