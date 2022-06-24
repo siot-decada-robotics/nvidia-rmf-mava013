@@ -28,6 +28,7 @@ class EvaluatorOfflineLogging(ParallelExecutorEnvironmentLoop):
             config : _description_.
         """
         self.config = config
+        print("CONFIG CHECK: ", self.config.offline_sequence_length, "$$$$$$$$$$$$$$$")
 
     def on_building_executor_environment(self, builder: SystemBuilder):
         env = self.config.environment_factory(evaluation=False)  # type: ignore
