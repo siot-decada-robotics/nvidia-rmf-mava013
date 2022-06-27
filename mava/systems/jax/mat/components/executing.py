@@ -38,7 +38,7 @@ class MatExecutorActionSelection(ExecutorSelectAction):
         )
         # for every agent's action in the batch, set initial action to 1
         # TODO (sasha): 1 seems like a bad value as it is an actual action -
-        #  except that this is an extra dim, so
+        #  except that this is an extra dim, so...?
         #  ---------------------------------------------------------------
         #  why does it only set at agent=0 action=0, but when setting current action, it sets from
         #  1:end for all agent dims?

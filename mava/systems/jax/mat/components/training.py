@@ -81,7 +81,7 @@ class MatStep(Step):
                 behavior_values, encoded_obs = networks[net_key].encoder.forward_fn(
                     states.params[net_key]["encoder"], o
                 )
-                # behavior_values = jnp.reshape(behavior_values, reward.shape[0:2])
+
                 behavior_values = jnp.reshape(
                     behavior_values,
                     (batch_size, num_sequences, *behavior_values.shape[1:]),
@@ -89,6 +89,7 @@ class MatStep(Step):
                 encoded_obs = jnp.reshape(
                     encoded_obs, (batch_size, num_sequences, *encoded_obs.shape[1:])
                 )
+                # TODO (sasha): this squeeze prevents MAT working on single agent envs
                 return encoded_obs, jnp.squeeze(behavior_values)
 
             # TODO (sasha): I don't know why it is necessary to explicitely convert observations to
@@ -375,8 +376,8 @@ class MatLoss(Loss):
                 #  [ ] mean and apply once
                 #  [ ] sum and apply once
                 #  [x] index and apply 3 times - learnt, but not well -0.9
-                #  [ ] flatten and apply once
-                #  [ ] put grads in a dict {"encoder":grad,"decoder":grad} for optax.update
+                #  [ ] flatten and apply once -> try this next
+                #  [x] put grads in a dict {"encoder":grad,"decoder":grad} for optax.update
                 return total_loss[agent_ind], index_stacked_tree(loss_info, i)
 
             # TODO (sasha): this is not the correct solution, it's going to apply the avg loss

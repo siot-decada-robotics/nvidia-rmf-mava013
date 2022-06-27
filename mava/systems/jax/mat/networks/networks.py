@@ -106,7 +106,6 @@ class MatNetworks:
         self.encoder = encoder
         self.decoder = decoder
 
-        # TODO (sasha): custom trainer to work with dict of params (from mamu)
         self.params = {"encoder": encoder.params, "decoder": decoder.params}
 
         # TODO (sasha): make defaults + use in trainer and decoder

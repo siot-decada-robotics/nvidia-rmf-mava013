@@ -24,13 +24,12 @@ import optax
 from absl import app, flags
 from acme.jax.networks.atari import DeepAtariTorso
 
+from mava.components.jax.building.environments import MonitorParallelExecutorEnvironmentLoop
 from mava.systems.jax import mat
 
-from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
 
 from pcb_mava import pcb_grid_utils
-
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -59,10 +58,8 @@ def main(_: Any) -> None:
         _ : _
     """
     env_factory = functools.partial(
-        pcb_grid_utils.make_environment, size=8, num_agents=3, mava=True
+        pcb_grid_utils.make_environment, size=6, num_agents=2, mava=True, render=True
     )
-
-    env = env_factory()
 
     def network_factory(*args, **kwargs):
         def obs_net_forward(x):
@@ -99,11 +96,12 @@ def main(_: Any) -> None:
 
     # Optimizer.
     optimizer = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+        optax.clip_by_global_norm(0.5), optax.scale_by_adam(), optax.scale(-1e-4)
     )
 
     # Create the system.
     system = mat.MatSystem()
+    system.update(MonitorParallelExecutorEnvironmentLoop)
 
     # Build the system.
     system.build(
