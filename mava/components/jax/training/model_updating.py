@@ -94,12 +94,13 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
         ) -> Tuple[Tuple[Any, optax.OptState], Dict[str, Any]]:
             """Performs model update for a single minibatch."""
             params, opt_states = carry
-
+            print(f"b4:{minibatch.advantages.shape}")
             # Normalize advantages at the minibatch level before using them.
             advantages = jax.tree_map(
                 lambda x: (x - jnp.mean(x, axis=0)) / (jnp.std(x, axis=0) + 1e-8),
                 minibatch.advantages,
             )
+            print(f"a4:{advantages.shape}")
 
             # Calculate the gradients and agent metrics.
             gradients, agent_metrics = trainer.store.grad_fn(

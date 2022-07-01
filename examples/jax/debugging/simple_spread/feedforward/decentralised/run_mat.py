@@ -23,8 +23,9 @@ import haiku as hk
 import optax
 from absl import app, flags
 from acme.jax.networks.atari import DeepAtariTorso
+from pyvirtualdisplay import Display
 
-from mava.components.jax.building.environments import MonitorParallelExecutorEnvironmentLoop
+from mava.components.jax.building.environments import MonitorExecutorEnvironmentLoop
 from mava.systems.jax import mat
 
 from mava.utils.loggers import logger_utils
@@ -57,8 +58,18 @@ def main(_: Any) -> None:
     Args:
         _ : _
     """
+    display = Display(visible=False, size=(600, 600))
+    display.start()
+    # Environment.
     env_factory = functools.partial(
-        pcb_grid_utils.make_environment, size=6, num_agents=2, mava=True, render=True
+        pcb_grid_utils.make_environment,
+        size=6,
+        num_agents=2,
+        step_timeout=50,
+        reward_per_timestep=-0.03,
+        mava=True,
+        mava_stats=True,
+        render=True,
     )
 
     def network_factory(*args, **kwargs):
@@ -71,9 +82,6 @@ def main(_: Any) -> None:
 
             return x
 
-        # obs_net_forward = lambda x: DeepAtariTorso()(
-        #     hk.Embed(128, 8)(jnp.reshape(x, (-1, *x.shape[2:])))
-        # )
         return mat.make_default_networks(
             *args,
             obs_net=obs_net_forward,
@@ -81,7 +89,7 @@ def main(_: Any) -> None:
         )
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
-    checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
+    experiment_path = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
     log_every = 10
@@ -101,20 +109,21 @@ def main(_: Any) -> None:
 
     # Create the system.
     system = mat.MatSystem()
-    system.update(MonitorParallelExecutorEnvironmentLoop)
+    system.update(MonitorExecutorEnvironmentLoop)
 
     # Build the system.
     system.build(
         environment_factory=env_factory,
         network_factory=network_factory,
         logger_factory=logger_factory,
-        checkpoint_subpath=checkpoint_subpath,
+        experiment_path=experiment_path,
         optimizer=optimizer,
         run_evaluator=True,
         sample_batch_size=5,
         num_epochs=15,
         num_executors=1,
         multi_process=True,
+        record_every=1,
     )
 
     # Launch the system.

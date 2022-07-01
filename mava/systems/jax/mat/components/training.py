@@ -27,6 +27,11 @@ from mava.types import OLT
 from mava.utils.jax_tree_utils import stack_trees, index_stacked_tree
 
 
+def unstack_agents(a):
+    # a = merge_leading_dims(a, 2)
+    return jnp.reshape(a, (a.shape[0], -1), order="F")
+
+
 class MatStep(Step):
     def __init__(
         self,
@@ -48,9 +53,6 @@ class MatStep(Step):
         # TODO: surely some of the asserts for batch size can be done in here
 
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
-        """_summary_"""
-
-        @jit
         def sgd_step(
             states: TrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
@@ -102,8 +104,6 @@ class MatStep(Step):
             )
             # (batch, sequence, agents, obs...)
             observations = stack_trees(olts, axis=2)
-            # TODO (sasha): dict.values might be returning different order for each of these, get
-            #  order once and then get values as [d[key] for key in keys]
             actions = stack_trees([actions[key] for key in agent_keys], axis=-1)
             discounts = stack_trees([discounts[key] for key in agent_keys], axis=-1)
             rewards = stack_trees([rewards[key] for key in agent_keys], axis=-1)
@@ -122,18 +122,31 @@ class MatStep(Step):
             )
 
             # Vmap over batch and agent dimension
-            batch_gae_advantages = jax.vmap(jax.vmap(trainer.store.gae_fn, in_axes=0))
+            batch_gae_advantages = jax.vmap(trainer.store.gae_fn, in_axes=0)
+            batch_gae_advantages1 = jax.vmap(jax.vmap(trainer.store.gae_fn, in_axes=0))
             # need to transpose to (batch, agents, sequence) so that the vmap performs gae over
             # sequence dim
-            advantages, target_values = batch_gae_advantages(
+
+            advantages_old, target_values_old = batch_gae_advantages1(
                 jnp.transpose(rewards, (0, 2, 1)),
                 jnp.transpose(discounts, (0, 2, 1)),
                 jnp.transpose(behavior_values, (0, 2, 1)),
             )
 
+            advantages, target_values = batch_gae_advantages(
+                unstack_agents(rewards),
+                unstack_agents(discounts),
+                unstack_agents(behavior_values),
+            )
+
+            print(f"orig:{rewards.shape}")
+            print(f"merged+stacked:{unstack_agents(rewards).shape}")
+            print(f"old:{advantages_old.shape}|{target_values_old.shape}")
+            print(f"new:{advantages.shape}|{target_values.shape}")
+
             # transpose back to standard (batch, sequence, agents) view
-            advantages = jnp.transpose(advantages, (0, 2, 1))
-            target_values = jnp.transpose(target_values, (0, 2, 1))
+            advantages_old = jnp.transpose(advantages_old, (0, 2, 1))
+            target_values_old = jnp.transpose(target_values_old, (0, 2, 1))
 
             # Exclude the last step - it was only used for bootstrapping.
             # The shape is [num_sequences, num_steps, ..]
@@ -142,6 +155,9 @@ class MatStep(Step):
                 (observations, actions, behavior_log_probs, behavior_values),
             )
 
+            # TODO (sasha): currently advs and target vals are in a diff shape:
+            #  (batch, seq*n_agents) instead of
+            #  (batch, seq, n_agents)
             trajectories = Batch(
                 observations=observations,
                 actions=actions,
@@ -160,7 +176,7 @@ class MatStep(Step):
                 f"Num minibatches must divide batch size. Got batch_size={batch_size}"
                 f" num_minibatches={trainer.store.num_minibatches}."
             )
-
+            print("bas:", batch.advantages.shape)
             # print(
             #     f"o:{batch.observations.observation.shape}\n"
             #     f"a:{batch.actions.shape}\n"
@@ -322,18 +338,35 @@ class MatLoss(Loss):
                     params["decoder"], prev_actions, encoded_obs
                 )
 
+                # print(f"distp:{distribution_params.shape}")
                 # copy ppo logp + entropy funcs
                 log_probs = distribution_params.log_prob(actions)
                 entropy = distribution_params.entropy()
+
+                print(
+                    log_probs.shape,
+                    entropy.shape,
+                    behaviour_log_probs.shape,
+                    behavior_values.shape,
+                )
+
+                log_probs = jnp.reshape(log_probs, (-1,), order="F")
+                entropy = jnp.reshape(entropy, (-1,), order="F")
+                behaviour_log_probs = jnp.reshape(behaviour_log_probs, (-1,), order="F")
+                behavior_values = jnp.reshape(behavior_values, (-1,), order="F")
+
                 # Compute importance sampling weights:
                 # current policy / behavior policy.
                 rhos = jnp.exp(log_probs - behaviour_log_probs)
                 clipping_epsilon = self.config.clipping_epsilon
 
-                batch_pg_loss = jax.vmap(
-                    rlax.clipped_surrogate_pg_loss, in_axes=(1, 1, None)
+                # batch_pg_loss = jax.vmap(
+                #     rlax.clipped_surrogate_pg_loss, in_axes=(1, 1, None)
+                # )
+                print(rhos.shape, advantages.shape)
+                policy_loss = rlax.clipped_surrogate_pg_loss(
+                    rhos, advantages, clipping_epsilon
                 )
-                policy_loss = batch_pg_loss(rhos, advantages, clipping_epsilon)
 
                 # Value function loss. Exclude the bootstrap value
                 unclipped_value_error = target_values - values
@@ -377,6 +410,7 @@ class MatLoss(Loss):
                 #  [ ] sum and apply once
                 #  [x] index and apply 3 times - learnt, but not well -0.9
                 #  [ ] flatten and apply once -> try this next
+                #  [ ] change adv calc to diff btw agent's V and sum of prev agent's Vs
                 #  [x] put grads in a dict {"encoder":grad,"decoder":grad} for optax.update
                 return total_loss[agent_ind], index_stacked_tree(loss_info, i)
 
@@ -453,7 +487,9 @@ class MatEpochUpdate(EpochUpdate):
             )
 
             permutation = jax.random.permutation(subkey, trainer.store.full_batch_size)
-
+            # TODO: problem is here because of adv's different shape it is getting batched
+            #  differently in minibatch. Check the shape of obs/actions b4 and after
+            #  and then see how PPO does batching
             shuffled_batch = jax.tree_map(
                 lambda x: jnp.take(x, permutation, axis=0), batch
             )

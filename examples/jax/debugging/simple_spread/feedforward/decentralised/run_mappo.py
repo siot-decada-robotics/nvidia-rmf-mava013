@@ -20,6 +20,8 @@ from typing import Any
 
 import optax
 from absl import app, flags
+from pcb_mava import pcb_grid_utils
+from pyvirtualdisplay import Display
 
 from mava.components.jax.building.environments import MonitorExecutorEnvironmentLoop
 from mava.systems.jax import mappo
@@ -45,6 +47,10 @@ flags.DEFINE_string(
 )
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
+import jax.numpy as jnp
+import haiku as hk
+from acme.jax.networks.atari import DeepAtariTorso
+
 
 def main(_: Any) -> None:
     """Run main script
@@ -52,19 +58,34 @@ def main(_: Any) -> None:
     Args:
         _ : _
     """
+    display = Display(visible=False, size=(600, 600))
+    display.start()
     # Environment.
-    environment_factory = functools.partial(
-        debugging_utils.make_environment,
-        env_name=FLAGS.env_name,
-        action_space=FLAGS.action_space,
+    env_factory = functools.partial(
+        pcb_grid_utils.make_environment,
+        size=8,
+        num_agents=3,
+        step_timeout=50,
+        reward_per_timestep=-0.03,
+        continued_rewards=False,
+        mava=True,
+        mava_stats=True,
+        render=True,
     )
-
     # Networks.
-    def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return mappo.make_default_networks(  # type: ignore
-            policy_layer_sizes=(254, 254, 254),
-            critic_layer_sizes=(512, 512, 256),
+    def network_factory(*args, **kwargs):
+        def obs_net_forward(x):
+            # orig_shape = x.shape
+            # x = jnp.reshape(x, (-1, *orig_shape[2:]))
+            x = hk.Embed(128, 8)(jnp.int32(x))
+            x = DeepAtariTorso()(x)
+            # x = jnp.reshape(x, (*orig_shape[:2], -1))
+
+            return x
+
+        return mappo.make_default_networks(
             *args,
+            observation_network=obs_net_forward,
             **kwargs,
         )
 
@@ -84,15 +105,14 @@ def main(_: Any) -> None:
 
     # Optimizer.
     optimizer = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+        optax.clip_by_global_norm(0.5), optax.scale_by_adam(), optax.scale(-1e-4)
     )
 
     # Create the system.
     system = mappo.MAPPOSystem()
-    system.update(MonitorExecutorEnvironmentLoop)
-    # Build the system.
+
     system.build(
-        environment_factory=environment_factory,
+        environment_factory=env_factory,
         network_factory=network_factory,
         logger_factory=logger_factory,
         experiment_path=experiment_path,
@@ -102,7 +122,6 @@ def main(_: Any) -> None:
         num_epochs=15,
         num_executors=1,
         multi_process=True,
-        record_every=100,
     )
 
     # Launch the system.
