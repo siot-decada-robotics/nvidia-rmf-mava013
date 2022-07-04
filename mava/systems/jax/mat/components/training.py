@@ -105,6 +105,7 @@ class MatStep(Step):
             # TODO (sasha): dict.values might be returning different order for each of these, get
             #  order once and then get values as [d[key] for key in keys]
             actions = stack_trees([actions[key] for key in agent_keys], axis=-1)
+            # TODO (sasha): mask with this
             discounts = stack_trees([discounts[key] for key in agent_keys], axis=-1)
             rewards = stack_trees([rewards[key] for key in agent_keys], axis=-1)
             behavior_log_probs = stack_trees(
@@ -301,7 +302,6 @@ class MatLoss(Loss):
                 target_values: jnp.ndarray,
                 advantages: jnp.ndarray,
                 behavior_values: jnp.ndarray,
-                agent_ind: int,
             ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
 
                 # setting up actions to be passed through model as previous actions
@@ -327,12 +327,32 @@ class MatLoss(Loss):
                 entropy = distribution_params.entropy()
                 # Compute importance sampling weights:
                 # current policy / behavior policy.
+                (
+                    log_probs,
+                    entropy,
+                    advantages,
+                    values,
+                    target_values,
+                    behavior_values,
+                    behaviour_log_probs,
+                ) = jax.tree_map(
+                    lambda x: merge_leading_dims(x, 2),
+                    (
+                        log_probs,
+                        entropy,
+                        advantages,
+                        values,
+                        target_values,
+                        behavior_values,
+                        behaviour_log_probs,
+                    ),
+                )
+
                 rhos = jnp.exp(log_probs - behaviour_log_probs)
                 clipping_epsilon = self.config.clipping_epsilon
 
-                batch_pg_loss = jax.vmap(
-                    rlax.clipped_surrogate_pg_loss, in_axes=(1, 1, None)
-                )
+                batch_pg_loss = rlax.clipped_surrogate_pg_loss
+
                 policy_loss = batch_pg_loss(rhos, advantages, clipping_epsilon)
 
                 # Value function loss. Exclude the bootstrap value
@@ -376,24 +396,23 @@ class MatLoss(Loss):
                 #  [ ] mean and apply once
                 #  [ ] sum and apply once
                 #  [x] index and apply 3 times - learnt, but not well -0.9
-                #  [ ] flatten and apply once -> try this next
+                #  [x] flatten and apply once -> try this next
                 #  [x] put grads in a dict {"encoder":grad,"decoder":grad} for optax.update
-                return total_loss[agent_ind], index_stacked_tree(loss_info, i)
+                return total_loss, loss_info
 
             # TODO (sasha): this is not the correct solution, it's going to apply the avg loss
             #  3 times. Better to remake the update class and do it once.
-            for i, agent_key in enumerate(trainer.store.trainer_agents):
-                grad, info = jax.grad(loss_fn, has_aux=True)(
-                    params[agent_net_key],
-                    observations.observation,
-                    actions,
-                    behaviour_log_probs,
-                    target_values,
-                    advantages,
-                    behavior_values,
-                    int(agent_key.split("_")[1]),
-                )
-                grads[agent_key], loss_info[agent_key] = grad, info
+            # for i, agent_key in enumerate(trainer.store.trainer_agents):
+            grads, loss_info = jax.grad(loss_fn, has_aux=True)(
+                params[agent_net_key],
+                observations.observation,
+                actions,
+                behaviour_log_probs,
+                target_values,
+                advantages,
+                behavior_values,
+            )
+            # grads[agent_key], loss_info[agent_key] = grad, info
 
             return grads, loss_info
 

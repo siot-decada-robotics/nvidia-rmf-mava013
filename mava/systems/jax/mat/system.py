@@ -38,7 +38,7 @@ class MatSystem(System):
         # Default system processes
         # System initialization
         system_init = DesignSpec(
-            environment_spec=building.EnvironmentSpec, system_init=building.SystemInit
+            environment_spec=building.EnvironmentSpec, system_init=building.FixedNetworkSystemInit
         ).get()
 
         # Executor

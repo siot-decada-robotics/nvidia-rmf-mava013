@@ -102,7 +102,7 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
             )
 
             # Calculate the gradients and agent metrics.
-            gradients, agent_metrics = trainer.store.grad_fn(
+            gradient, agent_metric = trainer.store.grad_fn(
                 params,
                 minibatch.observations,
                 minibatch.actions,
@@ -114,24 +114,17 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
 
             # Update the networks and optimizers.
             metrics = {}
-            for agent_key in trainer.store.trainer_agents:
-                agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
-                # Apply updates
-                # TODO (dries): Use one optimizer per network type here and not
-                # just one.
-                updates, opt_states[agent_net_key] = trainer.store.optimizer.update(
-                    gradients[agent_key], opt_states[agent_net_key]
-                )
-                params[agent_net_key] = optax.apply_updates(
-                    params[agent_net_key], updates
-                )
+            agent_net_key = list(trainer.store.trainer_agent_net_keys.values())[0]
+            updates, opt_states[agent_net_key] = trainer.store.optimizer.update(
+                gradient, opt_states[agent_net_key]
+            )
+            params[agent_net_key] = optax.apply_updates(params[agent_net_key], updates)
 
-                agent_metrics[agent_key]["norm_grad"] = optax.global_norm(
-                    gradients[agent_key]
-                )
-                agent_metrics[agent_key]["norm_updates"] = optax.global_norm(updates)
-                metrics[agent_key] = agent_metrics
-            return (params, opt_states), metrics
+            agent_metric["norm_grad"] = optax.global_norm(
+                gradient
+            )
+            agent_metric["norm_updates"] = optax.global_norm(updates)
+            return (params, opt_states), agent_metric
 
         trainer.store.minibatch_update_fn = model_update_minibatch
 

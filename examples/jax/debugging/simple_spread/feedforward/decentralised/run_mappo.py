@@ -20,11 +20,17 @@ from typing import Any
 
 import optax
 from absl import app, flags
+from pcb_mava import pcb_grid_utils
+from pyvirtualdisplay import Display
 
 from mava.components.jax.building.environments import MonitorExecutorEnvironmentLoop
 from mava.systems.jax import mappo
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
+
+import haiku as hk
+import jax.numpy as jnp
+from acme.jax.networks.atari import DeepAtariTorso
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -52,19 +58,37 @@ def main(_: Any) -> None:
     Args:
         _ : _
     """
+    display = Display(visible=False)
+    display.start()
+
     # Environment.
-    environment_factory = functools.partial(
-        debugging_utils.make_environment,
-        env_name=FLAGS.env_name,
-        action_space=FLAGS.action_space,
+    env_factory = functools.partial(
+        pcb_grid_utils.make_environment,
+        size=8,
+        num_agents=3,
+        mava=True,
+        render=True,
+        step_timeout=50,
+        reward_per_timestep=-0.03,
+        reward_per_connected=1,
+        reward_per_blocked=-1,
+        reward_per_noop=-0.01,
     )
 
     # Networks.
-    def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return mappo.make_default_networks(  # type: ignore
-            policy_layer_sizes=(254, 254, 254),
-            critic_layer_sizes=(512, 512, 256),
+    def network_factory(*args, **kwargs):
+        def obs_net_forward(x):
+            x = hk.Embed(128, 8)(jnp.int32(x))
+            x = DeepAtariTorso()(x)
+
+            return x
+
+        # obs_net_forward = lambda x: DeepAtariTorso()(
+        #     hk.Embed(128, 8)(jnp.reshape(x, (-1, *x.shape[2:])))
+        # )
+        return mappo.make_default_networks(
             *args,
+            observation_network=obs_net_forward,
             **kwargs,
         )
 
@@ -72,7 +96,7 @@ def main(_: Any) -> None:
     experiment_path = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
-    log_every = 10
+    log_every = 5
     logger_factory = functools.partial(
         logger_utils.make_logger,
         directory=FLAGS.base_dir,
@@ -92,7 +116,7 @@ def main(_: Any) -> None:
     system.update(MonitorExecutorEnvironmentLoop)
     # Build the system.
     system.build(
-        environment_factory=environment_factory,
+        environment_factory=env_factory,
         network_factory=network_factory,
         logger_factory=logger_factory,
         experiment_path=experiment_path,

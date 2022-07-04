@@ -23,8 +23,9 @@ import haiku as hk
 import optax
 from absl import app, flags
 from acme.jax.networks.atari import DeepAtariTorso
+from pyvirtualdisplay import Display
 
-from mava.components.jax.building.environments import MonitorParallelExecutorEnvironmentLoop
+from mava.components.jax.building.environments import MonitorExecutorEnvironmentLoop
 from mava.systems.jax import mat
 
 from mava.utils.loggers import logger_utils
@@ -57,8 +58,20 @@ def main(_: Any) -> None:
     Args:
         _ : _
     """
+    display = Display(visible=False)
+    display.start()
+
     env_factory = functools.partial(
-        pcb_grid_utils.make_environment, size=6, num_agents=2, mava=True, render=True
+        pcb_grid_utils.make_environment,
+        size=8,
+        num_agents=3,
+        mava=True,
+        render=True,
+        step_timeout=50,
+        reward_per_timestep=-0.03,
+        reward_per_connected=1,
+        reward_per_blocked=-1,
+        reward_per_noop=-0.01,
     )
 
     def network_factory(*args, **kwargs):
@@ -101,14 +114,14 @@ def main(_: Any) -> None:
 
     # Create the system.
     system = mat.MatSystem()
-    system.update(MonitorParallelExecutorEnvironmentLoop)
+    system.update(MonitorExecutorEnvironmentLoop)
 
     # Build the system.
     system.build(
         environment_factory=env_factory,
         network_factory=network_factory,
         logger_factory=logger_factory,
-        checkpoint_subpath=checkpoint_subpath,
+        experiment_path=checkpoint_subpath,
         optimizer=optimizer,
         run_evaluator=True,
         sample_batch_size=5,
