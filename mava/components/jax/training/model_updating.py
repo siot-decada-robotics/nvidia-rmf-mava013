@@ -120,9 +120,7 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
             )
             params[agent_net_key] = optax.apply_updates(params[agent_net_key], updates)
 
-            agent_metric["norm_grad"] = optax.global_norm(
-                gradient
-            )
+            agent_metric["norm_grad"] = optax.global_norm(gradient)
             agent_metric["norm_updates"] = optax.global_norm(updates)
             return (params, opt_states), agent_metric
 
