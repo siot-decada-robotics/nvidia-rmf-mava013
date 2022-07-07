@@ -102,8 +102,6 @@ class MatStep(Step):
             )
             # (batch, sequence, agents, obs...)
             observations = stack_trees(olts, axis=2)
-            # TODO (sasha): dict.values might be returning different order for each of these, get
-            #  order once and then get values as [d[key] for key in keys]
             actions = stack_trees([actions[key] for key in agent_keys], axis=-1)
             # TODO (sasha): mask with this
             discounts = stack_trees([discounts[key] for key in agent_keys], axis=-1)
@@ -352,7 +350,6 @@ class MatLoss(Loss):
                 clipping_epsilon = self.config.clipping_epsilon
 
                 batch_pg_loss = rlax.clipped_surrogate_pg_loss
-
                 policy_loss = batch_pg_loss(rhos, advantages, clipping_epsilon)
 
                 # Value function loss. Exclude the bootstrap value
@@ -396,12 +393,11 @@ class MatLoss(Loss):
                 #  [ ] mean and apply once
                 #  [ ] sum and apply once
                 #  [x] index and apply 3 times - learnt, but not well -0.9
-                #  [x] flatten and apply once -> try this next
+                #  [x] flatten and apply once -> no improvement possibly need to flatten during
+                #   adv calc
                 #  [x] put grads in a dict {"encoder":grad,"decoder":grad} for optax.update
                 return total_loss, loss_info
 
-            # TODO (sasha): this is not the correct solution, it's going to apply the avg loss
-            #  3 times. Better to remake the update class and do it once.
             # for i, agent_key in enumerate(trainer.store.trainer_agents):
             grads, loss_info = jax.grad(loss_fn, has_aux=True)(
                 params[agent_net_key],

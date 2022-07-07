@@ -128,6 +128,7 @@ def main(_: Any) -> None:
         num_epochs=15,
         num_executors=1,
         multi_process=True,
+        record_every=1,
     )
 
     # Launch the system.
