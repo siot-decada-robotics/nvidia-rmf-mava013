@@ -22,7 +22,6 @@ from mava.systems.jax import System
 from mava.systems.jax.mappo.components import ExtrasLogProbSpec
 from mava.systems.jax.mappo.config import MAPPODefaultConfig
 from mava.systems.jax.mat.components import executing as mat_exec
-
 from mava.systems.jax.mat.components import training as mat_training
 
 
@@ -58,7 +57,7 @@ class MatSystem(System):
             trainer_init=training.TrainerInit,
             gae_fn=training.GAE,
             loss=mat_training.MatLoss,
-            epoch_update=mat_training.MatEpochUpdate,  # TODO (sasha): use default
+            epoch_update=mat_training.MatEpochUpdate,
             minibatch_update=training.MAPGMinibatchUpdate,
             sgd_step=mat_training.MatStep,
             step=training.DefaultTrainerStep,

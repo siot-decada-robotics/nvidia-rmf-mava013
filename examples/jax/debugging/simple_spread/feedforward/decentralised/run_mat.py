@@ -18,19 +18,17 @@ import functools
 from datetime import datetime
 from typing import Any
 
-import jax.numpy as jnp
 import haiku as hk
+import jax.numpy as jnp
 import optax
 from absl import app, flags
 from acme.jax.networks.atari import DeepAtariTorso
+from pcb_mava import pcb_grid_utils
 from pyvirtualdisplay import Display
 
 from mava.components.jax.building.environments import MonitorExecutorEnvironmentLoop
 from mava.systems.jax import mat
-
 from mava.utils.loggers import logger_utils
-
-from pcb_mava import pcb_grid_utils
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -65,10 +63,7 @@ def main(_: Any) -> None:
         pcb_grid_utils.make_environment,
         size=6,
         num_agents=2,
-        step_timeout=50,
-        reward_per_timestep=-0.03,
         mava=True,
-        mava_stats=True,
         render=True,
     )
 
@@ -92,7 +87,7 @@ def main(_: Any) -> None:
     experiment_path = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
-    log_every = 10
+    log_every = 1
     logger_factory = functools.partial(
         logger_utils.make_logger,
         directory=FLAGS.base_dir,
@@ -120,7 +115,8 @@ def main(_: Any) -> None:
         optimizer=optimizer,
         run_evaluator=True,
         sample_batch_size=5,
-        num_epochs=15,
+        num_epochs=5,
+        num_minibatches=1,
         num_executors=1,
         multi_process=True,
         record_every=1,

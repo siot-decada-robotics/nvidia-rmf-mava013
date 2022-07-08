@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Dict
 
 import jax.numpy as jnp
+
 from mava.components.jax import Component
 from mava.core_jax import SystemExecutor
 from mava.utils.sort_utils import sample_new_agent_keys, sort_str_num

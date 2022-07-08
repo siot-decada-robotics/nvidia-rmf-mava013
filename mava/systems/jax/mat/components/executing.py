@@ -11,7 +11,7 @@ from mava.components.jax.executing.action_selection import (
 )
 from mava.core_jax import SystemExecutor
 from mava.types import OLT
-from mava.utils.jax_tree_utils import stack_trees, index_stacked_tree
+from mava.utils.jax_tree_utils import index_stacked_tree, stack_trees
 
 
 class MatExecutorActionSelection(ExecutorSelectAction):

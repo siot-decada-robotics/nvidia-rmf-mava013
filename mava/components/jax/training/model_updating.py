@@ -94,16 +94,15 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
         ) -> Tuple[Tuple[Any, optax.OptState], Dict[str, Any]]:
             """Performs model update for a single minibatch."""
             params, opt_states = carry
-            print(f"b4:{minibatch.advantages.shape}")
             # Normalize advantages at the minibatch level before using them.
+            # TODO (sasha):
             advantages = jax.tree_map(
                 lambda x: (x - jnp.mean(x, axis=0)) / (jnp.std(x, axis=0) + 1e-8),
                 minibatch.advantages,
             )
-            print(f"a4:{advantages.shape}")
 
             # Calculate the gradients and agent metrics.
-            gradients, agent_metrics = trainer.store.grad_fn(
+            gradient, agent_metric = trainer.store.grad_fn(
                 params,
                 minibatch.observations,
                 minibatch.actions,
@@ -115,23 +114,19 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
 
             # Update the networks and optimizers.
             metrics = {}
-            for agent_key in trainer.store.trainer_agents:
-                agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
-                # Apply updates
-                # TODO (dries): Use one optimizer per network type here and not
-                # just one.
-                updates, opt_states[agent_net_key] = trainer.store.optimizer.update(
-                    gradients[agent_key], opt_states[agent_net_key]
-                )
-                params[agent_net_key] = optax.apply_updates(
-                    params[agent_net_key], updates
-                )
+            agent_key = trainer.store.trainer_agents[0]
+            agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
+            # Apply updates
+            # TODO (dries): Use one optimizer per network type here and not
+            # just one.
+            updates, opt_states[agent_net_key] = trainer.store.optimizer.update(
+                gradient, opt_states[agent_net_key]
+            )
+            params[agent_net_key] = optax.apply_updates(params[agent_net_key], updates)
 
-                agent_metrics[agent_key]["norm_grad"] = optax.global_norm(
-                    gradients[agent_key]
-                )
-                agent_metrics[agent_key]["norm_updates"] = optax.global_norm(updates)
-                metrics[agent_key] = agent_metrics
+            metrics["norm_grad"] = optax.global_norm(gradient)
+            metrics["norm_updates"] = optax.global_norm(updates)
+            metrics["check"] = agent_metric["check"]
             return (params, opt_states), metrics
 
         trainer.store.minibatch_update_fn = model_update_minibatch

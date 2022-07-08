@@ -137,7 +137,7 @@ class MAPGWithTrustRegionStep(Step):
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
 
-        @jit
+        # @jit
         def sgd_step(
             states: TrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
@@ -192,6 +192,10 @@ class MAPGWithTrustRegionStep(Step):
                     rewards[key], discounts[key], behavior_values[key]
                 )
 
+            print("adv shape:", advantages[key].shape)
+            print("b vals", behavior_values[key].shape)
+            print("obs shape:", observations[key].observation.shape)
+
             # Exclude the last step - it was only used for bootstrapping.
             # The shape is [num_sequences, num_steps, ..]
             observations, actions, behavior_log_probs, behavior_values = jax.tree_map(
@@ -222,6 +226,10 @@ class MAPGWithTrustRegionStep(Step):
             batch = jax.tree_map(
                 lambda x: x.reshape((batch_size,) + x.shape[2:]), trajectories
             )
+
+            print("adv shape:", batch.advantages[key].shape)
+            print("b vals", batch.behavior_values[key].shape)
+            print("obs shape:", batch.observations[key].observation.shape)
 
             (new_key, new_params, new_opt_states, _,), metrics = jax.lax.scan(
                 trainer.store.epoch_update_fn,

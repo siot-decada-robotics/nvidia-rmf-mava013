@@ -15,8 +15,8 @@ from dm_env import specs as dm_specs
 from jax import jit
 
 from mava import specs as mava_specs
+from mava.systems.jax.mat.networks.transformer import Decoder, Encoder
 from mava.utils.jax_training_utils import action_mask_categorical_policies
-from mava.systems.jax.mat.networks.transformer import Encoder, Decoder
 
 Array = dm_specs.Array
 BoundedArray = dm_specs.BoundedArray

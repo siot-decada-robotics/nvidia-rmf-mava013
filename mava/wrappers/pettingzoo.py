@@ -598,6 +598,7 @@ class PettingZooParallelEnvWrapper(ParallelEnvWrapper):
             Dict[str, Union[specs.DiscreteArray, specs.BoundedArray]]: spec for actions.
         """
         import jax.numpy as jnp
+
         action_specs = {}
         action_spaces = self._environment.action_spaces
         for agent in self.possible_agents:

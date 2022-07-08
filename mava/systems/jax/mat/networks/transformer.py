@@ -4,11 +4,11 @@
 
 from typing import Optional
 
-from acme.jax.networks import CategoricalHead
 import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
+from acme.jax.networks import CategoricalHead
 
 
 class CausalSelfAttention(hk.MultiHeadAttention):

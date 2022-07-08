@@ -47,8 +47,8 @@ flags.DEFINE_string(
 )
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
-import jax.numpy as jnp
 import haiku as hk
+import jax.numpy as jnp
 from acme.jax.networks.atari import DeepAtariTorso
 
 
@@ -63,13 +63,9 @@ def main(_: Any) -> None:
     # Environment.
     env_factory = functools.partial(
         pcb_grid_utils.make_environment,
-        size=8,
-        num_agents=3,
-        step_timeout=50,
-        reward_per_timestep=-0.03,
-        continued_rewards=False,
+        size=6,
+        num_agents=2,
         mava=True,
-        mava_stats=True,
         render=True,
     )
     # Networks.
