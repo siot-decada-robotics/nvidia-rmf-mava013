@@ -110,6 +110,7 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
                 minibatch.target_values,
                 advantages,
                 minibatch.behavior_values,
+                minibatch.terminals,
             )
 
             # Update the networks and optimizers.
@@ -126,7 +127,7 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
 
             metrics["norm_grad"] = optax.global_norm(gradient)
             metrics["norm_updates"] = optax.global_norm(updates)
-            metrics["check"] = agent_metric["check"]
+
             return (params, opt_states), metrics
 
         trainer.store.minibatch_update_fn = model_update_minibatch

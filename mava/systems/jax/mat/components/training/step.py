@@ -18,6 +18,7 @@ from mava.utils.jax_tree_utils import stack_trees
 from mava.systems.jax.mat.components.training.utils import (
     merge_agents_to_sequence,
     unmerge_agents_to_sequence,
+    MatBatch,
 )
 
 
@@ -65,7 +66,6 @@ class MatStep(Step):
             )
 
             behavior_log_probs = extra["policy_info"]
-
             networks = trainer.store.networks["networks"]
 
             def get_values_and_encode_obs(
@@ -107,6 +107,7 @@ class MatStep(Step):
             behavior_log_probs = stack_trees(
                 [behavior_log_probs[key] for key in agent_keys], axis=-1
             )
+            terminals = stack_trees([termination[key] for key in agent_keys], axis=-1)
 
             agent_nets = trainer.store.trainer_agent_net_keys
             encoded_obs, behavior_values = get_values_and_encode_obs(
@@ -138,10 +139,12 @@ class MatStep(Step):
             target_values = unmerge_agents_to_sequence(
                 target_values, len(trainer.store.agents)
             )
+            # terminals = merge_agents_to_sequence(terminals)
+            print("terminals:", terminals.shape)
+            terminals.at[:, -1, -1].set(0)
 
-            # print(f"rew:{rewards.shape}")
-            # print(f"merged+stacked:{merge_agents_to_sequence(rewards).shape}")
-            print(f"adv|vals shape:{advantages.shape}|{target_values.shape}")
+            # print(f"adv|vals shape:{advantages.shape}|{target_values.shape}")
+            # print(f"adv (zero?):{advantages[:,-1,-1]}")
 
             # TODO (sasha) elsewhere: Exclude the last step - it was only used for bootstrapping.
             # The shape is [num_sequences, num_steps, ..]
@@ -156,14 +159,20 @@ class MatStep(Step):
             # TODO (sasha): currently advs and target vals are in a diff shape:
             #  (batch, seq*n_agents) instead of
             #  (batch, seq, n_agents)
-            trajectories = Batch(
+            trajectories = MatBatch(
                 observations=observations,
                 actions=actions,
                 advantages=advantages,
                 behavior_log_probs=behavior_log_probs,
                 target_values=target_values,
                 behavior_values=behavior_values,
+                terminals=terminals,
             )
+
+            # check = merge_agents_to_sequence(jnp.reshape(advantages, (5, -1, 2)))
+            # print(f"CHECK (shape):{check.shape}")
+            # print(f"CHECK (zeros):{check[:,-1]}")
+            # print(f"CHECK (all):{check}")
 
             # Concatenate all trajectories. Reshape from [num_sequences, num_steps,..]
             # to [num_sequences * num_steps,..]
@@ -218,6 +227,7 @@ class MatStep(Step):
             new_states = TrainingState(
                 params=new_params, opt_states=new_opt_states, random_key=new_key
             )
+
             return new_states, metrics
 
         def step(sample: reverb.ReplaySample) -> Tuple[Dict[str, jnp.ndarray]]:

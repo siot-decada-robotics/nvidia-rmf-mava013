@@ -72,8 +72,6 @@ class MatEpochUpdate(EpochUpdate):
                 shuffled_batch,
             )
 
-            print("minbatch adv shape:", minibatches.advantages.shape)
-
             (new_params, new_opt_states), metrics = jax.lax.scan(
                 trainer.store.minibatch_update_fn,
                 (params, opt_states),

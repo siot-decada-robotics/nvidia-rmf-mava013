@@ -176,7 +176,7 @@ def make_default_networks(
     net_spec_keys: Dict[str, str] = {},
     obs_net=functools.partial(utils.batch_concat, num_batch_dims=2),
 ):
-    specs = environment_spec.get_agent_specs()
+    specs = environment_spec.get_agent_environment_specs()
     n_agents = len(specs)
 
     if not net_spec_keys:

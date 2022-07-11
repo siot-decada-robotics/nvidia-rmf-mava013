@@ -22,7 +22,9 @@ class MatExecutorActionSelection(ExecutorSelectAction):
 
     def on_execution_select_actions(self, executor: SystemExecutor) -> None:
         # TODO (sasha): do this once and put it in the store
-        agent_spec = list(executor.store.environment_spec.get_agent_specs().values())[0]
+        agent_spec = list(
+            executor.store.agent_environment_specs.get_agent_environment_specs().values()
+        )[0]
 
         executor.store.actions_info = {}
         executor.store.policies_info = {}
@@ -74,7 +76,9 @@ class MatExecutorActionSelection(ExecutorSelectAction):
         agent_ind = int(executor.store.agent.split("_")[1])
 
         # TODO (sasha): do this once and put it in the store
-        agent_spec = list(executor.store.environment_spec.get_agent_specs().values())[0]
+        agent_spec = list(
+            executor.store.agent_environment_specs.get_agent_environment_specs().values()
+        )[0]
         action_dim = agent_spec.actions.num_values
 
         observation = executor.store.observation.observation

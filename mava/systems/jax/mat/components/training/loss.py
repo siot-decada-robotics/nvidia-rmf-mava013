@@ -43,6 +43,7 @@ class MatLoss(Loss):
             target_values: Dict[str, jnp.ndarray],
             advantages: Dict[str, jnp.ndarray],
             behavior_values: Dict[str, jnp.ndarray],
+            terminals: Dict[str, jnp.ndarray],
         ) -> Tuple[Dict[str, jnp.ndarray], Dict[str, Dict[str, jnp.ndarray]]]:
             """Surrogate loss using clipped probability ratios."""
 
@@ -61,6 +62,7 @@ class MatLoss(Loss):
                 target_values: jnp.ndarray,
                 advantages: jnp.ndarray,
                 behavior_values: jnp.ndarray,
+                terminals: jnp.ndarray,
             ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
                 # print(f"loss fn actions shape 3:{actions.shape}")
 
@@ -87,82 +89,99 @@ class MatLoss(Loss):
                 log_probs = distribution_params.log_prob(actions)
                 entropy = distribution_params.entropy()
 
-                # print(
-                #     "lp, ent, behv lp, behv vals",
-                #     log_probs.shape,
-                #     entropy.shape,
-                #     behaviour_log_probs.shape,
-                #     behavior_values.shape,
-                # )
-
                 batch_size = 5
                 num_agents = 2
+                num_non_terminal = jnp.sum(terminals)
+
+                # TODO instead of doing all this stuff just pass in terminals and mask it all out
                 # unmerge batch and sequence dim and merge sequence and agent dim
-                log_probs = jnp.ravel(
-                    merge_agents_to_sequence(
-                        jnp.reshape(log_probs, (batch_size, -1, num_agents))
-                    )[:, :-1]
-                )
-                entropy = jnp.ravel(
-                    merge_agents_to_sequence(
-                        jnp.reshape(entropy, (batch_size, -1, num_agents))
-                    )[:, :-1]
-                )
-                behaviour_log_probs = jnp.ravel(
-                    merge_agents_to_sequence(
-                        jnp.reshape(
-                            behaviour_log_probs,
-                            (batch_size, -1, num_agents),
-                        )
-                    )[:, :-1]
-                )
-                behavior_values = jnp.ravel(
-                    merge_agents_to_sequence(
-                        jnp.reshape(behavior_values, (batch_size, -1, num_agents))
-                    )[:, :-1]
-                )
-                check = merge_agents_to_sequence(
-                    jnp.reshape(advantages, (batch_size, -1, num_agents))
-                )
-                print(f"b4 shape:{advantages.shape}")
-                print(f"a4 shape:{check.shape}")
-                # print("check:", jax.block_until_ready(check[:, -1]))
-                # TODO (sasha): check in the middle of this proccess that once you get (batch, sequence * num_agents) that x[:,0]==0
-                advantages = jnp.ravel(
-                    merge_agents_to_sequence(
-                        jnp.reshape(advantages, (batch_size, -1, num_agents))
-                    )[:, :-1]
-                )
-                values = jnp.ravel(
-                    merge_agents_to_sequence(
-                        jnp.reshape(values, (batch_size, -1, num_agents))
-                    )[:, :-1]
-                )
-                target_values = jnp.ravel(
-                    merge_agents_to_sequence(
-                        jnp.reshape(target_values, (batch_size, -1, num_agents))
-                    )[:, :-1]
-                )
+                # log_probs = jnp.ravel(
+                #     merge_agents_to_sequence(
+                #         jnp.reshape(log_probs, (batch_size, -1, num_agents))
+                #     )[:, :-1]
+                # )
+                # entropy = jnp.ravel(
+                #     merge_agents_to_sequence(
+                #         jnp.reshape(entropy, (batch_size, -1, num_agents))
+                #     )[:, :-1]
+                # )
+                # behaviour_log_probs = jnp.ravel(
+                #     merge_agents_to_sequence(
+                #         jnp.reshape(
+                #             behaviour_log_probs,
+                #             (batch_size, -1, num_agents),
+                #         )
+                #     )[:, :-1]
+                # )
+                # behavior_values = jnp.ravel(
+                #     merge_agents_to_sequence(
+                #         jnp.reshape(behavior_values, (batch_size, -1, num_agents))
+                #     )[:, :-1]
+                # )
+                #
+                # behavior_values = jnp.ravel(
+                #     merge_agents_to_sequence(
+                #         jnp.reshape(behavior_values, (batch_size, -1, num_agents))
+                #     )[:, :-1]
+                # )
+                # # TODO this isn't working it should == 0
+                # check = merge_agents_to_sequence(
+                #     jnp.reshape(advantages, (batch_size, -1, num_agents))
+                # )
+
+                # TODO (sasha): check in the middle of this proccess that once you get
+                #  (batch, sequence * num_agents) that x[:,-1]==0
+                # advantages = jnp.ravel(
+                #     merge_agents_to_sequence(
+                #         jnp.reshape(advantages, (batch_size, -1, num_agents))
+                #     )[:, :-1]
+                # )
+                # values = jnp.ravel(
+                #     merge_agents_to_sequence(
+                #         jnp.reshape(values, (batch_size, -1, num_agents))
+                #     )[:, :-1]
+                # )
+                # target_values = jnp.ravel(
+                #     merge_agents_to_sequence(
+                #         jnp.reshape(target_values, (batch_size, -1, num_agents))
+                #     )[:, :-1]
+                # )
+
+                log_probs = jnp.ravel(log_probs)
+                behaviour_log_probs = jnp.ravel(behaviour_log_probs)
+                advantages = jnp.ravel(advantages)
+                terminals = jnp.ravel(terminals)
+                behavior_values = jnp.ravel(behavior_values)
+                values = jnp.ravel(values)
+                target_values = jnp.ravel(target_values)
+                entropy = jnp.ravel(entropy)
+
                 print(
-                    "lp, ent, behv lp, behv vals",
-                    log_probs.shape,
-                    entropy.shape,
-                    behaviour_log_probs.shape,
-                    behavior_values.shape,
+                    f"--------------LOSS--------------\n"
+                    f"adv:{advantages.shape}\n"
+                    f"vals:{values.shape}\n"
+                    f"bvals:{behavior_values.shape}\n"
+                    f"ent:{entropy.shape}\n"
+                    f"lp:{log_probs.shape}\n"
+                    f"blp:{behaviour_log_probs.shape}\n"
+                    f"targ v:{target_values.shape}\n"
+                    f"term:{terminals.shape}\n"
+                    f"n non term:{num_non_terminal.shape}"
                 )
-                # profit?
+
 
                 # Compute importance sampling weights:
                 # current policy / behavior policy.
                 rhos = jnp.exp(log_probs - behaviour_log_probs)
                 clipping_epsilon = self.config.clipping_epsilon
 
-                # print(rhos.shape, advantages.shape)
+                # TODO this means, but we have zeros!
                 policy_loss = rlax.clipped_surrogate_pg_loss(
-                    rhos, advantages, clipping_epsilon
+                    rhos, advantages * terminals, clipping_epsilon
                 )
 
                 # Value function loss. Exclude the bootstrap value
+                # TODO both of these need to be masked
                 unclipped_value_error = target_values - values
                 unclipped_value_loss = unclipped_value_error**2
 
@@ -175,15 +194,18 @@ class MatLoss(Loss):
                     )
                     clipped_value_error = target_values - clipped_values
                     clipped_value_loss = clipped_value_error**2
-                    value_loss = jnp.mean(
-                        jnp.fmax(unclipped_value_loss, clipped_value_loss), axis=0
-                    )
+                    clipped_value_loss = clipped_value_loss * terminals
+                    value_loss = jnp.fmax(unclipped_value_loss, clipped_value_loss)
+
                 else:
-                    value_loss = jnp.mean(unclipped_value_loss, axis=0)
+                    value_loss = unclipped_value_loss
+
+                value_loss = jnp.sum(value_loss) / num_non_terminal
 
                 # Entropy regulariser.
-                entropy_loss = -jnp.mean(entropy, axis=0)
+                entropy_loss = -jnp.sum(entropy * terminals) / num_non_terminal
 
+                print(policy_loss.shape, value_loss.shape, entropy_loss.shape)
                 total_loss = (
                     policy_loss
                     + value_loss * self.config.value_cost
@@ -195,7 +217,6 @@ class MatLoss(Loss):
                     "loss_policy": policy_loss,
                     "loss_value": value_loss,
                     "loss_entropy": entropy_loss,
-                    "check": check[:, -1],
                 }
 
                 # loss = (num_agents,) therefore need to reduce it
@@ -217,6 +238,7 @@ class MatLoss(Loss):
                 target_values,
                 advantages,
                 behavior_values,
+                terminals,
             )
 
             return grad, loss_info

@@ -48,13 +48,14 @@ class MatSystem(System):
             executor_observe=executing.FeedforwardExecutorObserve,
             executor_select_action=mat_exec.MatExecutorActionSelection,
             executor_adder=building.ParallelSequenceAdder,
+            adder_priority=building.UniformAdderPriority,
             executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
             networks=building.DefaultNetworks,
         ).get()
 
         # Trainer
         trainer_process = DesignSpec(
-            trainer_init=training.TrainerInit,
+            trainer_init=training.SingleTrainerInit,
             gae_fn=training.GAE,
             loss=mat_training.MatLoss,
             epoch_update=mat_training.MatEpochUpdate,
