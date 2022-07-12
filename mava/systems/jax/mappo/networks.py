@@ -85,8 +85,8 @@ class PPONetworks:
     ) -> Tuple[np.ndarray, Dict]:
         """TODO: Add description here."""
         actions, log_prob = self.forward_fn(self.params, observations, key, mask)
-        actions = np.array(actions, dtype=np.int64)
-        log_prob = np.squeeze(np.array(log_prob, dtype=np.float32))
+        actions = jnp.array(actions, dtype=jnp.int64)
+        log_prob = jnp.squeeze(jnp.array(log_prob, dtype=jnp.float32))
         return actions, {"log_prob": log_prob}
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:

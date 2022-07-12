@@ -25,6 +25,7 @@ from acme.utils import counting, loggers
 
 import mava
 from mava.types import Action
+from mava.utils.jax_tree_utils import index_stacked_tree
 from mava.utils.training_utils import check_count_condition
 from mava.utils.wrapper_utils import (
     SeqTimestepDict,
@@ -427,6 +428,7 @@ class ParallelEnvironmentLoop(acme.core.Worker):
         timestep = self._environment.reset()
 
         if type(timestep) == tuple:
+            # TODO fix for this case -> output is a list of tuples
             timestep, env_extras = timestep
         else:
             env_extras = {}
@@ -443,7 +445,8 @@ class ParallelEnvironmentLoop(acme.core.Worker):
             episode_returns.update({agent: generate_zeros_from_spec(spec)})
 
         # Run an episode.
-        while not timestep.last():
+        # TODO probably stack timesteps and join the STEP_TYPE
+        while not all(timestep.step_type == dm_env.StepType.LAST):
 
             # Generate an action from the agent's policy and step the environment.
             actions = self._get_actions(timestep)
@@ -456,7 +459,7 @@ class ParallelEnvironmentLoop(acme.core.Worker):
                 env_actions = actions
 
             timestep = self._environment.step(env_actions)
-
+            # print(f"BEGIN----------------:\n{timestep}")
             if type(timestep) == tuple:
                 timestep, env_extras = timestep
             else:
@@ -488,6 +491,8 @@ class ParallelEnvironmentLoop(acme.core.Worker):
                 current_step_t = total_steps_before_current_episode + episode_steps
                 self._executor.after_action_selection(current_step_t)
 
+            # TODO: vmap?
+            rewards = index_stacked_tree(rewards, 0)
             self._compute_step_statistics(rewards)
 
             for agent, reward in rewards.items():

@@ -19,8 +19,14 @@ import abc
 from dataclasses import dataclass
 from typing import Any, Dict
 
+import dm_env
+import jax.numpy as jnp
+import jax
+
 from mava.components.jax import Component
 from mava.core_jax import SystemExecutor
+from mava.types import OLT
+from mava.utils.jax_tree_utils import index_stacked_tree
 from mava.utils.sort_utils import sample_new_agent_keys, sort_str_num
 
 
@@ -90,7 +96,7 @@ class FeedforwardExecutorObserve(ExecutorObserve):
         if not executor.store.adder:
             return
 
-        "Select new networks from the sampler at the start of each episode."
+        # Select new networks from the sampler at the start of each episode.
         agents = sort_str_num(list(executor.store.agent_net_keys.keys()))
         (
             executor.store.network_int_keys_extras,
@@ -104,7 +110,12 @@ class FeedforwardExecutorObserve(ExecutorObserve):
             "network_int_keys"
         ] = executor.store.network_int_keys_extras
 
-        executor.store.adder.add_first(executor.store.timestep, executor.store.extras)
+        # TODO (sasha): add all somehow
+        #  * multiple adders
+        #  * one at a time with one adder
+        timestep = index_stacked_tree(executor.store.timestep, 0)
+        # executor.store.adder.add_first(executor.store.timestep, executor.store.extras)
+        executor.store.adder.add_first(timestep, executor.store.extras)
 
     # Observe
     def on_execution_observe(self, executor: SystemExecutor) -> None:
@@ -116,8 +127,8 @@ class FeedforwardExecutorObserve(ExecutorObserve):
         if not executor.store.adder:
             return
 
-        actions_info = executor.store.actions_info
-        policies_info = executor.store.policies_info
+        actions_info = index_stacked_tree(executor.store.actions_info, 0)
+        policies_info = index_stacked_tree(executor.store.policies_info, 0)
 
         adder_actions: Dict[str, Any] = {}
         executor.store.next_extras["policy_info"] = {}
@@ -131,8 +142,13 @@ class FeedforwardExecutorObserve(ExecutorObserve):
             "network_int_keys"
         ] = executor.store.network_int_keys_extras
 
+        next_timestep = index_stacked_tree(executor.store.next_timestep, 0)
+
+        # executor.store.adder.add(
+        #     adder_actions, executor.store.next_timestep, executor.store.next_extras
+        # )
         executor.store.adder.add(
-            adder_actions, executor.store.next_timestep, executor.store.next_extras
+            adder_actions, next_timestep, executor.store.next_extras
         )
 
     # Update the executor variables.

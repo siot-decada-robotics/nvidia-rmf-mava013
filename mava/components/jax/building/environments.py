@@ -29,6 +29,7 @@ from mava.wrappers.environment_loop_wrappers import (
     DetailedPerAgentStatistics,
     EnvironmentLoopStatisticsBase,
 )
+from mava.wrappers.parallel_env_wrapper import VecEnvWrapper
 
 
 @dataclass
@@ -137,3 +138,33 @@ class ParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
                 executor_environment_loop
             )
         builder.store.system_executor = executor_environment_loop
+
+
+class ParallelExecutorVecEnvLoopConfig(ExecutorEnvironmentLoopConfig):
+    num_environments: int = 2
+
+
+class ParallelExecutorVecEnvLoop(ParallelExecutorEnvironmentLoop):
+    def __init__(
+        self,
+        config: ParallelExecutorVecEnvLoopConfig = ParallelExecutorVecEnvLoopConfig(),
+    ):
+        super().__init__(config)
+
+    def on_building_executor_environment(self, builder: SystemBuilder) -> None:
+        """_summary_
+
+        Args:
+            builder : _description_
+        """
+        # Global config set by EnvironmentSpec component
+        builder.store.executor_environment = VecEnvWrapper(
+            tuple(
+                builder.store.global_config.environment_factory(evaluation=False)
+                for _ in range(self.config.num_environments)
+            )
+        )  # type: ignore
+
+    @staticmethod
+    def config_class() -> Optional[Callable]:
+        return ParallelExecutorVecEnvLoopConfig

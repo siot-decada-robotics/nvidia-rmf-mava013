@@ -153,12 +153,12 @@ class DebuggingEnvWrapper(PettingZooParallelEnvWrapper):
             if isinstance(self._environment.action_spaces[agent], spaces.Discrete):
                 legals = np.ones(
                     _convert_to_spec(self._environment.action_spaces[agent]).num_values,
-                    dtype=self._environment.action_spaces[agent].dtype,
+                    dtype=np.int32,
                 )
             else:
                 legals = np.ones(
                     _convert_to_spec(self._environment.action_spaces[agent]).shape,
-                    dtype=self._environment.action_spaces[agent].dtype,
+                    dtype=np.int32,
                 )
 
             observation_specs[agent] = OLT(
@@ -169,6 +169,16 @@ class DebuggingEnvWrapper(PettingZooParallelEnvWrapper):
                 terminal=specs.Array((1,), np.float32),
             )
         return observation_specs
+
+    # TODO (sasha): reverb not playing nice
+    def action_spec(self) -> Dict[str, Union[specs.DiscreteArray, specs.BoundedArray]]:
+        act_spaces = {}
+        for agent, space in self._environment.action_spaces.items():
+            act_spaces[agent] = specs.DiscreteArray(
+                num_values=space.n, dtype=np.int32, name=f"{agent}-action_space"
+            )
+
+        return act_spaces
 
     def extras_spec(self) -> Dict[str, specs.BoundedArray]:
         extras = {}

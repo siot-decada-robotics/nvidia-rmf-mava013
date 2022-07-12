@@ -21,6 +21,7 @@ from typing import Any
 import optax
 from absl import app, flags
 
+from mava.components.jax.building.environments import ParallelExecutorVecEnvLoop
 from mava.systems.jax import mappo
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
@@ -88,7 +89,7 @@ def main(_: Any) -> None:
 
     # Create the system.
     system = mappo.MAPPOSystem()
-
+    system.update(ParallelExecutorVecEnvLoop)
     # Build the system.
     system.build(
         environment_factory=environment_factory,
@@ -101,6 +102,7 @@ def main(_: Any) -> None:
         num_epochs=15,
         num_executors=1,
         multi_process=True,
+        # num_environments=2,  # TODO: not working?
     )
 
     # Launch the system.

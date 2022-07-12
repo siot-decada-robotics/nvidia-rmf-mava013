@@ -19,6 +19,7 @@ import abc
 from dataclasses import dataclass
 
 import jax
+import jax.numpy as jnp
 from acme.jax import utils
 
 from mava.components.jax import Component
@@ -82,10 +83,28 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
         """Summary"""
         executor.store.actions_info = {}
         executor.store.policies_info = {}
+
         for agent, observation in executor.store.observations.items():
-            action_info, policy_info = executor.select_action(agent, observation)
-            executor.store.actions_info[agent] = action_info
-            executor.store.policies_info[agent] = policy_info
+            executor.store.key, *keys = jax.random.split(
+                executor.store.key,
+                2 + 1,  # TODO: executor.store.global_config.num_environments + 1
+            )
+            network = executor.store.networks["networks"][
+                executor.store.agent_net_keys[agent]
+            ]
+
+            action_infos, policy_infos = jax.vmap(
+                select_action, in_axes=(0, None, 0, 0)
+            )(
+                observation.observation,
+                network,
+                jnp.array(keys),
+                observation.legal_actions,
+            )
+
+            # action_info, policy_info = executor.select_action(agent, observation)
+            executor.store.actions_info[agent] = action_infos
+            executor.store.policies_info[agent] = policy_infos
 
     # Select action
     def on_execution_select_action_compute(self, executor: SystemExecutor) -> None:
@@ -107,3 +126,12 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
             rng_key,
             utils.add_batch_dim(executor.store.observation.legal_actions),
         )
+
+
+def select_action(observation, network, rng_key, legals):
+    observation = utils.add_batch_dim(observation)
+    return network.get_action(
+        observation,
+        rng_key,
+        utils.add_batch_dim(legals),
+    )
