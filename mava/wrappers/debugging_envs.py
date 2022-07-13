@@ -128,12 +128,12 @@ class DebuggingEnvWrapper(PettingZooParallelEnvWrapper):
                         _convert_to_spec(
                             self._environment.action_spaces[agent]
                         ).num_values,
-                        dtype=self._environment.action_spaces[agent].dtype,
+                        dtype=np.int32,
                     )
                 else:
                     legals = np.ones(
                         _convert_to_spec(self._environment.action_spaces[agent]).shape,
-                        dtype=self._environment.action_spaces[agent].dtype,
+                        dtype=np.int32,
                     )
 
             observation = np.array(observation, dtype=np.float32)

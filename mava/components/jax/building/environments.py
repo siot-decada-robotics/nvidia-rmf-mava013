@@ -25,6 +25,7 @@ from mava.components.jax import Component
 from mava.core_jax import SystemBuilder
 from mava.environment_loop import ParallelEnvironmentLoop
 from mava.utils.sort_utils import sort_str_num
+from mava.vectorized_env_loop import VectorizedParallelEnvironmentLoop
 from mava.wrappers.environment_loop_wrappers import (
     DetailedPerAgentStatistics,
     EnvironmentLoopStatisticsBase,
@@ -145,7 +146,27 @@ class ParallelExecutorVecEnvLoopConfig(ExecutorEnvironmentLoopConfig):
     num_environments: int = 2
 
 
-class ParallelExecutorVecEnvLoop(ParallelExecutorEnvironmentLoop):
+class ParallelExecutorVecEnvLoop(ExecutorEnvironmentLoop):
+    def on_building_executor_environment_loop(self, builder: SystemBuilder) -> None:
+        """_summary_
+
+        Args:
+            builder : _description_
+        """
+        executor_environment_loop = VectorizedParallelEnvironmentLoop(
+            environment=builder.store.executor_environment,
+            executor=builder.store.executor,
+            logger=builder.store.executor_logger,
+            should_update=self.config.should_update,
+        )
+        del builder.store.executor_logger
+
+        if self.config.executor_stats_wrapper_class:
+            executor_environment_loop = self.config.executor_stats_wrapper_class(
+                executor_environment_loop
+            )
+        builder.store.system_executor = executor_environment_loop
+
     def on_building_executor_environment(self, builder: SystemBuilder) -> None:
         """_summary_
 

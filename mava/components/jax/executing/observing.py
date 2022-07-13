@@ -114,8 +114,8 @@ class FeedforwardExecutorObserve(ExecutorObserve):
         #  * multiple adders
         #  * one at a time with one adder
         timestep = index_stacked_tree(executor.store.timestep, 0)
-        # executor.store.adder.add_first(executor.store.timestep, executor.store.extras)
         executor.store.adder.add_first(timestep, executor.store.extras)
+        # executor.store.adder.add_first(executor.store.timestep, executor.store.extras)
 
     # Observe
     def on_execution_observe(self, executor: SystemExecutor) -> None:
@@ -130,6 +130,9 @@ class FeedforwardExecutorObserve(ExecutorObserve):
         actions_info = index_stacked_tree(executor.store.actions_info, 0)
         policies_info = index_stacked_tree(executor.store.policies_info, 0)
 
+        # actions_info = executor.store.actions_info
+        # policies_info = executor.store.policies_info
+
         adder_actions: Dict[str, Any] = {}
         executor.store.next_extras["policy_info"] = {}
         for agent in actions_info.keys():
@@ -143,13 +146,13 @@ class FeedforwardExecutorObserve(ExecutorObserve):
         ] = executor.store.network_int_keys_extras
 
         next_timestep = index_stacked_tree(executor.store.next_timestep, 0)
+        executor.store.adder.add(
+            adder_actions, next_timestep, executor.store.next_extras
+        )
 
         # executor.store.adder.add(
         #     adder_actions, executor.store.next_timestep, executor.store.next_extras
         # )
-        executor.store.adder.add(
-            adder_actions, next_timestep, executor.store.next_extras
-        )
 
     # Update the executor variables.
     def on_execution_update(self, executor: SystemExecutor) -> None:

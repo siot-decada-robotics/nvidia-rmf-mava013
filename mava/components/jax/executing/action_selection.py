@@ -83,6 +83,39 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
         """Summary"""
         executor.store.actions_info = {}
         executor.store.policies_info = {}
+        for agent, observation in executor.store.observations.items():
+            action_info, policy_info = executor.select_action(agent, observation)
+            executor.store.actions_info[agent] = action_info
+            executor.store.policies_info[agent] = policy_info
+
+    # Select action
+    def on_execution_select_action_compute(self, executor: SystemExecutor) -> None:
+        """Summary"""
+
+        agent = executor.store.agent
+        network = executor.store.networks["networks"][
+            executor.store.agent_net_keys[agent]
+        ]
+
+        observation = utils.add_batch_dim(executor.store.observation.observation)
+        rng_key, executor.store.key = jax.random.split(executor.store.key)
+
+        # TODO (dries): We are currently using jit in the networks per agent.
+        # We can also try jit over all the agents in a for loop. This would
+        # allow the jit function to save us even more time.
+        executor.store.action_info, executor.store.policy_info = network.get_action(
+            observation,
+            rng_key,
+            utils.add_batch_dim(executor.store.observation.legal_actions),
+        )
+
+
+class VectorizedFeedforwardExecutorSelectAction(FeedforwardExecutorSelectAction):
+    # Select actions
+    def on_execution_select_actions(self, executor: SystemExecutor) -> None:
+        """Summary"""
+        executor.store.actions_info = {}
+        executor.store.policies_info = {}
 
         for agent, observation in executor.store.observations.items():
             executor.store.key, *keys = jax.random.split(
@@ -105,27 +138,6 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
             # action_info, policy_info = executor.select_action(agent, observation)
             executor.store.actions_info[agent] = action_infos
             executor.store.policies_info[agent] = policy_infos
-
-    # Select action
-    def on_execution_select_action_compute(self, executor: SystemExecutor) -> None:
-        """Summary"""
-
-        agent = executor.store.agent
-        network = executor.store.networks["networks"][
-            executor.store.agent_net_keys[agent]
-        ]
-
-        observation = utils.add_batch_dim(executor.store.observation.observation)
-        rng_key, executor.store.key = jax.random.split(executor.store.key)
-
-        # TODO (dries): We are currently using jit in the networks per agent.
-        # We can also try jit over all the agents in a for loop. This would
-        # allow the jit function to save us even more time.
-        executor.store.action_info, executor.store.policy_info = network.get_action(
-            observation,
-            rng_key,
-            utils.add_batch_dim(executor.store.observation.legal_actions),
-        )
 
 
 def select_action(observation, network, rng_key, legals):
