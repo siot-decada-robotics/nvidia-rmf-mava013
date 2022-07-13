@@ -476,8 +476,7 @@ class ParallelEnvironmentLoop(acme.core.Worker):
                 self._executor.update()
 
             # Book-keeping.
-            # TODO (sasha): get config stuff working
-            episode_steps += 2  # self._executor.store.global_config.num_environments
+            episode_steps += self._executor.store.global_config.num_environments
 
             if hasattr(self._executor, "after_action_selection"):
                 if hasattr(self._executor, "_counts"):

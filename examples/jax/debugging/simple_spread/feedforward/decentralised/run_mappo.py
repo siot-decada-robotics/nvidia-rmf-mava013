@@ -102,7 +102,7 @@ def main(_: Any) -> None:
         num_epochs=15,
         num_executors=1,
         multi_process=True,
-        # num_environments=2,  # TODO: not working?
+        num_environments=1,
     )
 
     # Launch the system.

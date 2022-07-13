@@ -87,7 +87,7 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
         for agent, observation in executor.store.observations.items():
             executor.store.key, *keys = jax.random.split(
                 executor.store.key,
-                2 + 1,  # TODO: executor.store.global_config.num_environments + 1
+                executor.store.global_config.num_environments + 1,
             )
             network = executor.store.networks["networks"][
                 executor.store.agent_net_keys[agent]

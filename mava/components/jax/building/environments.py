@@ -140,17 +140,12 @@ class ParallelExecutorEnvironmentLoop(ExecutorEnvironmentLoop):
         builder.store.system_executor = executor_environment_loop
 
 
+@dataclass
 class ParallelExecutorVecEnvLoopConfig(ExecutorEnvironmentLoopConfig):
     num_environments: int = 2
 
 
 class ParallelExecutorVecEnvLoop(ParallelExecutorEnvironmentLoop):
-    def __init__(
-        self,
-        config: ParallelExecutorVecEnvLoopConfig = ParallelExecutorVecEnvLoopConfig(),
-    ):
-        super().__init__(config)
-
     def on_building_executor_environment(self, builder: SystemBuilder) -> None:
         """_summary_
 
