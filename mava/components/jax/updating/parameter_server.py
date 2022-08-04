@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Sequence, Union
 
 import numpy as np
+import tensorflow_io as tfio
 from acme.jax import savers
 
 from mava.components.jax.component import Component
