@@ -57,8 +57,8 @@ class Logger(MavaLogger):
     ):
         self._label = label
 
-        if not isinstance(directory, Path):
-            directory = Path(directory)
+        # if not isinstance(directory, Path):
+            # directory = Path(directory)
 
         self._directory = directory
         self._time_stamp = time_stamp if time_stamp else str(datetime.now())
@@ -144,9 +144,9 @@ class Logger(MavaLogger):
 
     def _path(self, subdir: Optional[str] = None) -> str:
         if subdir:
-            path = str(self._directory / self._time_stamp / subdir / self._label)
+            path = str(self._directory + "/" + self._time_stamp + "/" + subdir + "/" + self._label)
         else:
-            path = str(self._directory / self._time_stamp / self._label)
+            path = str(self._directory + "/" + self._time_stamp + "/" + self._label)
 
         # Recursively replace "~"
         return paths.process_path(path)
