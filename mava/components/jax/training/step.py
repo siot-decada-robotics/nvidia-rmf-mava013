@@ -266,6 +266,8 @@ class MAPGWithTrustRegionStep(Step):
                 for key in agent_nets.keys()
             }
 
+            behavior_values = jax.lax.stop_gradient(behavior_values)
+
             # Vmap over batch dimension
             batch_gae_advantages = jax.vmap(trainer.store.gae_fn, in_axes=0)
 
