@@ -19,6 +19,7 @@ from types import SimpleNamespace
 from typing import Dict, List, Tuple, Union
 
 import dm_env
+from acme.jax import utils
 from acme.types import NestedArray
 
 from mava.callbacks import Callback, ExecutorHookMixin
@@ -150,7 +151,9 @@ class Executor(SystemExecutor, ExecutorHookMixin):
 
         self.on_execution_select_actions_end()
 
-        return self.store.actions_info, self.store.policies_info
+        return utils.to_numpy_squeeze(self.store.actions_info), utils.to_numpy_squeeze(
+            self.store.policies_info
+        )
 
     def update(self, wait: bool = False) -> None:
         """Update executor parameters.

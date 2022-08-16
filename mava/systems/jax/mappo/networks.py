@@ -21,7 +21,6 @@ import chex
 import haiku as hk  # type: ignore
 import jax
 import jax.numpy as jnp
-import numpy as np
 from acme import specs
 from acme.jax import networks as networks_lib
 from acme.jax import utils
@@ -102,7 +101,7 @@ class PPONetworks:
         observations: networks_lib.Observation,
         key: networks_lib.PRNGKey,
         mask: chex.Array = None,
-    ) -> Tuple[np.ndarray, Dict]:
+    ) -> Tuple[jnp.ndarray, Dict]:
         """Gets an action from the network from given observation
 
         Args:
