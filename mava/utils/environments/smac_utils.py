@@ -16,6 +16,8 @@
 """Utils for SMAC environment."""
 from typing import Any, Optional
 
+from mava.wrappers.single_precision import SinglePrecisionWrapper
+
 try:
     from smac.env import StarCraft2Env
 
@@ -37,6 +39,7 @@ if _found_smac:
         concat_agent_id: bool = True,
         evaluation: bool = False,
         random_seed: Optional[int] = None,
+        single_precision: bool = True,
     ) -> Any:
         env = StarCraft2Env(map_name=map_name, seed=random_seed)
 
@@ -47,5 +50,8 @@ if _found_smac:
 
         if concat_agent_id:
             env = ConcatAgentIdToObservation(env)
+
+        if single_precision:
+            env = SinglePrecisionWrapper(env)
 
         return env

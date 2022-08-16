@@ -24,6 +24,7 @@ from mava.wrappers.debugging_envs import (
     SwitchGameWrapper,
     TwoStepWrapper,
 )
+from mava.wrappers.single_precision import SinglePrecisionWrapper
 
 
 def make_environment(
@@ -35,6 +36,7 @@ def make_environment(
     return_state_info: bool = False,
     random_seed: Optional[int] = None,
     recurrent_test: bool = False,
+    single_precision: bool = True,
 ) -> dm_env.Environment:
 
     assert action_space == "continuous" or action_space == "discrete"
@@ -60,5 +62,8 @@ def make_environment(
 
     if random_seed and hasattr(environment, "seed"):
         environment.seed(random_seed)
+
+    if single_precision:
+        environment = SinglePrecisionWrapper(environment)
 
     return environment
