@@ -22,6 +22,8 @@ import tree
 from acme import specs, types, wrappers
 from acme.wrappers.single_precision import _convert_value
 
+from mava import types as mava_types
+
 
 class SinglePrecisionWrapper(wrappers.SinglePrecisionWrapper):
     """Wrapper which converts environments from double- to single-precision.
@@ -65,7 +67,7 @@ class SinglePrecisionWrapper(wrappers.SinglePrecisionWrapper):
         """
         return _convert_spec(self._environment.extras_spec())
 
-    def observation_spec(self) -> Dict[str, types.OLT]:
+    def observation_spec(self) -> Dict[str, mava_types.OLT]:
         """Convert timestep to single precision.
 
         Returns:
