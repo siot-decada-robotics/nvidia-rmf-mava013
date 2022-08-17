@@ -151,9 +151,10 @@ class Executor(SystemExecutor, ExecutorHookMixin):
 
         self.on_execution_select_actions_end()
 
-        return utils.to_numpy_squeeze(self.store.actions_info), utils.to_numpy_squeeze(
-            self.store.policies_info
-        )
+        return self.store.actions_info, self.store.policies_info
+        # return utils.to_numpy_squeeze(self.store.actions_info), utils.to_numpy_squeeze(
+        #     self.store.policies_info
+        # )
 
     def update(self, wait: bool = False) -> None:
         """Update executor parameters.
