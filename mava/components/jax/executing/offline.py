@@ -1,3 +1,5 @@
+from chex import dataclass
+
 from mava.components.jax import Component
 from mava.components.jax.building.environments import (
     ExecutorEnvironmentLoopConfig,
@@ -5,7 +7,6 @@ from mava.components.jax.building.environments import (
 )
 from mava.core_jax import SystemBuilder, SystemExecutor
 from mava.wrappers.offline_environment_logger import MAOfflineEnvironmentSequenceLogger
-from chex import dataclass
 
 
 @dataclass
@@ -31,7 +32,7 @@ class EvaluatorOfflineLogging(ParallelExecutorEnvironmentLoop):
         print("CONFIG CHECK: ", self.config.offline_sequence_length, "$$$$$$$$$$$$$$$")
 
     def on_building_executor_environment(self, builder: SystemBuilder):
-        env = self.config.environment_factory(evaluation=False)  # type: ignore
+        env = builder.store.global_config.environment_factory(evaluation=False)  # type: ignore
 
         if builder.store.is_evaluator:
             env = MAOfflineEnvironmentSequenceLogger(
