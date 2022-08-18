@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 from typing import Any, Callable, Dict, Optional, Union
 
 from mava.components.tf.modules.exploration.exploration_scheduling import (
@@ -22,7 +23,22 @@ from mava.components.tf.modules.exploration.exploration_scheduling import (
 from mava.utils.sort_utils import sort_str_num
 
 
-def covert_specs(
+def copy_node_fn(fn: Callable) -> Callable:
+    """Creates a copy of a node function.
+
+    Args:
+        fn : node function.
+
+    Returns:
+        copied node function.
+    """
+    memo = {}
+    memo[id(fn.__self__.store.program)] = fn.__self__.store.program  # type: ignore
+    copied_fn = copy.deepcopy(fn, memo=memo)
+    return copied_fn
+
+
+def convert_specs(
     agent_net_keys: Dict[str, Any], spec: Dict[str, Any], num_networks: int
 ) -> Dict[str, Any]:
     """_summary_
@@ -45,7 +61,7 @@ def covert_specs(
     else:
         # For the extras
         for key in spec.keys():
-            converted_spec[key] = covert_specs(agent_net_keys, spec[key], num_networks)
+            converted_spec[key] = convert_specs(agent_net_keys, spec[key], num_networks)
     return converted_spec
 
 

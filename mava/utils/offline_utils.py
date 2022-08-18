@@ -1,11 +1,13 @@
-import numpy as np
 import copy
+
+import numpy as np
+
 from mava.specs import MAEnvironmentSpec
 
 
 def get_schema(environment):
     environment_spec = MAEnvironmentSpec(environment)
-    agent_specs = environment_spec.get_agent_specs()
+    agent_specs = environment_spec.get_agent_environment_specs()
 
     schema = {}
     for agent in environment_spec.get_agent_ids():
@@ -22,7 +24,7 @@ def get_schema(environment):
     schema["zero_padding_mask"] = np.array(1, dtype=np.float32)
 
     # Global env state
-    extras_spec = environment_spec.get_extra_specs()
+    extras_spec = environment_spec.get_extras_specs()
     if "s_t" in extras_spec:
         schema["env_state"] = extras_spec["s_t"]
 

@@ -15,18 +15,20 @@
 
 """Example running MAPPO on debug MPE environments."""
 import functools
+import os
 from datetime import datetime
 from typing import Any
 
 import optax
 from absl import app, flags
-from mava.components.jax.executing.offline import EvaluatorOfflineLogging
 
+from mava.components.jax.executing.offline import EvaluatorOfflineLogging
 from mava.systems.jax import mappo
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
 
-
+# Without this flag, JAX uses the whole GPU from the beginning and our trainer crashes.
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "env_name",
@@ -69,8 +71,8 @@ def main(_: Any) -> None:
             **kwargs,
         )
 
-    # Checkpointer appends "Checkpoints" to checkpoint_dir
-    checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
+    # Used for checkpoints, tensorboard logging and env monitoring
+    experiment_path = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
     log_every = 10
@@ -97,14 +99,14 @@ def main(_: Any) -> None:
         environment_factory=environment_factory,
         network_factory=network_factory,
         logger_factory=logger_factory,
-        checkpoint_subpath=checkpoint_subpath,
+        experiment_path=experiment_path,
         optimizer=optimizer,
         run_evaluator=True,
         sample_batch_size=5,
         num_epochs=15,
         num_executors=1,
         multi_process=True,
-        terminal="gnome-terminal",
+        clip_value=False,
     )
 
     # Launch the system.

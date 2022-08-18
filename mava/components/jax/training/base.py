@@ -47,37 +47,17 @@ class TrainingState(NamedTuple):
     random_key: Any
 
 
+class TrainingStateSeparateNetworks(NamedTuple):
+    """Training state consists of network parameters and optimiser state."""
+
+    policy_params: Any
+    critic_params: Any
+    policy_opt_states: Dict[str, optax.OptState]
+    critic_opt_states: Dict[str, optax.OptState]
+    random_key: Any
+
+
 class Utility(Component):
     @abc.abstractmethod
     def on_training_utility_fns(self, trainer: SystemTrainer) -> None:
-        """[summary]"""
-
-
-class Loss(Component):
-    @abc.abstractmethod
-    def on_training_loss_fns(self, trainer: SystemTrainer) -> None:
-        """[summary]"""
-
-    @staticmethod
-    def name() -> str:
-        """_summary_
-
-        Returns:
-            _description_
-        """
-        return "loss"
-
-
-class Step(Component):
-    @abc.abstractmethod
-    def on_training_step_fn(self, trainer: SystemTrainer) -> None:
-        """[summary]"""
-
-    @staticmethod
-    def name() -> str:
-        """_summary_
-
-        Returns:
-            _description_
-        """
-        return "sgd_step"
+        """Hook to override to define training utility functions."""
