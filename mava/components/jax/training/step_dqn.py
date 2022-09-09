@@ -207,7 +207,7 @@ class MADQNStep(Step):
             # Set the metrics
             trainer.store.metrics = metrics
 
-            trainer.store.training_steps = new_states.steps
+            trainer.store.trainer_counts["trainer_steps"] = new_states.steps
 
             return metrics
 
