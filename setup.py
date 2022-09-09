@@ -26,11 +26,11 @@ _metadata = import_util.module_from_spec(spec)  # type: ignore
 spec.loader.exec_module(_metadata)  # type: ignore
 
 reverb_requirements = [
-    "dm-reverb~=0.6.1",
+    "dm-reverb~=0.7.2",
 ]
 
 tf_requirements = [
-    "tensorflow~=2.7.0",
+    "tensorflow~=2.8.0",
     "tensorflow_probability~=0.15.0",
     "dm-sonnet",
     "trfl",
@@ -38,12 +38,15 @@ tf_requirements = [
 
 jax_requirements = [
     "chex",
-    "jax",
+    # TODO Unpin JAX, once new rlax and acme version is released.
+    # To fix cannot import name 'tree_multimap' from 'jax.tree_util'.
+    "jax<=0.3.15",
     "jaxlib",
     "dm-haiku",
     "flax",
     "optax",
     "rlax",
+    "networkx",
 ] + tf_requirements
 
 pettingzoo_requirements = [
@@ -53,8 +56,6 @@ pettingzoo_requirements = [
     "pygame",
     "pysc2",
 ]
-
-launchpad_requirements = ["dm-launchpad~=0.3.2"]
 
 smac_requirements = ["pysc2", "SMAC @ git+https://github.com/oxwhirl/smac.git"]
 testing_formatting_requirements = [
@@ -70,7 +71,7 @@ testing_formatting_requirements = [
     "types-six",
 ]
 
-record_episode_requirements = ["array2gif"]
+record_episode_requirements = ["array2gif", "pyglet"]
 
 flatland_requirements = ["flatland-rl==3.0.1"]
 open_spiel_requirements = ["open_spiel"]
@@ -102,12 +103,12 @@ setup(
     keywords="multi-agent reinforcement-learning python machine learning",
     packages=find_packages(),
     install_requires=[
-        "dm-acme~=0.2.4",
+        "dm-acme~=0.4.0",
         "chex",
         "absl-py",
         "dm_env",
         "dm-tree",
-        "numpy~=1.21.4",
+        "numpy",
         "pillow",
         "matplotlib",
         "dataclasses",
@@ -120,7 +121,6 @@ setup(
         "flatland": flatland_requirements,
         "open_spiel": open_spiel_requirements,
         "reverb": reverb_requirements,
-        "launchpad": launchpad_requirements,
         "testing_formatting": testing_formatting_requirements,
         "record_episode": record_episode_requirements,
         "sc2": smac_requirements,
