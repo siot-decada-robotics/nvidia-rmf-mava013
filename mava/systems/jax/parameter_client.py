@@ -146,6 +146,7 @@ class ParameterClient:
 
     def add_async(self, params: Dict[str, Any]) -> None:
         """Asynchronously adds to server parameters."""
+        names = None
         if self._add_future is not None and self._add_future.done():
             self._add_future = None
 
@@ -165,7 +166,7 @@ class ParameterClient:
                 )
                 self._async_add_buffer = {}
             return
-        else:
+        elif names:
             # The trainers is going to fast to keep up! Adding
             # all the values up and only writing them when the
             # process is ready.
