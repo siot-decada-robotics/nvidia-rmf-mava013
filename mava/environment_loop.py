@@ -444,7 +444,7 @@ class ParallelEnvironmentLoop(acme.core.Worker):
 
         # Run an episode.
         while not timestep.last():
-
+            #print(episode_steps)
             # Generate an action from the agent's policy and step the environment.
             actions = self._get_actions(timestep)
 
@@ -473,6 +473,8 @@ class ParallelEnvironmentLoop(acme.core.Worker):
                 self._executor.update()
 
             # Book-keeping.
+            episode_steps += 1
+
             if hasattr(self._executor, "after_action_selection"):
                 if hasattr(self._executor, "_counts"):
                     loop_type = "evaluator" if self._executor._evaluator else "executor"
@@ -589,6 +591,8 @@ class ParallelEnvironmentLoop(acme.core.Worker):
                 result = self.run_episode()
                 episode_count += 1
                 step_count += result["episode_length"]
+                #print("*********STEP COUNT***********")
+                #print(step_count)
                 # Log the given results.
                 self._logger.write(result)
             else:

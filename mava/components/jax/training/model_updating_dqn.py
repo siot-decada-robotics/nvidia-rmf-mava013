@@ -161,7 +161,8 @@ class MADQNEpochUpdate(Utility):
         ]:
             """Performs model updates based on one epoch of data."""
             key, params, target_params, opt_states, batch, steps = carry
-
+            #jax.debug.print(steps)
+            #exit()
             # Calculate the gradients and agent metrics.
             gradients, agent_metrics = trainer.store.grad_fn(
                 params,
