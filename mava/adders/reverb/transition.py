@@ -221,7 +221,9 @@ class ParallelNStepTransitionAdder(NStepTransitionAdder, ReverbParallelAdder):
         table_priorities = acme_utils.calculate_priorities(
             self._priority_fns, transition
         )
-
+        # print("****************PER************")
+        # print(table_priorities)
+        # exit()
         # Add the experience to the trainer tables in the correct form.
         self.write_experience_to_tables(transition, table_priorities)
 

@@ -47,6 +47,7 @@ def make_networks(
         256,
         256,
     ),
+    dueling: bool = True,
 ) -> DQNNetworks:
     """TODO: Add description here."""
     if isinstance(spec.actions, specs.DiscreteArray):
@@ -54,6 +55,7 @@ def make_networks(
             environment_spec=spec,
             key=key,
             policy_layer_sizes=policy_layer_sizes,
+            dueling=True,
         )
     else:
         raise NotImplementedError("Only discrete actions are implemented for MADQN.")
@@ -63,6 +65,7 @@ def make_discrete_networks(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
     policy_layer_sizes: Sequence[int],
+    dueling: bool = True,
 ) -> DQNNetworks:
     """TODO: Add description here."""
 
@@ -72,15 +75,29 @@ def make_discrete_networks(
     # than having a policy_fn and critic_fn. Maybe jit solves
     # this issue. Having one function makes obs network calculations
     # easier.
-    def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
-        policy_value_network = hk.Sequential(
-            [
-                utils.batch_concat,
-                networks_lib.LayerNormMLP(policy_layer_sizes, activate_final=True),
-                networks_lib.NearZeroInitializedLinear(num_actions),
-            ]
-        )
-        return policy_value_network(inputs)
+    if dueling:
+
+        def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+            policy_value_network = hk.Sequential(
+                [
+                    utils.batch_concat,
+                    networks_lib.LayerNormMLP(policy_layer_sizes, activate_final=True),
+                    networks_lib.DuellingMLP(num_actions, policy_layer_sizes),
+                ]
+            )
+            return policy_value_network(inputs)
+
+    else:
+
+        def forward_fn(inputs: jnp.ndarray) -> networks_lib.FeedForwardNetwork:
+            policy_value_network = hk.Sequential(
+                [
+                    utils.batch_concat,
+                    networks_lib.LayerNormMLP(policy_layer_sizes, activate_final=True),
+                    networks_lib.NearZeroInitializedLinear(num_actions),
+                ]
+            )
+            return policy_value_network(inputs)
 
     # Transform into pure functions.
     forward_fn = hk.without_apply_rng(hk.transform(forward_fn))
@@ -121,6 +138,7 @@ def make_default_networks(
             specs[net_key],
             key=rng_key,
             policy_layer_sizes=policy_layer_sizes,
+            dueling=True,
         )
 
     return {

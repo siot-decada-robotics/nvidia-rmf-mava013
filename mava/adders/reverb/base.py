@@ -330,32 +330,6 @@ class ReverbParallelAdder(ReverbAdder, ParallelAdder):
                                     # and not per agent. Maybe fix this in the future.
                                     new_trajectory.extras[key] = trajectory.extras[key]
 
-                                # TODO: (Siddarth) Breaks tables for transition adder
-                                """
-                                if type(trajectory) == mava_types.Transition:
-                                    ext = trajectory.next_extras[key]  # type: ignore
-                                    if (
-                                        type(ext) is dict  # type: ignore
-                                        and cur_agent in ext  # type: ignore
-                                    ):
-                                        new_trajectory.next_extras[key][  # type: ignore
-                                            want_agent
-                                        ] = trajectory.next_extras[  # type: ignore
-                                            key
-                                        ][  # type: ignore
-                                            cur_agent
-                                        ]  # type: ignore
-                                    else:
-                                        # TODO: (dries) Only actually need to
-                                        # do this once and not per agent. Maybe
-                                        # fix this in the future.
-                                        new_trajectory.next_extras[  # type: ignore
-                                            key
-                                        ] = trajectory.next_extras[  # type: ignore
-                                            key
-                                        ]  # type: ignore
-                                """
-
                         # Write the new_trajectory to the table.
                         self._writer.create_item(
                             table=table, priority=priority, trajectory=new_trajectory

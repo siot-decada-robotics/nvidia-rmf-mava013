@@ -70,7 +70,8 @@ class MADQNSystem(System):
             data_server_rate_limiter=building.SampleToInsertRateLimiter,
             data_server_adder_signature=building.ParallelTransitionAdderSignature,
             extras_spec=ExtrasActionInfo,
-            data_server_sampler=building.reverb_components.UniformSampler,
+            # data_server_sampler=building.reverb_components.UniformSampler,
+            data_server_sampler=building.reverb_components.PrioritySampler,
             data_server_remover=building.reverb_components.FIFORemover,
         ).get()
 
