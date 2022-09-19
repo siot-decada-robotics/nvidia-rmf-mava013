@@ -22,6 +22,7 @@ from typing import Any
 import optax
 from absl import app, flags
 
+from mava.components.jax.executing.offline import EvaluatorOfflineLogging
 from mava.systems.jax import mappo
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
@@ -91,6 +92,7 @@ def main(_: Any) -> None:
 
     # Create the system.
     system = mappo.MAPPOSystem()
+    system.update(EvaluatorOfflineLogging)
 
     # Build the system.
     system.build(

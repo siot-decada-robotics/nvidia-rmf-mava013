@@ -1,11 +1,12 @@
+from typing import Callable, Optional
+
 from chex import dataclass
 
-from mava.components.jax import Component
 from mava.components.jax.building.environments import (
     ExecutorEnvironmentLoopConfig,
     ParallelExecutorEnvironmentLoop,
 )
-from mava.core_jax import SystemBuilder, SystemExecutor
+from mava.core_jax import SystemBuilder
 from mava.wrappers.offline_environment_logger import MAOfflineEnvironmentSequenceLogger
 
 
@@ -23,16 +24,25 @@ class EvaluatorOfflineLogging(ParallelExecutorEnvironmentLoop):
         self,
         config: EvaluatorOfflineLoggingConfig = EvaluatorOfflineLoggingConfig(),
     ):
-        """_summary_
+        """Component logs evaluator trajectories to create offline datasets.
 
         Args:
-            config : _description_.
+            config: EvaluatorOfflineLoggingConfig.
         """
         self.config = config
-        print("CONFIG CHECK: ", self.config.offline_sequence_length, "$$$$$$$$$$$$$$$")
 
-    def on_building_executor_environment(self, builder: SystemBuilder):
-        env = builder.store.global_config.environment_factory(evaluation=False)  # type: ignore
+    def on_building_executor_environment(self, builder: SystemBuilder) -> None:
+        """Log sequences of experience to file.
+
+        Args:
+            builder: SystemBuilder.
+
+        Returns:
+            None.
+        """
+        env = builder.store.global_config.environment_factory(
+            evaluation=False
+        )  # type: ignore
 
         if builder.store.is_evaluator:
             env = MAOfflineEnvironmentSequenceLogger(
@@ -47,14 +57,10 @@ class EvaluatorOfflineLogging(ParallelExecutorEnvironmentLoop):
         builder.store.executor_environment = env
 
     @staticmethod
-    def name() -> str:
-        """_summary_
+    def config_class() -> Optional[Callable]:
+        """Config class used for component.
 
         Returns:
-            _description_
+            config class/dataclass for component.
         """
-        return "executor_environment_loop"  # "evaluator_offline_logging"  # for creating system lowercase underscore
-
-    @staticmethod
-    def config_class():
         return EvaluatorOfflineLoggingConfig
