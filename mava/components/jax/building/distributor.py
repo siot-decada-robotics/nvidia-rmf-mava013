@@ -15,9 +15,9 @@
 
 """Commonly used distributor components for system builders"""
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Type, Union
+from typing import List, Optional, Type, Union
 
-import launchpad as lp
+import jax
 
 from mava.callbacks import Callback
 from mava.components.jax import Component
@@ -34,8 +34,8 @@ class DistributorConfig:
     run_evaluator: bool = True
     distributor_name: str = "System"
     terminal: str = "current_terminal"
-    lp_launch_type: Union[str, lp.LaunchType] = lp.LaunchType.LOCAL_MULTI_PROCESSING
     single_process_max_episodes: Optional[int] = None
+    is_test: Optional[bool] = False
 
 
 class Distributor(Component):
@@ -66,9 +66,30 @@ class Distributor(Component):
             nodes_on_gpu=self.config.nodes_on_gpu,
             name=self.config.distributor_name,
             terminal=self.config.terminal,
-            lp_launch_type=self.config.lp_launch_type,
             single_process_max_episodes=self.config.single_process_max_episodes,
+            is_test=self.config.is_test,
         )
+
+        # Generate keys for the data_server, parameter_server and evaluator.
+        (
+            base_key,
+            builder.store.data_key,
+            builder.store.param_key,
+            builder.store.eval_key,
+        ) = jax.random.split(builder.store.base_key, 4)
+
+        # Generate keys for the executors
+        keys = jax.random.split(base_key, 1 + self.config.num_executors)
+        base_key = keys[0]
+        builder.store.executor_keys = keys[1:]
+
+        # Generate keys for the trainers
+        builder.store.trainer_keys = jax.random.split(
+            base_key, len(builder.store.trainer_networks.keys())
+        )
+
+        # Delete the builder key as it should not be used directly.
+        del builder.store.base_key
 
         # tables node
         data_server = builder.store.program.add(
@@ -129,15 +150,6 @@ class Distributor(Component):
     def name() -> str:
         """Static method that returns component name."""
         return "distributor"
-
-    @staticmethod
-    def config_class() -> Optional[Callable]:
-        """Config class used for component.
-
-        Returns:
-            config class/dataclass for component.
-        """
-        return DistributorConfig
 
     @staticmethod
     def required_components() -> List[Type[Callback]]:
