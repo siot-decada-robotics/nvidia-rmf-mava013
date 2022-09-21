@@ -101,6 +101,8 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
             """Performs model update for a single minibatch."""
             params, opt_states = carry
 
+            # def test_fn():
+            #    print(5)
             # Normalize advantages at the minibatch level before using them.
             if self.config.normalize_advantage:
                 advantages = jax.tree_util.tree_map(
@@ -110,6 +112,8 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
             else:
                 advantages = minibatch.advantages
 
+            # print(trainer.store)
+            # exit()
             # Calculate the gradients and agent metrics.
             gradients, agent_metrics = trainer.store.grad_fn(
                 params,

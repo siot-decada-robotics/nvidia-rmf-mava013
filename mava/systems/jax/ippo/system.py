@@ -55,7 +55,76 @@ class IPPOSystemSeparateNetworks(System):
         trainer_process = DesignSpec(
             trainer_init=training.SingleTrainerInit,
             gae_fn=training.GAE,
-            loss=training.MAPGWithTrustRegionClippingLossSeparateNetworks,
+            value_loss=training.MAPGWithTrustRegionClippingValueLossSeparateNetworks,
+            policy_loss=training.MAPGWithTrustRegionClippingPolicyLossSeparateNetworks,
+            epoch_update=training.MAPGEpochUpdateSeparateNetworks,
+            minibatch_update=training.MAPGMinibatchUpdateSeparateNetworks,
+            sgd_step=training.MAPGWithTrustRegionStepSeparateNetworks,
+            step=training.DefaultTrainerStep,
+            trainer_dataset=building.TrajectoryDataset,
+        ).get()
+
+        # Data Server
+        data_server_process = DesignSpec(
+            data_server=building.OnPolicyDataServer,
+            data_server_adder_signature=building.ParallelSequenceAdderSignature,
+            extras_spec=ExtrasLogProbSpec,
+        ).get()
+
+        # Parameter Server
+        parameter_server_process = DesignSpec(
+            parameter_server=updating.ParameterServerSeparateNetworks,
+            executor_parameter_client=building.ExecutorParameterClientSeparateNetworks,
+            trainer_parameter_client=building.TrainerParameterClientSeparateNetworks,
+            termination_condition=updating.CountConditionTerminator,
+        ).get()
+
+        system = DesignSpec(
+            **system_init,
+            **data_server_process,
+            **parameter_server_process,
+            **executor_process,
+            **trainer_process,
+            distributor=building.Distributor,
+            logger=building.Logger,
+        )
+        return system, default_params
+
+
+class IPPOSystemSeparateNetworksHuber(System):
+    def design(self) -> Tuple[DesignSpec, Any]:
+        """System design for PPO with separate policy and critic networks.
+
+        Returns:
+            system callback components, default system parameters
+        """
+        # Set the default configs
+        default_params = IPPODefaultConfig()
+
+        # Default system processes
+        # System initialization
+        system_init = DesignSpec(
+            environment_spec=building.EnvironmentSpec,
+            system_init=building.FixedNetworkSystemInit,
+        ).get()
+
+        # Executor
+        executor_process = DesignSpec(
+            executor_init=executing.ExecutorInit,
+            executor_observe=executing.FeedforwardExecutorObserve,
+            executor_select_action=executing.FeedforwardExecutorSelectAction,
+            executor_adder=building.ParallelSequenceAdder,
+            adder_priority=building.UniformAdderPriority,
+            executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
+            networks=building.DefaultNetworks,
+        ).get()
+
+        # Trainer
+        trainer_process = DesignSpec(
+            trainer_init=training.SingleTrainerInit,
+            gae_fn=training.GAE,
+            value_loss=training.MAPGWithTrustRegionClippingValueHuberLossSeparateNetworks,  # noqa: E501
+            policy_loss=training.MAPGWithTrustRegionClippingPolicyLossSeparateNetworks,
             epoch_update=training.MAPGEpochUpdateSeparateNetworks,
             minibatch_update=training.MAPGMinibatchUpdateSeparateNetworks,
             sgd_step=training.MAPGWithTrustRegionStepSeparateNetworks,
