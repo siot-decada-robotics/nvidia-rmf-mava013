@@ -17,6 +17,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from acme.jax import utils
 import jax
 import jax.numpy as jnp
 import optax
@@ -26,7 +27,7 @@ from optax._src import base as optax_base
 
 from mava.components.jax.training import BatchDQN, Utility
 from mava.core_jax import SystemTrainer
-
+import tree
 
 @dataclass
 class MADQNMinibatchUpdateConfig:
@@ -153,18 +154,18 @@ class MADQNEpochUpdate(Utility):
 
         @jax.jit
         def model_update_epoch(
-            carry: Tuple[KeyArray, Any, Any, Any, optax.OptState, BatchDQN],
+            carry: Tuple[Any, Any, KeyArray, Any, Any, Any, optax.OptState, BatchDQN],
             unused_t: Tuple[()],
         ) -> Tuple[
             Tuple[KeyArray, Any, Any, optax.OptState, BatchDQN],
             Dict[str, jnp.ndarray],
         ]:
             """Performs model updates based on one epoch of data."""
-            key, params, target_params, opt_states, batch, steps = carry
+            key, params, target_params, opt_states, batch, steps, probs,keys = carry
             #jax.debug.print(steps)
-            #exit()
+           
             # Calculate the gradients and agent metrics.
-            gradients, agent_metrics = trainer.store.grad_fn(
+            gradients, agent_metrics, reverb_updates = trainer.store.grad_fn(
                 params,
                 target_params,
                 batch.observations,
@@ -172,8 +173,25 @@ class MADQNEpochUpdate(Utility):
                 batch.actions,
                 batch.discounts,
                 batch.rewards,
+                probs,
+                keys
             )
 
+            #TODO: Finish assigning priorities
+            keys, priorities = tree.map_structure(
+                # Fetch array and combine device and batch dimensions.
+                lambda x: utils.fetch_devicearray(x).reshape((-1,) + x.shape[2:]),
+                (reverb_updates.keys, reverb_updates.priorities))
+            print(keys)
+            print(priorities)
+            trainer.store.data_server_client.mutate_priorities(table = "trainer")#,updates=dict(zip(keys, priorities)))
+            print("***********REPLAY*******************")
+            print("***********REPLAY*******************")
+            print("***********REPLAY*******************")
+            print("***********REPLAY*******************")
+            print("***********REPLAY*******************")
+            print(trainer.store.data_server_client)
+            exit()
             # Update the networks and optimizers.
             metrics = {}
             new_params = {}

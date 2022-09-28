@@ -60,6 +60,7 @@ class TrainingStateDQN(NamedTuple):
     steps: int
     # values needed for Q-learning family of methods.
     target_params: Any = {}
+    
 
 
 class TrainingStatePPO(NamedTuple):

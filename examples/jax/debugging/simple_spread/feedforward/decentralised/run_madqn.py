@@ -100,9 +100,9 @@ def main(_: Any) -> None:
         multi_process=True,
         run_evaluator=True,
         num_executors=1,
-        sample_batch_size=256,
-        target_update_period=100,
-        min_data_server_size=1_000,
+        sample_batch_size=3,
+        target_update_period=5,
+        min_data_server_size=20,
         n_step=1,
         # use_next_extras=False
     )
