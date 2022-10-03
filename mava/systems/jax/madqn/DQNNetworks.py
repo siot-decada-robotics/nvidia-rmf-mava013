@@ -43,9 +43,9 @@ class DQNNetworks:
             """
             # The parameters of the network might change. So it has to
             # be fed into the jitted function.
-            q_values = self.network.apply(params, observations)
+            q_values, q_logits, atoms = self.network.apply(params, observations)
 
-            return q_values
+            return q_values, q_logits, atoms
 
         self.forward_fn = forward_fn
 
@@ -67,7 +67,7 @@ class DQNNetworks:
         Returns:
             the actions and a dictionary with q-values
         """
-        action_values = self.forward_fn(self.params, observations)
+        action_values, _, _ = self.forward_fn(self.params, observations)
         actions = EpsilonGreedyWithMask(
             preferences=action_values, epsilon=epsilon, mask=mask  # type: ignore
         ).sample(seed=key)

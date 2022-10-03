@@ -77,7 +77,7 @@ def make_discrete_networks(
             [
                 utils.batch_concat,
                 networks_lib.LayerNormMLP(policy_layer_sizes, activate_final=True),
-                networks_lib.NearZeroInitializedLinear(num_actions),
+                networks_lib.DiscreteValued(num_actions),
             ]
         )
         return policy_value_network(inputs)

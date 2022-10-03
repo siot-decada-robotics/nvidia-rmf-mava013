@@ -161,11 +161,3 @@ class FeedforwardExecutorSelectActionValueBased(ExecutorSelectAction):
             epsilon=epsilon,
             mask=utils.add_batch_dim(executor.store.observation.legal_actions),
         )
-
-        """
-         executor.store.action_info, executor.store.policy_info = network.get_action(
-            observation,
-            rng_key,
-            utils.add_batch_dim(executor.store.observation.legal_actions),
-        )
-        """

@@ -30,10 +30,6 @@ from mava.core_jax import SystemTrainer
 
 @dataclass
 class MADQNLossConfig:
-    # clipping_epsilon: float = 0.2
-    # clip_value: bool = True
-    # entropy_cost: float = 0.01
-    # value_cost: float = 0.5
     max_abs_reward: float = 1.0
     gamma: float = 0.99
 
@@ -107,9 +103,9 @@ class MADQNLoss(Loss):
                     next_legal_actions: Any,
                 ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
                     # Forward pass.
-                    q_tm1 = network.forward_fn(params, observations)
-                    q_t_value = network.forward_fn(target_params, next_observations)
-                    q_t_selector = network.forward_fn(params, next_observations)
+                    _, logits_tm1, atoms_tm1 = network.forward_fn(params, observations)
+                    _, logits_t, atoms_t = network.forward_fn(target_params, next_observations)
+                    q_t_selector,_, _ = network.forward_fn(params, next_observations)
 
                     q_t_selector = jnp.where(
                         next_legal_actions.astype(bool),
@@ -125,12 +121,14 @@ class MADQNLoss(Loss):
                         self.config.max_abs_reward,
                     ).astype(jnp.float32)
 
-                    # Compute Q-learning TD-error.
-                    batch_error = jax.vmap(rlax.double_q_learning)
-                    td_error = batch_error(
-                        q_tm1, actions, r_t, d_t, q_t_value, q_t_selector
-                    )
-                    loss = jnp.mean(rlax.l2_loss(td_error))
+                    # Compute categorical double Q-learning loss.
+                    batch_loss_fn = jax.vmap(
+                        rlax.categorical_double_q_learning,
+                        in_axes=(None, 0, 0, 0, 0, None, 0, 0))
+                    batch_loss = batch_loss_fn(atoms_tm1, logits_tm1, actions, r_t,
+                                            d_t, atoms_t, logits_t, q_t_selector)
+                                            
+                    loss = jnp.mean(rlax.l2_loss(batch_loss))
                     loss_info = {"loss_total": loss}
                     return loss, loss_info
 
