@@ -23,10 +23,15 @@ import chex
 import jax
 import jax.numpy as jnp
 import rlax
+from acme.agents.jax.dqn import learning_lib
+from jax import jit
+from jax.config import config
 
 from mava.components.jax.training.base import Loss
 from mava.core_jax import SystemTrainer
-from acme.agents.jax.dqn import learning_lib
+
+config.update("jax_disable_jit", True)
+
 
 @dataclass
 class MADQNLossConfig:
@@ -71,7 +76,7 @@ class MADQNLoss(Loss):
             discounts: Any,
             rewards: Any,
             probs: Any,
-            keys: Any
+            keys: Any,
         ) -> Tuple[Dict[str, jnp.ndarray], Dict[str, Dict[str, jnp.ndarray]]]:
             """Gradient of loss.
 
@@ -88,12 +93,11 @@ class MADQNLoss(Loss):
                 grads: gradients of loss with respect to all the parameters.
                 extra: extra information.
             """
-            #self.reverb_update = Any
+            # self.reverb_update = Any
             grads = {}
             loss = {}
             loss_info = {}
-            t1 = {}
-            reverb_update = {}
+
             for agent_key in trainer.store.trainer_agents:
                 agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
                 network = trainer_network[agent_net_key]
@@ -135,30 +139,21 @@ class MADQNLoss(Loss):
                         q_tm1, actions, r_t, d_t, q_t_value, q_t_selector
                     )
 
-                    #TODO(SIDDARTH): MAKE SEPARATE LOSS FUNCTIONS
-                    #FOR PRIORITIZD EXO
-                    #Importance weighting
-                    importance_weights = (1. / probs).astype(jnp.float32)
+                    importance_weights = (1.0 / probs).astype(jnp.float32)
                     importance_weights **= 1
                     importance_weights /= jnp.max(importance_weights)
 
-                    #print("*************IMPORTANCE********************")
-                    #print("*************IMPORTANCE********************")
-                    #print("*************IMPORTANCE********************")
-                    #print("*************IMPORTANCE********************")
-                    #print("*************IMPORTANCE********************")
-                    
-                    
-                    loss = jnp.mean(rlax.l2_loss(td_error))
                     # Reweight
+                    # loss = jnp.mean(importance_weights * td_error)
+                    loss = jnp.mean(td_error)
                     reverb_update = learning_lib.ReverbUpdate(
-                        keys=keys, priorities=jnp.abs(td_error).astype(jnp.float64))
+                        keys=keys, priorities=jnp.abs(td_error).astype(jnp.float64)
+                    )
+                    loss_info = {"loss_total": loss, "reverb_updates": reverb_update}
 
-                    self.reverb_update =reverb_update
-                    loss_info = {"loss_total": loss}
-                    return loss, [loss_info,reverb_update]
-                #(loss[agent_key], loss_info[agent_key],reverb_update), grads[
-                (loss[agent_key], [loss_info[agent_key],reverb_update[agent_key]]), grads[
+                    return loss, loss_info
+
+                (loss[agent_key], loss_info[agent_key]), grads[
                     agent_key
                 ] = jax.value_and_grad(loss_fn, has_aux=True)(
                     params[agent_net_key],
@@ -170,11 +165,14 @@ class MADQNLoss(Loss):
                     rewards[agent_key],
                     next_observations[agent_key].legal_actions,
                 )
-                #loss_info,reverb_update = data
-                loss_info = loss_info[agent_key]
+
+                if agent_key == "agent_0":
+                    loss_info["joint"] = [loss_info[agent_key]["reverb_updates"]]
+                else:
+                    loss_info["joint"].append(loss_info[agent_key]["reverb_updates"])
                 loss_info["total_loss"] = loss[agent_key]
 
-            return grads, loss_info, reverb_update
+            return grads, loss_info
 
         # Save the gradient function.
         trainer.store.grad_fn = jax.jit(

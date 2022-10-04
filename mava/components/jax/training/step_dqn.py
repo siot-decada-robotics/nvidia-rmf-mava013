@@ -57,7 +57,8 @@ class MADQNStep(Step):
         @jit
         @chex.assert_max_traces(n=1)
         def sgd_step(
-            states: TrainingStateDQN, sample: reverb.ReplaySample,
+            states: TrainingStateDQN,
+            sample: reverb.ReplaySample,
         ) -> Tuple[TrainingStateDQN, Dict[str, jnp.ndarray]]:
             """Performs a minibatch SGD step, returning new state and metrics."""
             # Extract the data.
@@ -88,27 +89,27 @@ class MADQNStep(Step):
             )
 
             batch = trajectories
-
-            next_rng_key, rng_key = jax.random.split(states.random_key)
-            (
-                new_params,
-                new_target_params,
-                new_opt_states,
-                _,
-                steps,
-            ), metrics = trainer.store.epoch_update_fn(
+            with jax.disable_jit():
+                next_rng_key, rng_key = jax.random.split(states.random_key)
                 (
-                    rng_key,
-                    states.params,
-                    states.target_params,
-                    states.opt_states,
-                    batch,
-                    states.steps,
-                    probs,
-                    keys,
-                ),
-                {},
-            )
+                    new_params,
+                    new_target_params,
+                    new_opt_states,
+                    _,
+                    steps,
+                ), metrics = trainer.store.epoch_update_fn(
+                    (
+                        rng_key,
+                        states.params,
+                        states.target_params,
+                        states.opt_states,
+                        batch,
+                        states.steps,
+                        probs,
+                        keys,
+                    ),
+                    {},
+                )
 
             # Update the training states.
             new_states = TrainingStateDQN(
@@ -143,7 +144,7 @@ class MADQNStep(Step):
                 utils.batch_concat(rewards, num_batch_dims=0)
             )
 
-            return new_states,metrics
+            return new_states, metrics
 
         def step(sample: reverb.ReplaySample) -> Tuple[Dict[str, jnp.ndarray]]:
 
@@ -158,10 +159,10 @@ class MADQNStep(Step):
             }
             opt_states = trainer.store.opt_states
             random_key, _ = jax.random.split(trainer.store.key)
-            #keys, probs, *_ = sample.info
-            
+            # keys, probs, *_ = sample.info
+
             steps = trainer.store.trainer_counts["trainer_steps"]
-            
+
             states = TrainingStateDQN(
                 params=params,
                 target_params=target_params,

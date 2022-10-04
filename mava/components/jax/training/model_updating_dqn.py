@@ -17,17 +17,18 @@
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
 
-from acme.jax import utils
 import jax
 import jax.numpy as jnp
 import optax
+import tree
 from acme.jax import networks as networks_lib
+from acme.jax import utils
 from jax.random import KeyArray
 from optax._src import base as optax_base
 
 from mava.components.jax.training import BatchDQN, Utility
 from mava.core_jax import SystemTrainer
-import tree
+
 
 @dataclass
 class MADQNMinibatchUpdateConfig:
@@ -161,77 +162,85 @@ class MADQNEpochUpdate(Utility):
             Dict[str, jnp.ndarray],
         ]:
             """Performs model updates based on one epoch of data."""
-            key, params, target_params, opt_states, batch, steps, probs,keys = carry
-            #jax.debug.print(steps)
-           
+            key, params, target_params, opt_states, batch, steps, probs, keys = carry
+
             # Calculate the gradients and agent metrics.
-            gradients, agent_metrics, reverb_updates = trainer.store.grad_fn(
-                params,
-                target_params,
-                batch.observations,
-                batch.next_observations,
-                batch.actions,
-                batch.discounts,
-                batch.rewards,
-                probs,
-                keys
-            )
-
-            #TODO: Finish assigning priorities
-            keys, priorities = tree.map_structure(
-                # Fetch array and combine device and batch dimensions.
-                lambda x: utils.fetch_devicearray(x).reshape((-1,) + x.shape[2:]),
-                (reverb_updates.keys, reverb_updates.priorities))
-            print(keys)
-            print(priorities)
-            trainer.store.data_server_client.mutate_priorities(table = "trainer")#,updates=dict(zip(keys, priorities)))
-            print("***********REPLAY*******************")
-            print("***********REPLAY*******************")
-            print("***********REPLAY*******************")
-            print("***********REPLAY*******************")
-            print("***********REPLAY*******************")
-            print(trainer.store.data_server_client)
-            exit()
-            # Update the networks and optimizers.
-            metrics = {}
-            new_params = {}
-            new_target_params = {}
-            new_opt_states = {}
-
-            steps += 1  # type: ignore
-
-            for agent_key in trainer.store.trainer_agents:
-                agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
-                # Apply updates
-                # TODO (dries): Use one optimizer per network type here and not
-                # just one.
-                updates, new_opt_states[agent_net_key] = trainer.store.optimizer.update(
-                    gradients[agent_key], opt_states[agent_net_key]
-                )
-                new_params[agent_net_key] = optax.apply_updates(
-                    params[agent_net_key], updates
+            with jax.disable_jit():
+                # gradients, agent_metrics, reverb_updates = trainer.store.grad_fn(
+                gradients, agent_metrics = trainer.store.grad_fn(
+                    params,
+                    target_params,
+                    batch.observations,
+                    batch.next_observations,
+                    batch.actions,
+                    batch.discounts,
+                    batch.rewards,
+                    probs,
+                    keys,
                 )
 
-                agent_metrics[agent_key]["norm_grad"] = optax.global_norm(
-                    gradients[agent_key]
-                )
-                agent_metrics[agent_key]["norm_updates"] = optax.global_norm(updates)
-                metrics[agent_key] = agent_metrics
+                priorities = agent_metrics["joint"][0].priorities
+                # Average priorities across all agents
+                for i in range(1, len(agent_metrics["joint"])):
+                    priorities += agent_metrics["joint"][i].priorities
+                priorities /= len(agent_metrics["joint"])
 
-                new_target_params[agent_net_key] = optax.periodic_update(
-                    new_params[agent_net_key],
-                    target_params[agent_net_key],
+                # TODO: Finish assigning priorities
+                keys, priorities = tree.map_structure(
+                    # Fetch array and combine device and batch dimensions.
+                    lambda x: utils.fetch_devicearray(x).reshape((-1,) + x.shape[2:]),
+                    (keys, priorities),
+                )
+
+                trainer.store.data_server_client.mutate_priorities(
+                    table="trainer", updates=dict(zip(keys, priorities))
+                )
+
+                # Update the networks and optimizers.
+                metrics = {}
+                new_params = {}
+                new_target_params = {}
+                new_opt_states = {}
+
+                steps += 1  # type: ignore
+
+                for agent_key in trainer.store.trainer_agents:
+                    agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
+                    # Apply updates
+                    # TODO (dries): Use one optimizer per network type here and not
+                    # just one.
+                    (
+                        updates,
+                        new_opt_states[agent_net_key],
+                    ) = trainer.store.optimizer.update(
+                        gradients[agent_key], opt_states[agent_net_key]
+                    )
+                    new_params[agent_net_key] = optax.apply_updates(
+                        params[agent_net_key], updates
+                    )
+
+                    agent_metrics[agent_key]["norm_grad"] = optax.global_norm(
+                        gradients[agent_key]
+                    )
+                    agent_metrics[agent_key]["norm_updates"] = optax.global_norm(
+                        updates
+                    )
+                    metrics[agent_key] = agent_metrics
+
+                    new_target_params[agent_net_key] = optax.periodic_update(
+                        new_params[agent_net_key],
+                        target_params[agent_net_key],
+                        steps,
+                        self.config.target_update_period,
+                    )
+
+                return (
+                    new_params,
+                    new_target_params,
+                    new_opt_states,
+                    batch,
                     steps,
-                    self.config.target_update_period,
-                )
-
-            return (
-                new_params,
-                new_target_params,
-                new_opt_states,
-                batch,
-                steps,
-            ), metrics
+                ), metrics
 
         trainer.store.epoch_update_fn = model_update_epoch
 

@@ -190,7 +190,7 @@ class MinHeapSampler(Sampler):
 
 @dataclass
 class PrioritySamplerConfig:
-    priority_exponent: float = 1.0
+    priority_exponent: float = 0.6
 
 
 class PrioritySampler(Sampler):

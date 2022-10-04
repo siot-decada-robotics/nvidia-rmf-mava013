@@ -99,10 +99,10 @@ def main(_: Any) -> None:
         executor_parameter_update_period=10,
         multi_process=True,
         run_evaluator=True,
-        num_executors=1,
-        sample_batch_size=3,
-        target_update_period=5,
-        min_data_server_size=20,
+        num_executors=8,
+        sample_batch_size=256,
+        target_update_period=100,
+        min_data_server_size=1000,
         n_step=1,
         # use_next_extras=False
     )
