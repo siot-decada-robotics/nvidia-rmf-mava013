@@ -61,7 +61,7 @@ def main(_: Any) -> None:
 
     # Networks.
     def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return madqn.make_default_networks(policy_layer_sizes=(254, 254, 254), **kwargs)
+        return madqn.make_default_networks(policy_layer_sizes=(64, 64, 64), **kwargs)
 
     # Checkpointer appends "Checkpoints" to checkpoint_dir
     # checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
@@ -99,7 +99,7 @@ def main(_: Any) -> None:
         executor_parameter_update_period=10,
         multi_process=True,
         run_evaluator=True,
-        num_executors=1,
+        num_executors=8,
         sample_batch_size=256,
         target_update_period=100,
         min_data_server_size=1_000,

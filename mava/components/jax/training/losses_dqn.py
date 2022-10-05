@@ -104,14 +104,18 @@ class MADQNLoss(Loss):
                 ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
                     # Forward pass.
                     _, logits_tm1, atoms_tm1 = network.forward_fn(params, observations)
-                    _, logits_t, atoms_t = network.forward_fn(target_params, next_observations)
-                    q_t_selector,_, _ = network.forward_fn(params, next_observations)
+                    _, logits_t, atoms_t = network.forward_fn(
+                        target_params, next_observations
+                    )
+                    q_t_selector, _, _ = network.forward_fn(params, next_observations)
 
+                    """
                     q_t_selector = jnp.where(
                         next_legal_actions.astype(bool),
                         q_t_selector,
                         jnp.finfo(q_t_selector.dtype).min,
                     )
+                    """
 
                     d_t = (discount * self.config.gamma).astype(jnp.float32)
                     # Cast and clip rewards.
@@ -124,10 +128,19 @@ class MADQNLoss(Loss):
                     # Compute categorical double Q-learning loss.
                     batch_loss_fn = jax.vmap(
                         rlax.categorical_double_q_learning,
-                        in_axes=(None, 0, 0, 0, 0, None, 0, 0))
-                    batch_loss = batch_loss_fn(atoms_tm1, logits_tm1, actions, r_t,
-                                            d_t, atoms_t, logits_t, q_t_selector)
-                                            
+                        in_axes=(None, 0, 0, 0, 0, None, 0, 0),
+                    )
+                    batch_loss = batch_loss_fn(
+                        atoms_tm1,
+                        logits_tm1,
+                        actions,
+                        r_t,
+                        d_t,
+                        atoms_t,
+                        logits_t,
+                        q_t_selector,
+                    )
+
                     loss = jnp.mean(rlax.l2_loss(batch_loss))
                     loss_info = {"loss_total": loss}
                     return loss, loss_info

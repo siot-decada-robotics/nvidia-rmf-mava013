@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """Jax MADQN system networks."""
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 import haiku as hk  # type: ignore
 import jax
@@ -30,6 +30,60 @@ from mava.systems.jax.madqn.DQNNetworks import DQNNetworks
 Array = dm_specs.Array
 BoundedArray = dm_specs.BoundedArray
 DiscreteArray = dm_specs.DiscreteArray
+
+
+class C51DuellingMLP(hk.Module):
+    """A Duelling MLP Q-network."""
+
+    def __init__(
+        self,
+        num_actions: int,
+        hidden_sizes: Sequence[int],
+        w_init: Optional[hk.initializers.Initializer] = None,
+        num_atoms: int = 51,
+        v_min: float = -1.0,
+        v_max: float = 1.0,
+    ):
+        super().__init__(name="duelling_q_network")
+
+        self._value_mlp = hk.nets.MLP([*hidden_sizes, num_atoms], w_init=w_init)
+        self._advantage_mlp = hk.nets.MLP(
+            [*hidden_sizes, num_actions * num_atoms], w_init=w_init
+        )
+        self.num_actions = num_actions
+        self._num_atoms = 51
+        self._atoms = jnp.linspace(v_min, v_max, self._num_atoms)
+
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        """Forward pass of the duelling network.
+
+        Args:
+          inputs: 2-D tensor of shape [batch_size, embedding_size].
+
+        Returns:
+          q_values: 2-D tensor of action values of shape [batch_size, num_actions]
+        """
+
+        # Compute value & advantage for dueling.
+        value = self._value_mlp(inputs)  # [B, 1]
+        advantages = self._advantage_mlp(inputs)  # [B, A]
+
+        # Advantages have zero mean.
+        # dueling part
+        advantages -= jnp.mean(advantages, axis=-1, keepdims=True)  # [B, A]
+        advantages = advantages.reshape(-1, self._num_atoms, self.num_actions)
+        value = jax.numpy.expand_dims(value, axis=-1)
+        q_logits = value + advantages  # [B, A]
+
+        # Distributional Part
+        q_logits = q_logits.reshape(-1, self.num_actions, self._num_atoms)
+        q_dist = jax.nn.softmax(q_logits)
+        # print(q_dist.shape)
+        # print(self._atoms.shape)
+        # exit()
+        q_values = jnp.sum(q_dist * self._atoms, axis=2)
+        q_values = jax.lax.stop_gradient(q_values)
+        return q_values, q_logits, self._atoms
 
 
 def make_DQN_network(
@@ -77,7 +131,8 @@ def make_discrete_networks(
             [
                 utils.batch_concat,
                 networks_lib.LayerNormMLP(policy_layer_sizes, activate_final=True),
-                networks_lib.DiscreteValued(num_actions),
+                # networks_lib.DiscreteValued(num_actions)
+                C51DuellingMLP(num_actions, policy_layer_sizes),
             ]
         )
         return policy_value_network(inputs)
