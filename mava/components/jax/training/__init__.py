@@ -42,7 +42,7 @@ from mava.components.jax.training.model_updating import (
 # FOR MADQN
 from mava.components.jax.training.model_updating_dqn import (
     MADQNEpochUpdate,
-    MADQNMinibatchUpdate,
+    # MADQNMinibatchUpdate,
 )
 from mava.components.jax.training.step import (
     DefaultTrainerStep,

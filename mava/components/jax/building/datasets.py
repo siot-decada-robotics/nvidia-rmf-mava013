@@ -96,7 +96,8 @@ class TransitionDataset(TrainerDataset):
             prefetch_size=self.config.prefetch_size,
             num_parallel_calls=self.config.num_parallel_calls,
             max_in_flight_samples_per_worker=max_in_flight_samples_per_worker,
-            postprocess=self.config.postprocess,
+            # TODO (sasha): this is giving an error, possibly reverb version?
+            # postprocess=self.config.postprocess,
         )
 
         # builder.store.dataset = iter(dataset)

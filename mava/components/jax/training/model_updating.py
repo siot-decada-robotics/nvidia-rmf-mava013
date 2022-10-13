@@ -113,7 +113,7 @@ class MAPGMinibatchUpdate(MinibatchUpdate):
                 advantages = minibatch.advantages
 
             # print(trainer.store)
-            
+
             # Calculate the gradients and agent metrics.
             gradients, agent_metrics = trainer.store.grad_fn(
                 params,

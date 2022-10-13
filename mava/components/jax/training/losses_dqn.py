@@ -41,6 +41,7 @@ class MADQNLossConfig:
     # value_cost: float = 0.5
     max_abs_reward: float = 1.0
     gamma: float = 0.99
+    importance_sampling_exponent: float = 0.6
 
 
 class MADQNLoss(Loss):
@@ -119,6 +120,7 @@ class MADQNLoss(Loss):
                     q_t_value = network.forward_fn(target_params, next_observations)
                     q_t_selector = network.forward_fn(params, next_observations)
 
+                    # Is this is double q step? Kinda hard to work out what's happening here
                     q_t_selector = jnp.where(
                         next_legal_actions.astype(bool),
                         q_t_selector,
@@ -139,13 +141,14 @@ class MADQNLoss(Loss):
                         q_tm1, actions, r_t, d_t, q_t_value, q_t_selector
                     )
 
+                    # What are probs!?
+                    # Sure this should be abs(td_error)?
                     importance_weights = (1.0 / probs).astype(jnp.float32)
-                    importance_weights **= 1
+                    importance_weights **= self.config.importance_sampling_exponent
                     importance_weights /= jnp.max(importance_weights)
 
-                    # Reweight
-                    # loss = jnp.mean(importance_weights * td_error)
-                    loss = jnp.mean(td_error)
+                    # Weigthing loss by probability transition was chosen
+                    loss = jnp.mean(importance_weights * td_error)
                     reverb_update = learning_lib.ReverbUpdate(
                         keys=keys, priorities=jnp.abs(td_error).astype(jnp.float64)
                     )
