@@ -190,6 +190,7 @@ class MinHeapSampler(Sampler):
 
 @dataclass
 class PrioritySamplerConfig:
+    # this is manually applied to importance weights, should use the same config optio
     priority_exponent: float = 0.6
 
 

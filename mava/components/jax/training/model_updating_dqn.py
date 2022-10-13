@@ -181,13 +181,13 @@ class MADQNEpochUpdate(Utility):
                     keys,
                 )
 
+                # Calcluating priorities
                 priorities = agent_metrics["joint"][0].priorities
 
-                # Average priorities across all agents
+                # Average priorities because replay table stores all agents observations as a single entry
                 for i in range(1, len(agent_metrics["joint"])):
                     priorities += agent_metrics["joint"][i].priorities
 
-                # TODO (sasha): could be this
                 priorities /= len(agent_metrics["joint"])
 
                 # TODO: Finish assigning priorities

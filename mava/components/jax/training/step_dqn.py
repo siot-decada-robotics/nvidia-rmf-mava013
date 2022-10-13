@@ -74,10 +74,9 @@ class MADQNStep(Step):
                 data.extras,
             )
 
+            # TODO: this is a hack, fix it
             discounts = tree.map_structure(
-                lambda x: x * self.config.discounts,
-                discounts
-                # lambda x: x * 0.99, discounts  # TODO: this is a hack, fix it
+                lambda x: x * self.config.discounts, discounts
             )
 
             trajectories = BatchDQN(
@@ -91,6 +90,7 @@ class MADQNStep(Step):
             batch = trajectories
             with jax.disable_jit():
                 next_rng_key, rng_key = jax.random.split(states.random_key)
+
                 (
                     new_params,
                     new_target_params,

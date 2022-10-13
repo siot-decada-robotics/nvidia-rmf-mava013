@@ -140,17 +140,20 @@ class MADQNLoss(Loss):
                     td_error = batch_error(
                         q_tm1, actions, r_t, d_t, q_t_value, q_t_selector
                     )
+                    batch_loss = rlax.l2_loss(td_error)
+                    # batch_loss = rlax.huber_loss(td_error)
 
-                    # What are probs!?
-                    # Sure this should be abs(td_error)?
+                    # What are probs: looks like they are priorities currently in replay buff
                     importance_weights = (1.0 / probs).astype(jnp.float32)
                     importance_weights **= self.config.importance_sampling_exponent
                     importance_weights /= jnp.max(importance_weights)
 
                     # Weigthing loss by probability transition was chosen
-                    loss = jnp.mean(importance_weights * td_error)
+                    loss = jnp.mean(importance_weights * batch_loss)
+                    # makes sure prio never exceeds one
                     reverb_update = learning_lib.ReverbUpdate(
-                        keys=keys, priorities=jnp.abs(td_error).astype(jnp.float64)
+                        keys=keys,
+                        priorities=jnp.abs(td_error).astype(jnp.float64),
                     )
                     loss_info = {"loss_total": loss, "reverb_updates": reverb_update}
 
