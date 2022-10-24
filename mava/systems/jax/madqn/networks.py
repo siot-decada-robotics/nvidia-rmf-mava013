@@ -39,10 +39,10 @@ class C51DuellingMLP(hk.Module):
         self,
         num_actions: int,
         hidden_sizes: Sequence[int],
+        v_min: float,
+        v_max: float,
         w_init: Optional[hk.initializers.Initializer] = None,
         num_atoms: int = 51,
-        v_min: float = -1.0,
-        v_max: float = 1.0,
     ):
         super().__init__(name="duelling_q_network")
 
@@ -96,11 +96,14 @@ def make_DQN_network(
 def make_networks(
     spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
+    v_max: int,
+    v_min: int,
     policy_layer_sizes: Sequence[int] = (
         256,
         256,
         256,
     ),
+    num_atoms: int = 51,
 ) -> DQNNetworks:
     """TODO: Add description here."""
     if isinstance(spec.actions, specs.DiscreteArray):
@@ -108,6 +111,9 @@ def make_networks(
             environment_spec=spec,
             key=key,
             policy_layer_sizes=policy_layer_sizes,
+            v_max=v_max,
+            v_min=v_min,
+            num_atoms=num_atoms,
         )
     else:
         raise NotImplementedError("Only discrete actions are implemented for MADQN.")
@@ -117,6 +123,9 @@ def make_discrete_networks(
     environment_spec: specs.EnvironmentSpec,
     key: networks_lib.PRNGKey,
     policy_layer_sizes: Sequence[int],
+    v_max: int,
+    v_min: int,
+    num_atoms: int = 51,
 ) -> DQNNetworks:
     """TODO: Add description here."""
 
@@ -132,7 +141,13 @@ def make_discrete_networks(
                 utils.batch_concat,
                 networks_lib.LayerNormMLP(policy_layer_sizes, activate_final=True),
                 # networks_lib.DiscreteValued(num_actions)
-                C51DuellingMLP(num_actions, policy_layer_sizes),
+                C51DuellingMLP(
+                    num_actions,
+                    policy_layer_sizes,
+                    v_max=v_max,
+                    v_min=v_min,
+                    num_atoms=num_atoms,
+                ),
             ]
         )
         return policy_value_network(inputs)
@@ -154,12 +169,15 @@ def make_default_networks(
     environment_spec: mava_specs.MAEnvironmentSpec,
     agent_net_keys: Dict[str, str],
     rng_key: List[int],
+    v_max: int,
+    v_min: int,
     net_spec_keys: Dict[str, str] = {},
     policy_layer_sizes: Sequence[int] = (
         256,
         256,
         256,
     ),
+    num_atoms: int = 51,
 ) -> Dict[str, Any]:
     """Description here"""
 
@@ -176,6 +194,9 @@ def make_default_networks(
             specs[net_key],
             key=rng_key,
             policy_layer_sizes=policy_layer_sizes,
+            v_max=v_max,
+            v_min=v_min,
+            num_atoms=num_atoms,
         )
 
     return {
