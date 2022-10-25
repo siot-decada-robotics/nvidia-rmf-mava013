@@ -104,9 +104,9 @@ def main(_: Any) -> None:
         target_update_period=100,
         min_data_server_size=1000,
         n_step=1,
-        priority_exponent=0.6,
-        importance_sampling_exponent=0.6,
-        use_next_extras=False,
+        priority_exponent=0.7,
+        importance_sampling_exponent=0.7,
+        # use_next_extras=False,
         # terminal="gnome-terminal"
     )
 

@@ -167,85 +167,86 @@ class MADQNEpochUpdate(Utility):
 
             # Calculate the gradients and agent metrics.
             # TODO: why calculate gradients without jit?
-            with jax.disable_jit():
-                # gradients, agent_metrics, reverb_updates = trainer.store.grad_fn(
-                gradients, agent_metrics = trainer.store.grad_fn(
-                    params,
-                    target_params,
-                    batch.observations,
-                    batch.next_observations,
-                    batch.actions,
-                    batch.discounts,
-                    batch.rewards,
-                    probs,
-                    keys,
+            gradients, agent_metrics = trainer.store.grad_fn(
+                params,
+                target_params,
+                batch.observations,
+                batch.next_observations,
+                batch.actions,
+                batch.discounts,
+                batch.rewards,
+                probs,
+                keys,
+            )
+
+            # Calcluating priorities
+            priorities = agent_metrics["joint"][0].priorities
+
+            # Average priorities because replay table stores all agents observations as a single entry
+            for i in range(1, len(agent_metrics["joint"])):
+                priorities += agent_metrics["joint"][i].priorities
+
+            priorities /= len(agent_metrics["joint"])
+
+            # TODO: Finish assigning priorities
+            keys, priorities = tree.map_structure(
+                # Fetch array and combine device and batch dimensions.
+                lambda x: utils.fetch_devicearray(x).reshape((-1,) + x.shape[2:]),
+                (keys, priorities),
+            )
+
+            # trainer.store.data_server_client.mutate_priorities(
+            #     table="trainer", updates=dict(zip(keys, priorities))
+            # )
+            priority_updates = (keys, priorities)
+
+            # Update the networks and optimizers.
+            metrics = {}
+            new_params = {}
+            new_target_params = {}
+            new_opt_states = {}
+
+            steps += 1  # type: ignore
+
+            for agent_key in trainer.store.trainer_agents:
+                agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
+                # Apply updates
+                # TODO (dries): Use one optimizer per network type here and not
+                # just one.
+                (
+                    updates,
+                    new_opt_states[agent_net_key],
+                ) = trainer.store.optimizer.update(
+                    gradients[agent_key], opt_states[agent_net_key]
+                )
+                new_params[agent_net_key] = optax.apply_updates(
+                    params[agent_net_key], updates
                 )
 
-                # Calcluating priorities
-                priorities = agent_metrics["joint"][0].priorities
+                agent_metrics[agent_key]["norm_grad"] = optax.global_norm(
+                    gradients[agent_key]
+                )
+                agent_metrics[agent_key]["norm_updates"] = optax.global_norm(updates)
+                metrics[agent_key] = agent_metrics
 
-                # Average priorities because replay table stores all agents observations as a single entry
-                for i in range(1, len(agent_metrics["joint"])):
-                    priorities += agent_metrics["joint"][i].priorities
-
-                priorities /= len(agent_metrics["joint"])
-
-                # TODO: Finish assigning priorities
-                keys, priorities = tree.map_structure(
-                    # Fetch array and combine device and batch dimensions.
-                    lambda x: utils.fetch_devicearray(x).reshape((-1,) + x.shape[2:]),
-                    (keys, priorities),
+                new_target_params[agent_net_key] = optax.periodic_update(
+                    new_params[agent_net_key],
+                    target_params[agent_net_key],
+                    steps,
+                    self.config.target_update_period,
                 )
 
-                trainer.store.data_server_client.mutate_priorities(
-                    table="trainer", updates=dict(zip(keys, priorities))
-                )
-
-                # Update the networks and optimizers.
-                metrics = {}
-                new_params = {}
-                new_target_params = {}
-                new_opt_states = {}
-
-                steps += 1  # type: ignore
-
-                for agent_key in trainer.store.trainer_agents:
-                    agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
-                    # Apply updates
-                    # TODO (dries): Use one optimizer per network type here and not
-                    # just one.
-                    (
-                        updates,
-                        new_opt_states[agent_net_key],
-                    ) = trainer.store.optimizer.update(
-                        gradients[agent_key], opt_states[agent_net_key]
-                    )
-                    new_params[agent_net_key] = optax.apply_updates(
-                        params[agent_net_key], updates
-                    )
-
-                    agent_metrics[agent_key]["norm_grad"] = optax.global_norm(
-                        gradients[agent_key]
-                    )
-                    agent_metrics[agent_key]["norm_updates"] = optax.global_norm(
-                        updates
-                    )
-                    metrics[agent_key] = agent_metrics
-
-                    new_target_params[agent_net_key] = optax.periodic_update(
-                        new_params[agent_net_key],
-                        target_params[agent_net_key],
-                        steps,
-                        self.config.target_update_period,
-                    )
-
-                return (
+            return (
+                (
                     new_params,
                     new_target_params,
                     new_opt_states,
                     batch,
                     steps,
-                ), metrics
+                ),
+                metrics,
+                priority_updates,
+            )
 
         trainer.store.epoch_update_fn = model_update_epoch
 

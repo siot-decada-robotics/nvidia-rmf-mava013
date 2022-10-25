@@ -30,8 +30,6 @@ from jax.config import config
 from mava.components.jax.training.base import Loss
 from mava.core_jax import SystemTrainer
 
-config.update("jax_disable_jit", True)
-
 
 @dataclass
 class MADQNLossConfig:

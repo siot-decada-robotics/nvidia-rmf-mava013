@@ -88,28 +88,31 @@ class MADQNStep(Step):
             )
 
             batch = trajectories
-            with jax.disable_jit():
-                next_rng_key, rng_key = jax.random.split(states.random_key)
+            next_rng_key, rng_key = jax.random.split(states.random_key)
 
+            (
                 (
                     new_params,
                     new_target_params,
                     new_opt_states,
                     _,
                     steps,
-                ), metrics = trainer.store.epoch_update_fn(
-                    (
-                        rng_key,
-                        states.params,
-                        states.target_params,
-                        states.opt_states,
-                        batch,
-                        states.steps,
-                        probs,
-                        keys,
-                    ),
-                    {},
-                )
+                ),
+                metrics,
+                priority_updates,
+            ) = trainer.store.epoch_update_fn(
+                (
+                    rng_key,
+                    states.params,
+                    states.target_params,
+                    states.opt_states,
+                    batch,
+                    states.steps,
+                    probs,
+                    keys,
+                ),
+                {},
+            )
 
             # Update the training states.
             new_states = TrainingStateDQN(
@@ -144,7 +147,7 @@ class MADQNStep(Step):
                 utils.batch_concat(rewards, num_batch_dims=0)
             )
 
-            return new_states, metrics
+            return new_states, metrics, priority_updates
 
         def step(sample: reverb.ReplaySample) -> Tuple[Dict[str, jnp.ndarray]]:
 
@@ -171,7 +174,16 @@ class MADQNStep(Step):
                 steps=steps,
             )
 
-            new_states, metrics = sgd_step(states, sample)
+            new_states, metrics, priority_updates = sgd_step(states, sample)
+
+            # priority_updates is a tuple of reverb keys and new priorities
+            # converts device arrays to lists
+            prio_updates_list = map(lambda x: x.tolist(), priority_updates)
+            # udpating the reverb table's priorities
+            trainer.store.data_server_client.mutate_priorities(
+                table="trainer",
+                updates=dict(zip(*prio_updates_list)),
+            )
 
             # Set the new variables
             # TODO (dries): key is probably not being store correctly.
