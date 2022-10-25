@@ -21,7 +21,7 @@ from typing import Any
 import optax
 from absl import app, flags
 
-from mava.systems.jax import madqn
+from mava.systems import madqn
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
 from mava.utils.schedules.linear_epsilon_scheduler import LinearEpsilonScheduler

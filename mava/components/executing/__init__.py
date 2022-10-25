@@ -17,12 +17,11 @@
 from mava.components.executing.action_selection import (
     FeedforwardExecutorSelectAction,
     RecurrentExecutorSelectAction,
-    FeedforwardExecutorSelectActionValueBased,
 )
-from mava.components.executing.base import ExecutorInit, ExecutorTargetNetInitConfig
-from mava.components.jax.executing.epsilon_scheduler import EpsilonScheduler
+from mava.components.executing.base import ExecutorInit
+from mava.components.executing.epsilon_scheduler import EpsilonScheduler
 from mava.components.executing.observing import (
-    ExtrasFinder,
+    UserDefinedExtrasFinder,
     FeedforwardExecutorObserve,
     RecurrentExecutorObserve,
 )

@@ -40,6 +40,7 @@ class Batch(NamedTuple):
     behavior_log_probs: Any
 
 
+# TODO (sasha): move to dqn components
 class BatchDQN(NamedTuple):
     """A batch of data; all shapes are expected to be [B, ...]."""
 
@@ -63,6 +64,7 @@ class TrainingStateDQN(NamedTuple):
     target_params: Any = {}
 
 
+# TODO (sasha): move to PPO
 class TrainingStatePPO(NamedTuple):
     """Training state consists of network parameters and optimiser state."""
 

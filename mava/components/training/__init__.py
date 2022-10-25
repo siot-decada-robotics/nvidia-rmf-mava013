@@ -15,7 +15,7 @@
 
 """Trainer components for Mava systems."""
 from mava.components.training.advantage_estimation import GAE
-from mava.components.training.base import Batch, TrainingState, Utility
+from mava.components.training.base import Batch, TrainingStatePPO, Utility
 from mava.components.training.losses import (
     HuberValueLoss,
     MAPGWithTrustRegionClippingLoss,

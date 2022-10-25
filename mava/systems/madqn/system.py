@@ -16,13 +16,14 @@
 """Jax MADQN system."""
 from typing import Any, Tuple
 
-from mava.components.jax import building, executing, training, updating
-from mava.components.jax.executing.base import ExecutorTargetNetInit
+from mava.components import building, executing, training, updating
+from mava.components.executing.base import ExecutorTargetNetInit
 from mava.specs import DesignSpec
-from mava.systems.jax import System
-from mava.systems.jax.madqn.components import training as dqn_training
-from mava.systems.jax.madqn.components.utils import ExtrasActionInfo
-from mava.systems.jax.madqn.config import MADQNDefaultConfig
+from mava.systems import System
+from mava.systems.madqn.components import executing as dqn_executing
+from mava.systems.madqn.components import training as dqn_training
+from mava.systems.madqn.components.utils import ExtrasActionInfo
+from mava.systems.madqn.config import MADQNDefaultConfig
 
 
 class MADQNSystem(System):
@@ -45,9 +46,9 @@ class MADQNSystem(System):
         executor_process = DesignSpec(
             executor_init=executing.ExecutorInit,
             executor_target_network_init=ExecutorTargetNetInit,
-            extras_finder=executing.ExtrasFinder,
+            extras_finder=executing.UserDefinedExtrasFinder,
             executor_observe=executing.FeedforwardExecutorObserve,
-            executor_select_action=executing.FeedforwardExecutorSelectActionValueBased,
+            executor_select_action=dqn_executing.FeedforwardExecutorSelectActionValueBased,
             executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
             executor_scheduler=executing.EpsilonScheduler,
             networks=building.DefaultNetworks,

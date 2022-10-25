@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
-from mava.components.jax import Component
+from mava.components import Component
 from mava.core_jax import SystemExecutor
 from mava.utils.schedules.linear_epsilon_scheduler import LinearEpsilonScheduler
 

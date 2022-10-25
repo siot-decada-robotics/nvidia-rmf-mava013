@@ -37,7 +37,7 @@ from mava.components.building.loggers import Logger
 from mava.components.building.networks import Networks
 from mava.components.building.parameter_client import TrainerParameterClient
 from mava.components.training.advantage_estimation import GAE
-from mava.components.training.base import Batch, TrainingState
+from mava.components.training.base import Batch, TrainingStatePPO
 from mava.components.training.trainer import BaseTrainerInit
 from mava.core_jax import SystemTrainer
 from mava.utils.jax_training_utils import denormalize, normalize
@@ -218,8 +218,8 @@ class MAPGWithTrustRegionStep(Step):
 
         @jit
         def sgd_step(
-            states: TrainingState, sample: reverb.ReplaySample
-        ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
+            states: TrainingStatePPO, sample: reverb.ReplaySample
+        ) -> Tuple[TrainingStatePPO, Dict[str, jnp.ndarray]]:
             """Performs a minibatch SGD step.
 
             Args:
@@ -402,7 +402,7 @@ class MAPGWithTrustRegionStep(Step):
                 lambda x: jnp.std(x, axis=(0, 1)), rewards
             )
 
-            new_states = TrainingState(
+            new_states = TrainingStatePPO(
                 policy_params=new_policy_params,
                 critic_params=new_critic_params,
                 policy_opt_states=new_policy_opt_states,
@@ -445,7 +445,7 @@ class MAPGWithTrustRegionStep(Step):
                 constants.OBS_NORM_STATE_DICT_KEY
             ]
 
-            states = TrainingState(
+            states = TrainingStatePPO(
                 policy_params=policy_params,
                 critic_params=critic_params,
                 policy_opt_states=policy_opt_states,

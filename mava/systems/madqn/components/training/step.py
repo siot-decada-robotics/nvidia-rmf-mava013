@@ -27,9 +27,7 @@ import tree
 from acme.jax import utils
 from jax import jit
 
-from mava.components.jax.training import Step  # , TrainingState
-from mava.components.jax.training import TrainingStateDQN as TrainingStateDQN
-from mava.components.jax.training.base import BatchDQN
+from mava.components.training.base import BatchDQN, TrainingStateDQN, Step
 from mava.core_jax import SystemTrainer
 
 

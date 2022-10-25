@@ -24,14 +24,13 @@ from mava.components.building.adders import (
 )
 from mava.components.building.datasets import TrajectoryDataset, TransitionDataset
 from mava.components.building.distributor import Distributor
-from mava.components.building.environments import (
-from mava.components.jax.building.data_server import (
+from mava.components.building.data_server import (
     OffPolicyDataServer,
     OnPolicyDataServer,
 )
-from mava.components.jax.building.datasets import TrajectoryDataset, TransitionDataset
-from mava.components.jax.building.distributor import Distributor
-from mava.components.jax.building.environments import (
+from mava.components.building.datasets import TrajectoryDataset, TransitionDataset
+from mava.components.building.distributor import Distributor
+from mava.components.building.environments import (
     EnvironmentSpec,
     ParallelExecutorEnvironmentLoop,
 )
@@ -44,7 +43,7 @@ from mava.components.building.parameter_client import (
 )
 
 # For off-policy learning
-from mava.components.jax.building.rate_limiters import (
+from mava.components.building.reverb_components import (
     MinSizeRateLimiter,
     SampleToInsertRateLimiter,
 )

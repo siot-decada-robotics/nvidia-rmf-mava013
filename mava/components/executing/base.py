@@ -17,11 +17,12 @@
 
 import copy
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import List, Optional, Type
 
 from mava.callbacks import Callback
 from mava.components import Component
-from mava.core_jax import SystemExecutor
+from mava.core_jax import SystemExecutor, SystemBuilder
 
 
 @dataclass
@@ -79,17 +80,10 @@ class ExecutorInit(Component):
         """
         return []
 
+
 # TODO (sasha): this should go in dqn system
-
-@dataclass
-class ExecutorTargetNetInitConfig:
-    pass
-
-
 class ExecutorTargetNetInit(Component):
-    def __init__(
-        self, config: ExecutorTargetNetInitConfig = ExecutorTargetNetInitConfig()
-    ):
+    def __init__(self, config: SimpleNamespace = SimpleNamespace()):
         """_summary_
 
         Args:
@@ -106,9 +100,3 @@ class ExecutorTargetNetInit(Component):
     def name() -> str:
         """_summary_"""
         return "executor_target_network_init"
-
-    @staticmethod
-    def config_class() -> Callable:
-        """Returns the config class for this component."""
-        return ExecutorTargetNetInitConfig
-

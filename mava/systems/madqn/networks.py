@@ -25,7 +25,7 @@ from acme.jax import utils
 from dm_env import specs as dm_specs
 
 from mava import specs as mava_specs
-from mava.systems.jax.madqn.DQNNetworks import DQNNetworks
+from mava.systems.madqn.DQNNetworks import DQNNetworks
 
 Array = dm_specs.Array
 BoundedArray = dm_specs.BoundedArray

@@ -27,7 +27,7 @@ from acme.agents.jax.dqn import learning_lib
 from jax import jit
 from jax.config import config
 
-from mava.components.jax.training.base import Loss
+from mava.components.training.base import Loss
 from mava.core_jax import SystemTrainer
 
 

@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 from dm_env import specs
 
-from mava.components.jax import Component
+from mava.components import Component
 from mava.core_jax import SystemBuilder
 
 

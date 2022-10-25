@@ -7,8 +7,8 @@ import pytest
 import reverb
 from tqdm import tqdm  # type: ignore
 
-from mava.systems.jax import madqn
-from mava.systems.jax.madqn import MADQNSystem
+from mava.systems import madqn
+from mava.systems.madqn import MADQNSystem
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
 from mava.utils.schedules.linear_epsilon_scheduler import LinearEpsilonScheduler
@@ -349,7 +349,6 @@ def test_full_system_training() -> Tuple:
 
 def test_trainer_learning(test_full_system_training: Tuple) -> None:
     """_summary_"""
-    from jax.config import config
 
     data_server, _, executor, trainer = test_full_system_training
     # run ten episodes

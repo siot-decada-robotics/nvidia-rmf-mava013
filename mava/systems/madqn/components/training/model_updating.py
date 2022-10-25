@@ -26,7 +26,8 @@ from acme.jax import utils
 from jax.random import KeyArray
 from optax._src import base as optax_base
 
-from mava.components.jax.training import BatchDQN, Utility
+from mava.components.training import Utility
+from mava.components.training.base import BatchDQN
 from mava.core_jax import SystemTrainer
 
 

@@ -14,5 +14,5 @@
 # limitations under the License.
 
 """Jax MADQN system."""
-from mava.systems.jax.madqn.networks import make_default_networks
-from mava.systems.jax.madqn.system import MADQNSystem
+from .networks import make_default_networks
+from .system import MADQNSystem
