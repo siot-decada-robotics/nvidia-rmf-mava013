@@ -20,7 +20,8 @@ from mava.components.jax import building, executing, training, updating
 from mava.components.jax.executing.base import ExecutorTargetNetInit
 from mava.specs import DesignSpec
 from mava.systems.jax import System
-from mava.systems.jax.madqn.components import ExtrasActionInfo
+from mava.systems.jax.madqn.components import training as dqn_training
+from mava.systems.jax.madqn.components.utils import ExtrasActionInfo
 from mava.systems.jax.madqn.config import MADQNDefaultConfig
 
 
@@ -56,9 +57,9 @@ class MADQNSystem(System):
         trainer_process = DesignSpec(
             trainer_init=training.SingleTrainerInit,
             step=training.DefaultTrainerStep,
-            sgd_step=training.MADQNStep,
-            loss=training.MADQNLoss,
-            epoch_update=training.MADQNEpochUpdate,
+            sgd_step=dqn_training.MADQNStep,
+            loss=dqn_training.MADQNLoss,
+            epoch_update=dqn_training.MADQNEpochUpdate,
             trainer_dataset=building.TransitionDataset,
         ).get()
 
