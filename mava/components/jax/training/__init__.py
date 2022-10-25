@@ -27,7 +27,9 @@ from mava.components.jax.training.base import (
 )
 from mava.components.jax.training.losses import (
     MAPGWithTrustRegionClippingLoss,
-    MAPGWithTrustRegionClippingLossSeparateNetworks,
+    MAPGWithTrustRegionClippingPolicyLossSeparateNetworks,
+    MAPGWithTrustRegionClippingValueHuberLossSeparateNetworks,
+    MAPGWithTrustRegionClippingValueLossSeparateNetworks,
 )
 from mava.components.jax.training.losses_dqn import MADQNLoss
 from mava.components.jax.training.model_updating import (
@@ -40,7 +42,7 @@ from mava.components.jax.training.model_updating import (
 # FOR MADQN
 from mava.components.jax.training.model_updating_dqn import (
     MADQNEpochUpdate,
-    MADQNMinibatchUpdate,
+    # MADQNMinibatchUpdate,
 )
 from mava.components.jax.training.step import (
     DefaultTrainerStep,

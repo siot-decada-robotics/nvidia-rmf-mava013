@@ -57,11 +57,13 @@ class MADQNStep(Step):
         @jit
         @chex.assert_max_traces(n=1)
         def sgd_step(
-            states: TrainingStateDQN, sample: reverb.ReplaySample
+            states: TrainingStateDQN,
+            sample: reverb.ReplaySample,
         ) -> Tuple[TrainingStateDQN, Dict[str, jnp.ndarray]]:
             """Performs a minibatch SGD step, returning new state and metrics."""
             # Extract the data.
             data = sample.data
+            keys, probs, *_ = sample.info
 
             observations, new_observations, actions, rewards, discounts, _ = (
                 data.observations,
@@ -73,9 +75,7 @@ class MADQNStep(Step):
             )
 
             discounts = tree.map_structure(
-                lambda x: x * self.config.discounts,
-                discounts
-                # lambda x: x * 0.99, discounts  # TODO: this is a hack, fix it
+                lambda x: x * self.config.discounts, discounts
             )
 
             trajectories = BatchDQN(
@@ -87,15 +87,19 @@ class MADQNStep(Step):
             )
 
             batch = trajectories
-
             next_rng_key, rng_key = jax.random.split(states.random_key)
+
             (
-                new_params,
-                new_target_params,
-                new_opt_states,
-                _,
-                steps,
-            ), metrics = trainer.store.epoch_update_fn(
+                (
+                    new_params,
+                    new_target_params,
+                    new_opt_states,
+                    _,
+                    steps,
+                ),
+                metrics,
+                priority_updates,
+            ) = trainer.store.epoch_update_fn(
                 (
                     rng_key,
                     states.params,
@@ -103,6 +107,8 @@ class MADQNStep(Step):
                     states.opt_states,
                     batch,
                     states.steps,
+                    probs,
+                    keys,
                 ),
                 {},
             )
@@ -140,7 +146,7 @@ class MADQNStep(Step):
                 utils.batch_concat(rewards, num_batch_dims=0)
             )
 
-            return new_states, metrics
+            return new_states, metrics, priority_updates
 
         def step(sample: reverb.ReplaySample) -> Tuple[Dict[str, jnp.ndarray]]:
 
@@ -155,6 +161,7 @@ class MADQNStep(Step):
             }
             opt_states = trainer.store.opt_states
             random_key, _ = jax.random.split(trainer.store.key)
+            # keys, probs, *_ = sample.info
 
             steps = trainer.store.trainer_counts["trainer_steps"]
 
@@ -166,7 +173,16 @@ class MADQNStep(Step):
                 steps=steps,
             )
 
-            new_states, metrics = sgd_step(states, sample)
+            new_states, metrics, priority_updates = sgd_step(states, sample)
+
+            # priority_updates is a tuple of reverb keys and new priorities
+            # converts device arrays to lists
+            prio_updates_list = map(lambda x: x.tolist(), priority_updates)
+            # udpating the reverb table's priorities
+            trainer.store.data_server_client.mutate_priorities(
+                table="trainer",
+                updates=dict(zip(*prio_updates_list)),
+            )
 
             # Set the new variables
             # TODO (dries): key is probably not being store correctly.

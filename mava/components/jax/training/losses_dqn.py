@@ -23,6 +23,9 @@ import chex
 import jax
 import jax.numpy as jnp
 import rlax
+from acme.agents.jax.dqn import learning_lib
+from jax import jit
+from jax.config import config
 
 from mava.components.jax.training.base import Loss
 from mava.core_jax import SystemTrainer
@@ -32,6 +35,7 @@ from mava.core_jax import SystemTrainer
 class MADQNLossConfig:
     max_abs_reward: float = 1.0
     gamma: float = 0.99
+    importance_sampling_exponent: float = 0.6
 
 
 class MADQNLoss(Loss):
@@ -66,6 +70,8 @@ class MADQNLoss(Loss):
             actions: Dict[str, jnp.ndarray],
             discounts: Any,
             rewards: Any,
+            probs: Any,
+            keys: Any,
         ) -> Tuple[Dict[str, jnp.ndarray], Dict[str, Dict[str, jnp.ndarray]]]:
             """Gradient of loss.
 
@@ -82,10 +88,10 @@ class MADQNLoss(Loss):
                 grads: gradients of loss with respect to all the parameters.
                 extra: extra information.
             """
-
             grads = {}
             loss = {}
             loss_info = {}
+
             for agent_key in trainer.store.trainer_agents:
                 agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
                 network = trainer_network[agent_net_key]
@@ -109,13 +115,12 @@ class MADQNLoss(Loss):
                     )
                     q_t_selector, _, _ = network.forward_fn(params, next_observations)
 
-                    """
-                    q_t_selector = jnp.where(
-                        next_legal_actions.astype(bool),
-                        q_t_selector,
-                        jnp.finfo(q_t_selector.dtype).min,
-                    )
-                    """
+                    # Masking illegal actions with min float, not sure if this has any effect?
+                    # q_t_selector = jnp.where(
+                    #    next_legal_actions.astype(bool),
+                    #    q_t_selector,
+                    #    jnp.finfo(q_t_selector.dtype).min,
+                    # )
 
                     d_t = (discount * self.config.gamma).astype(jnp.float32)
                     # Cast and clip rewards.
@@ -130,7 +135,7 @@ class MADQNLoss(Loss):
                         rlax.categorical_double_q_learning,
                         in_axes=(None, 0, 0, 0, 0, None, 0, 0),
                     )
-                    batch_loss = batch_loss_fn(
+                    batch_error = batch_loss_fn(
                         atoms_tm1,
                         logits_tm1,
                         actions,
@@ -141,8 +146,21 @@ class MADQNLoss(Loss):
                         q_t_selector,
                     )
 
-                    loss = jnp.mean(rlax.l2_loss(batch_loss))
-                    loss_info = {"loss_total": loss}
+                    batch_loss = rlax.l2_loss(batch_error)
+                    # batch_loss = rlax.huber_loss(td_error)
+
+                    # What are probs: looks like they are priorities currently in replay buff
+                    importance_weights = (1.0 / probs).astype(jnp.float32)
+                    importance_weights **= self.config.importance_sampling_exponent
+                    importance_weights /= jnp.max(importance_weights)
+
+                    # Weigthing loss by probability transition was chosen
+                    loss = jnp.mean(importance_weights * batch_loss)
+                    reverb_update = learning_lib.ReverbUpdate(
+                        keys=keys,
+                        priorities=jnp.abs(batch_error).astype(jnp.float64),
+                    )
+                    loss_info = {"loss_total": loss, "reverb_updates": reverb_update}
                     return loss, loss_info
 
                 (loss[agent_key], loss_info[agent_key]), grads[
@@ -157,6 +175,11 @@ class MADQNLoss(Loss):
                     rewards[agent_key],
                     next_observations[agent_key].legal_actions,
                 )
+
+                if agent_key == "agent_0":
+                    loss_info["joint"] = [loss_info[agent_key]["reverb_updates"]]
+                else:
+                    loss_info["joint"].append(loss_info[agent_key]["reverb_updates"])
                 loss_info["total_loss"] = loss[agent_key]
 
             return grads, loss_info

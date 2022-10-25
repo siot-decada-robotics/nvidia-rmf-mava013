@@ -351,7 +351,6 @@ def test_trainer_learning(test_full_system_training: Tuple) -> None:
     """_summary_"""
     from jax.config import config
 
-    config.update("jax_disable_jit", True)
     data_server, _, executor, trainer = test_full_system_training
     # run ten episodes
     for _ in tqdm(range(40)):

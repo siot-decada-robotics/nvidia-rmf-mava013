@@ -107,8 +107,6 @@ class FeedforwardExecutorObserve(ExecutorObserve):
         if not executor.store.adder:
             return
 
-        #print(executor.store)
-        #exit()
         "Select new networks from the sampler at the start of each episode."
         agents = sort_str_num(list(executor.store.agent_net_keys.keys()))
         (
