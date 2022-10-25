@@ -160,13 +160,37 @@ class MAEnvironmentSpec:
 
 class DesignSpec(SimpleNamespace):
     def __init__(self, **kwargs: Any) -> None:
-        """_summary_"""
+        """Multi-agent system design spec
+
+        This design spec is used to store a reference to all the components
+        that should be included in a system.
+
+        Args:
+            uninitialised components.
+        """
         super().__init__(**kwargs)
 
     def get(self) -> Dict[str, Any]:
-        """_summary_
+        """Get the design spec dictionary.
 
         Returns:
-            _description_
+            The dictionary inside the design spec.
         """
         return self.__dict__
+
+    def set(self, name: str, component: Any) -> None:
+        """Set/override a component in the design spec dictionary.
+
+        Returns:
+            None
+        """
+        self.__dict__[name] = component
+
+    def set(self, component_dict: Dict) -> None:  # type: ignore
+        """Set/override multiple components in the design spec dictionary.
+
+        Returns:
+            None
+        """
+        for key in component_dict.keys():
+            self.__dict__[key] = component_dict[key]

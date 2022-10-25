@@ -48,12 +48,12 @@ DEFAULT_PRIORITY_TABLE = "priority_table"
 class Step(NamedTuple):
     """Step class used internally for reverb adders."""
 
-    observations: Dict[str, types.NestedArray]
-    actions: Dict[str, types.NestedArray]
-    rewards: Dict[str, types.NestedArray]
-    discounts: Dict[str, types.NestedArray]
+    observations: Dict[str, mava_types.NestedArray]
+    actions: Dict[str, mava_types.NestedArray]
+    rewards: Dict[str, mava_types.NestedArray]
+    discounts: Dict[str, mava_types.NestedArray]
     start_of_episode: Union[bool, acme_specs.Array, tf.Tensor, Tuple[()]]
-    extras: Dict[str, types.NestedArray]
+    extras: Dict[str, mava_types.NestedArray]
 
 
 Trajectory = Step
@@ -329,6 +329,29 @@ class ReverbParallelAdder(ReverbAdder, ParallelAdder):
                                     # TODO: (dries) Only actually need to do this once
                                     # and not per agent. Maybe fix this in the future.
                                     new_trajectory.extras[key] = trajectory.extras[key]
+                                # TODO (sasha): this was removed from dqn branch, is it required?
+                                # if type(trajectory) == mava_types.Transition:
+                                #     ext = trajectory.next_extras[key]  # type: ignore
+                                #     if (
+                                #         type(ext) is dict  # type: ignore
+                                #         and cur_agent in ext  # type: ignore
+                                #     ):
+                                #         new_trajectory.next_extras[key][  # type: ignore
+                                #             want_agent
+                                #         ] = trajectory.next_extras[  # type: ignore
+                                #             key
+                                #         ][  # type: ignore
+                                #             cur_agent
+                                #         ]  # type: ignore
+                                #     else:
+                                #         # TODO: (dries) Only actually need to
+                                #         # do this once and not per agent. Maybe
+                                #         # fix this in the future.
+                                #         new_trajectory.next_extras[  # type: ignore
+                                #             key
+                                #         ] = trajectory.next_extras[  # type: ignore
+                                #             key
+                                #         ]  # type: ignore
 
                         # Write the new_trajectory to the table.
                         self._writer.create_item(
@@ -351,7 +374,7 @@ class ReverbParallelAdder(ReverbAdder, ParallelAdder):
         self._writer.flush(self._max_in_flight_items)
 
     def add_first(
-        self, timestep: dm_env.TimeStep, extras: Dict[str, types.NestedArray] = {}
+        self, timestep: dm_env.TimeStep, extras: Dict[str, mava_types.NestedArray] = {}
     ) -> None:
         """Record the first observation of a trajectory."""
         if not timestep.first():
@@ -381,9 +404,9 @@ class ReverbParallelAdder(ReverbAdder, ParallelAdder):
 
     def add(
         self,
-        actions: Dict[str, types.NestedArray],
+        actions: Dict[str, mava_types.NestedArray],
         next_timestep: dm_env.TimeStep,
-        next_extras: Dict[str, types.NestedArray] = {},
+        next_extras: Dict[str, mava_types.NestedArray] = {},
         extras: Dict = {},
     ) -> None:
         """Record an action and the following timestep."""
@@ -399,7 +422,6 @@ class ReverbParallelAdder(ReverbAdder, ParallelAdder):
             # Start of episode indicator was passed at the previous add call.
         )
 
-        # print(next_extras)
         if not self._use_next_extras:
             current_step["extras"] = next_extras
 

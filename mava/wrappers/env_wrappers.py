@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from abc import abstractmethod
-from typing import Any, Iterator, List
+from typing import List
 
 import dm_env
 
@@ -29,33 +29,9 @@ class ParallelEnvWrapper(dm_env.Environment):
     @property
     @abstractmethod
     def agents(self) -> List:
-        """
-        Returns the active agents in the env.
-        """
+        """Returns the active agents in the env."""
 
     @property
     @abstractmethod
     def possible_agents(self) -> List:
-        """
-        Returns all the possible agents in the env.
-        """
-
-
-class SequentialEnvWrapper(ParallelEnvWrapper):
-    """
-    Abstract class for sequential environment wrappers.
-    """
-
-    @abstractmethod
-    def agent_iter(self, max_iter: int) -> Iterator:
-        """
-        Returns an iterator that yields the current agent in the env.
-            max_iter: Maximum number of iterations (to limit infinite loops/iterations).
-        """
-
-    @property
-    @abstractmethod
-    def current_agent(self) -> Any:
-        """
-        Returns the current selected agent.
-        """
+        """Returns all the possible agents in the env."""

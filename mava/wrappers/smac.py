@@ -33,6 +33,7 @@ class SMACWrapper(ParallelEnvWrapper):
         self,
         environment: StarCraft2Env,
         return_state_info: bool = True,
+        death_masking: bool = False,
     ):
         """Constructor for parallel PZ wrapper.
 
@@ -41,6 +42,7 @@ class SMACWrapper(ParallelEnvWrapper):
             env_preprocess_wrappers (Optional[List], optional): Wrappers
                 that preprocess envs.
                 Format (env_preprocessor, dict_with_preprocessor_params).
+            death_masking: whether to mask out agent observations once dead.
             return_state_info: return extra state info
         """
         self._environment = environment
@@ -49,6 +51,11 @@ class SMACWrapper(ParallelEnvWrapper):
 
         self._reset_next_step = True
         self._done = False
+
+        self._battles_won = 0
+        self._battles_game = 0
+
+        self._death_masking = death_masking
 
     def reset(self) -> dm_env.TimeStep:
         """Resets the env.
@@ -107,7 +114,7 @@ class SMACWrapper(ParallelEnvWrapper):
             return self.reset()
 
         # Convert dict of actions to list for SMAC
-        smac_actions = list(actions.values())
+        smac_actions = [actions[agent] for agent in self._agents]
 
         # Step the SMAC environment
         reward, self._done, self._info = self._environment.step(smac_actions)
@@ -180,6 +187,17 @@ class SMACWrapper(ParallelEnvWrapper):
             )
         return legal_actions
 
+    def is_dead(self, agent: Any) -> bool:
+        """Check if the agent is dead.
+
+        Returns:
+            is_dead: boolean indicating whether the agent is alive or dead.
+        """
+        is_dead = False
+        if self._environment.agents[agent].health == 0.0:
+            is_dead = True
+        return is_dead
+
     def _convert_observations(
         self, observations: List, legal_actions: List, done: bool
     ) -> types.Observation:
@@ -194,9 +212,14 @@ class SMACWrapper(ParallelEnvWrapper):
         """
         olt_observations = {}
         for i, agent in enumerate(self._agents):
+            # Check if agent is dead, if so, apply death mask.
+            if self._death_masking and self.is_dead(i):
+                observation = np.zeros_like(observations[i])
+            else:
+                observation = observations[i]
 
             olt_observations[agent] = types.OLT(
-                observation=observations[i],
+                observation=observation,
                 legal_actions=legal_actions[i],
                 terminal=np.asarray([done], dtype=np.float32),
             )
@@ -281,7 +304,29 @@ class SMACWrapper(ParallelEnvWrapper):
         Returns:
             extra stats to be logged.
         """
-        return self._environment.get_stats()
+        stats = self._environment.get_stats()
+        stats["cumulative_win_rate"] = stats["win_rate"]
+        del stats["win_rate"]
+        return stats
+
+    def get_interval_stats(self) -> Optional[Dict]:
+        """Computes environment statistics which should be exclusively \
+            computed over a given number of evaluation episodes.
+
+        An example would be a win rate calculation where it is required to
+        keep track of the number of games won over a given set of evaluation
+        episodes.
+
+        Returns:
+           Win rate
+        """
+        interval_stats: Dict[str, Any] = {}
+        interval_stats["win_rate"] = (
+            self._environment.battles_won - self._battles_won
+        ) / (self._environment.battles_game - self._battles_game)
+        self._battles_won = self._environment.battles_won
+        self._battles_game = self._environment.battles_game
+        return interval_stats
 
     @property
     def agents(self) -> List:
