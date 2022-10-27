@@ -31,7 +31,8 @@ from mava.components.building.system_init import BaseSystemInit
 from mava.core_jax import SystemBuilder
 
 # Check network type
-from mava.systems.madqn import DQNNetworks
+import mava.systems.madqn as dqn
+# from mava.systems.madqn.DQNNetworks import DQNNetworks
 from mava.utils import enums
 from mava.utils.builder_utils import convert_specs
 from mava.utils.sort_utils import sort_str_num
@@ -105,13 +106,10 @@ class DataServer(Component):
                 num_networks,
             )
 
-            # TODO (sasha): this should probably be it's own dataserver?
+            # TODO (sasha): this should probably be it's own dataserver
             # DQN requires next extras for transition adder and IPPO does not
-            # TODO (sasha): this isinstance no longer works
-            # if isinstance(
-            #     builder.store.networks["networks"]["network_agent"], DQNNetworks
-            # ):
-            if True:
+            net = list(builder.store.networks.values())[0]
+            if isinstance(net, dqn.DQNNetworks):
                 next_extras_specs = convert_specs(
                     builder.store.agent_net_keys,
                     builder.store.next_extras_specs,

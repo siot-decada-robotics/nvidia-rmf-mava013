@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from acme.jax import networks as networks_lib
 from jax import jit
 
-from mava.components.executing.epsilon_greedy import EpsilonGreedyWithMask
+from mava.systems.madqn.components.executing.epsilon_greedy import EpsilonGreedyWithMask
 
 
 @dataclasses.dataclass

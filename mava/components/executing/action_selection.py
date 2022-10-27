@@ -84,17 +84,17 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
         """
         self.config = config
 
-    def on_execution_init_start(self, executor: SystemExecutor) -> None:
-        observations = executor.store.observations
-        # Normalise the observations before selecting actions.
-        if self.store.global_config.normalize_observations:
-            observations_stats = self.store.norm_params[
-                constants.OBS_NORM_STATE_DICT_KEY
-            ]
-            for key in observations.keys():
-                observations[key] = normalize_observations(
-                    observations_stats[key], observations[key]
-                )
+    # def on_execution_init_start(self, executor: SystemExecutor) -> None:
+    #     observations = executor.store.observations
+    #     # Normalise the observations before selecting actions.
+    #     if self.store.global_config.normalize_observations:
+    #         observations_stats = self.store.norm_params[
+    #             constants.OBS_NORM_STATE_DICT_KEY
+    #         ]
+    #         for key in observations.keys():
+    #             observations[key] = normalize_observations(
+    #                 observations_stats[key], observations[key]
+    #             )
 
     # Select actions
     def on_execution_select_actions(self, executor: SystemExecutor) -> None:
@@ -106,6 +106,18 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
         Returns:
             None.
         """
+
+        observations = executor.store.observations
+        # Normalise the observations before selecting actions.
+        if executor.store.global_config.normalize_observations:
+            observations_stats = executor.store.norm_params[
+                constants.OBS_NORM_STATE_DICT_KEY
+            ]
+            for key in observations.keys():
+                observations[key] = normalize_observations(
+                    observations_stats[key], observations[key]
+                )
+        executor.store.observations = observations
 
         # Dict with params per network
         current_agent_params = {

@@ -158,7 +158,6 @@ def make_discrete_networks(
     dummy_obs = utils.zeros_like(environment_spec.observations.observation)
     dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
 
-    print("KEY AT INIT:", key)
     network_key, key = jax.random.split(key)
     params = forward_fn.init(network_key, dummy_obs)  # type: ignore
 

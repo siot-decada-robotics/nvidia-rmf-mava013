@@ -117,7 +117,7 @@ class FeedforwardExecutorObserve(ExecutorObserve):
             executor.store.net_keys_to_ids,
         )
 
-        if True:  # hasattr(executor.store, "extras_finder"):
+        if hasattr(executor.store, "extras_finder"):
             print(list(executor.store.next_extras_specs.keys()))
             keys = list(executor.store.next_extras_specs.keys())
             extras = executor.store.extras_finder(executor.store, keys)
@@ -156,8 +156,7 @@ class FeedforwardExecutorObserve(ExecutorObserve):
         adder_actions: Dict[str, Any] = {}
 
         # TODO (sasha): find out the difference betweent the two if statements, they should be the same
-        # if hasattr(executor.store, "extras_finder"):
-        if True:
+        if hasattr(executor.store, "extras_finder"):
             # TODO (sasha): this extras finder is useless
             #  simply do what is done below
 
@@ -213,7 +212,7 @@ class FeedforwardExecutorObserve(ExecutorObserve):
                 "network_int_keys"
             ] = executor.store.network_int_keys_extras
 
-            print(f"PPO METHOD: {executor.store.next_extras}")
+            # print(f"PPO METHOD: {executor.store.next_extras}")
             # executor.store.next_timestep set by Executor
             executor.store.adder.add(
                 adder_actions, executor.store.next_timestep, executor.store.next_extras

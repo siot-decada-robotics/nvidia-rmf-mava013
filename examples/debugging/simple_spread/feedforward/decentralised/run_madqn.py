@@ -108,7 +108,7 @@ def main(_: Any) -> None:
         n_step=1,
         priority_exponent=0.7,
         importance_sampling_exponent=0.7,
-        use_next_extras=False,
+        # use_next_extras=False,
         # terminal="gnome-terminal"
     )
 

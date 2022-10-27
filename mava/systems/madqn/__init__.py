@@ -15,4 +15,5 @@
 
 """Jax MADQN system."""
 from .networks import make_default_networks
+from .DQNNetworks import DQNNetworks
 from .system import MADQNSystem

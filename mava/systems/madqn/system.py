@@ -51,7 +51,7 @@ class MADQNSystem(System):
             executor_observe=executing.FeedforwardExecutorObserve,
             executor_select_action=dqn_executing.FeedforwardExecutorSelectActionValueBased,
             executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
-            executor_scheduler=executing.EpsilonScheduler,
+            executor_scheduler=dqn_executing.EpsilonScheduler,
             networks=building.DefaultNetworks,
         ).get()
 

@@ -8,12 +8,8 @@ import jax
 from acme.jax import networks as networks_lib
 from acme.jax import utils
 
-from mava.callbacks import Callback
-from mava.components import Component
-from mava.components.building.networks import Networks
-from mava.components.building.system_init import BaseSystemInit
+
 from mava.components.executing.action_selection import ExecutorSelectAction
-from mava.components.training.trainer import BaseTrainerInit
 from mava.core_jax import SystemExecutor
 from mava.types import NestedArray
 
