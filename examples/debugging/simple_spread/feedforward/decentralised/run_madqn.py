@@ -97,7 +97,7 @@ def main(_: Any) -> None:
         network_factory=network_factory,
         logger_factory=logger_factory,
         # checkpoint_subpath=checkpoint_subpath,
-        optimizer=optimizer,
+        policy_optimiser=optimizer,
         executor_parameter_update_period=10,
         multi_process=True,
         run_evaluator=True,
@@ -108,7 +108,7 @@ def main(_: Any) -> None:
         n_step=1,
         priority_exponent=0.7,
         importance_sampling_exponent=0.7,
-        # use_next_extras=False,
+        use_next_extras=False,
         # terminal="gnome-terminal"
     )
 

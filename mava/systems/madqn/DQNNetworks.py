@@ -3,7 +3,6 @@ from typing import Dict, Tuple
 
 import chex
 import jax.numpy as jnp
-import numpy as np
 from acme.jax import networks as networks_lib
 from jax import jit
 
@@ -26,7 +25,7 @@ class DQNNetworks:
     ) -> None:
         """Instantiate the class."""
         self.network = network
-        self.params = params
+        self.policy_params = params  # TODO (sasha): change this back to params once ValueBasedTrainerInit has been created
 
         @jit
         def forward_fn(
@@ -51,11 +50,12 @@ class DQNNetworks:
 
     def get_action(
         self,
-        observations: networks_lib.Observation,
+        observation: networks_lib.Observation,
+        params: networks_lib.Params,
         key: networks_lib.PRNGKey,
         epsilon: float,
         mask: chex.Array,
-    ) -> Tuple[np.ndarray, Dict]:
+    ) -> Tuple[jnp.ndarray, Dict]:
         """Taking actions using epsilon greedy approach.
 
         Args:
@@ -67,15 +67,15 @@ class DQNNetworks:
         Returns:
             the actions and a dictionary with q-values
         """
-        action_values, _, _ = self.forward_fn(self.params, observations)
+        action_values, _, _ = self.forward_fn(params, observation)
         actions = EpsilonGreedyWithMask(
             preferences=action_values, epsilon=epsilon, mask=mask  # type: ignore
         ).sample(seed=key)
         assert len(actions) == 1, "Only one action is allowed."
-        actions = np.array(actions, dtype=np.int64)
-        actions = np.squeeze(actions)
+        actions = jnp.array(actions, dtype=jnp.int64)
+        actions = jnp.squeeze(actions)
 
-        return actions, {"action_values": np.squeeze(action_values)}
+        return actions, {"action_values": jnp.squeeze(action_values)}
 
     def get_value(self, observations: networks_lib.Observation) -> jnp.ndarray:
         """Get the value of the network.
@@ -85,5 +85,17 @@ class DQNNetworks:
         Returns:
             the feedforward values of the network, i.e. the Q-values in DQN.
         """
-        q_value = self.network.apply(self.params, observations)
+        q_value = self.network.apply(self.policy_params, observations)
         return q_value
+
+    def get_params(
+        self,
+    ) -> Dict[str, jnp.ndarray]:
+        """Return current params.
+
+        Returns:
+            policy and critic params.
+        """
+        return {
+            "value_network": self.policy_params,
+        }

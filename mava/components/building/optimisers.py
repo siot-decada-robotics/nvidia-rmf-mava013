@@ -67,6 +67,7 @@ class Optimisers(Component):
         return []
 
 
+# TODO (sasha): probably should be ActorCriticOptimisers or similar
 @dataclass
 class DefaultOptimisersConfig:
     policy_learning_rate: float = 1e-3
@@ -98,6 +99,7 @@ class DefaultOptimisers(Optimisers):
         Returns:
             None.
         """
+        builder.store.has_critic = True
         # Build the optimiser function here
         if not self.config.policy_optimiser:
             builder.store.policy_optimiser = optax.chain(
@@ -116,3 +118,44 @@ class DefaultOptimisers(Optimisers):
             )
         else:
             builder.store.critic_optimiser = self.config.critic_optimiser
+
+
+# TODO (sasha): change to ValueBasedOptimiser
+@dataclass
+class SingleOptimiserConfig:
+    learning_rate: float = 1e-3
+    adam_epsilon: float = 1e-5
+    max_gradient_norm: float = 0.5
+    policy_optimiser: Optional[optax_base.GradientTransformation] = None
+
+
+class SingleOptimiser(Optimisers):
+    def __init__(
+        self,
+        config: DefaultOptimisersConfig = DefaultOptimisersConfig(),
+    ):
+        """Component defines the default way to initialise optimisers.
+
+        Args:
+            config: DefaultOptimisers.
+        """
+        self.config = config
+
+    def on_building_init_start(self, builder: SystemBuilder) -> None:
+        """Create and store the optimiser.
+
+        Args:
+            builder: SystemBuilder.
+
+        Returns:
+            None.
+        """
+        builder.store.has_critic = False
+        if not self.config.policy_optimiser:
+            builder.store.policy_optimiser = optax.chain(
+                optax.clip_by_global_norm(self.config.max_gradient_norm),
+                optax.scale_by_adam(eps=self.config.adam_epsilon),
+                optax.scale(-self.config.learning_rate),
+            )
+        else:
+            builder.store.policy_optimiser = self.config.policy_optimiser

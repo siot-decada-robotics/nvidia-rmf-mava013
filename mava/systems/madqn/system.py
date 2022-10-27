@@ -23,6 +23,7 @@ from mava.systems import System
 from mava.systems.madqn.components import executing as dqn_executing
 from mava.systems.madqn.components import training as dqn_training
 from mava.systems.madqn.components.utils import ExtrasActionInfo
+from mava.systems.madqn.components.extras_finder import ExtrasFinder
 from mava.systems.madqn.config import MADQNDefaultConfig
 
 
@@ -46,7 +47,7 @@ class MADQNSystem(System):
         executor_process = DesignSpec(
             executor_init=executing.ExecutorInit,
             executor_target_network_init=ExecutorTargetNetInit,
-            extras_finder=executing.UserDefinedExtrasFinder,
+            extras_finder=ExtrasFinder,
             executor_observe=executing.FeedforwardExecutorObserve,
             executor_select_action=dqn_executing.FeedforwardExecutorSelectActionValueBased,
             executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
@@ -62,6 +63,7 @@ class MADQNSystem(System):
             loss=dqn_training.MADQNLoss,
             epoch_update=dqn_training.MADQNEpochUpdate,
             trainer_dataset=building.TransitionDataset,
+            optimisers=building.SingleOptimiser,  # for ppo this is in executor, which seems weird
         ).get()
 
         # Data Server

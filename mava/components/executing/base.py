@@ -91,7 +91,7 @@ class ExecutorTargetNetInit(Component):
         """
         self.config = config
 
-    def on_building_init(self, builder: SystemBuilder) -> None:
+    def on_training_init_end(self, builder: SystemBuilder) -> None:
         """Summary"""
         # Setup agent target networks
         builder.store.target_networks = copy.deepcopy(builder.store.networks)

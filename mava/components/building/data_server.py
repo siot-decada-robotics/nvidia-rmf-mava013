@@ -111,7 +111,7 @@ class DataServer(Component):
             # if isinstance(
             #     builder.store.networks["networks"]["network_agent"], DQNNetworks
             # ):
-            if False:
+            if True:
                 next_extras_specs = convert_specs(
                     builder.store.agent_net_keys,
                     builder.store.next_extras_specs,

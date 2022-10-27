@@ -217,7 +217,9 @@ class ParallelTransitionAdderSignature(AdderSignature):
                 ParallelNStepTransitionAdder signature.
             """
             return reverb_adders.ParallelNStepTransitionAdder.signature(
-                ma_environment_spec=ma_environment_spec, extras_specs=extras_specs,next_extras_spec=next_extras_specs,
+                environment_spec=ma_environment_spec,
+                extras_spec=extras_specs,
+                next_extras_spec=next_extras_specs,
             )
 
         builder.store.adder_signature_fn = adder_sig_fn

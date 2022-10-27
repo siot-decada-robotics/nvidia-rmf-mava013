@@ -27,7 +27,6 @@ from mava.components.building.parameter_client import ExecutorParameterClient
 from mava.components.building.system_init import BaseSystemInit
 from mava.components.executing.action_selection import ExecutorSelectAction
 from mava.core_jax import SystemExecutor
-from mava.utils.extras.extras import UserDefinedExtrasFinder
 from mava.utils.sort_utils import sample_new_agent_keys, sort_str_num
 
 
@@ -117,7 +116,9 @@ class FeedforwardExecutorObserve(ExecutorObserve):
             executor.store.network_sampling_setup,
             executor.store.net_keys_to_ids,
         )
-        if hasattr(executor.store, "extras_finder"):
+
+        if True:  # hasattr(executor.store, "extras_finder"):
+            print(list(executor.store.next_extras_specs.keys()))
             keys = list(executor.store.next_extras_specs.keys())
             extras = executor.store.extras_finder(executor.store, keys)
             executor.store.extras.update(extras)
@@ -135,7 +136,9 @@ class FeedforwardExecutorObserve(ExecutorObserve):
             ] = executor.store.network_int_keys_extras
 
             # executor.store.timestep set by Executor
-            executor.store.adder.add_first(executor.store.timestep, executor.store.extras)
+            executor.store.adder.add_first(
+                executor.store.timestep, executor.store.extras
+            )
 
     def on_execution_observe(self, executor: SystemExecutor) -> None:
         """Handle observations and pass along to the adder.
@@ -152,11 +155,22 @@ class FeedforwardExecutorObserve(ExecutorObserve):
         actions_info = executor.store.actions_info
         adder_actions: Dict[str, Any] = {}
 
-        if hasattr(executor.store, "extras_finder"):
+        # TODO (sasha): find out the difference betweent the two if statements, they should be the same
+        # if hasattr(executor.store, "extras_finder"):
+        if True:
+            # TODO (sasha): this extras finder is useless
+            #  simply do what is done below
 
             # collecting user-defined extras
-            keys = list(executor.store.next_extras_specs.keys())
-            extras = executor.store.extras_finder(executor.store, keys)
+            extras_keys = list(executor.store.extras_specs.keys())
+            next_extras_keys = list(executor.store.next_extras_specs.keys())
+
+            extras_keys = [
+                "policies_info",
+                "network_keys",
+            ]  # TODO (sasha): remove, not sure how to deal with this
+
+            extras = executor.store.extras_finder(executor.store, next_extras_keys)
             executor.store.next_extras.update(extras)
 
             # actions_info = executor.store.actions_info  # includes taken actions
@@ -167,20 +181,17 @@ class FeedforwardExecutorObserve(ExecutorObserve):
                     "actions_info": actions_info[agent],
                 }
 
-            # the extra information which became in relation to the taken actions (
-            # actions of timestep t). As these are information which are related to the
+            # the extra information which became in relation to the taken actions
+            # (actions of timestep t). As these are information which are related to the
             # timestep t (and not timestep t+1), they belong to the extras.
             # extras = executor.store.extras_sync_with_action.create(executor.store)
-            all_keys = list(executor.store.extras_specs.keys())
-            keys_to_be_removed = list(
-                executor.store.next_extras_specs.keys()
-            )  # they are
-            # already there.
-            for key in keys_to_be_removed:
-                if key in all_keys:
-                    all_keys.remove(key)
-            keys = all_keys
-            extras = executor.store.extras_finder(executor.store, keys)
+
+            # TODO (sasha): set opperation would be cleaner here
+            for key in next_extras_keys:
+                if key in extras_keys:
+                    extras_keys.remove(key)
+            next_extras_keys = extras_keys
+            extras = executor.store.extras_finder(executor.store, next_extras_keys)
 
             executor.store.adder.add(
                 actions=adder_actions,
@@ -202,6 +213,7 @@ class FeedforwardExecutorObserve(ExecutorObserve):
                 "network_int_keys"
             ] = executor.store.network_int_keys_extras
 
+            print(f"PPO METHOD: {executor.store.next_extras}")
             # executor.store.next_timestep set by Executor
             executor.store.adder.add(
                 adder_actions, executor.store.next_timestep, executor.store.next_extras

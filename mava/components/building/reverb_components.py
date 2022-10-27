@@ -45,7 +45,7 @@ class RateLimiter(Component):
     @staticmethod
     def name() -> str:
         """Static method that returns component name."""
-        return "rate_limiter"
+        return "data_server_rate_limiter"
 
     @staticmethod
     def required_components() -> List[Type[Callback]]:

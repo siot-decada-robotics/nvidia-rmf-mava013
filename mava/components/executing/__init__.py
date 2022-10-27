@@ -21,7 +21,6 @@ from mava.components.executing.action_selection import (
 from mava.components.executing.base import ExecutorInit
 from mava.components.executing.epsilon_scheduler import EpsilonScheduler
 from mava.components.executing.observing import (
-    UserDefinedExtrasFinder,
     FeedforwardExecutorObserve,
     RecurrentExecutorObserve,
 )

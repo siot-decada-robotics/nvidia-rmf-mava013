@@ -23,6 +23,7 @@ import jax
 from acme.jax import networks as networks_lib
 from acme.jax import utils
 
+from mava import constants
 from mava.callbacks import Callback
 from mava.components import Component
 from mava.components.building.networks import Networks
@@ -30,6 +31,7 @@ from mava.components.building.system_init import BaseSystemInit
 from mava.components.training.trainer import BaseTrainerInit
 from mava.core_jax import SystemExecutor
 from mava.types import NestedArray
+from mava.utils.jax_training_utils import normalize_observations
 
 
 class ExecutorSelectAction(Component):
@@ -81,6 +83,18 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
             config: SimpleNamespace.
         """
         self.config = config
+
+    def on_execution_init_start(self, executor: SystemExecutor) -> None:
+        observations = executor.store.observations
+        # Normalise the observations before selecting actions.
+        if self.store.global_config.normalize_observations:
+            observations_stats = self.store.norm_params[
+                constants.OBS_NORM_STATE_DICT_KEY
+            ]
+            for key in observations.keys():
+                observations[key] = normalize_observations(
+                    observations_stats[key], observations[key]
+                )
 
     # Select actions
     def on_execution_select_actions(self, executor: SystemExecutor) -> None:
@@ -191,6 +205,18 @@ class RecurrentExecutorSelectAction(ExecutorSelectAction):
             config: SimpleNamespace.
         """
         self.config = config
+
+    def on_execution_init_start(self, executor: SystemExecutor) -> None:
+        observations = executor.store.observations
+        # Normalise the observations before selecting actions.
+        if self.store.global_config.normalize_observations:
+            observations_stats = self.store.norm_params[
+                constants.OBS_NORM_STATE_DICT_KEY
+            ]
+            for key in observations.keys():
+                observations[key] = normalize_observations(
+                    observations_stats[key], observations[key]
+                )
 
     # Select actions
     def on_execution_select_actions(self, executor: SystemExecutor) -> None:

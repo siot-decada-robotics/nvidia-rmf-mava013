@@ -26,6 +26,7 @@ from acme.jax import utils
 from jax.random import KeyArray
 from optax._src import base as optax_base
 
+from mava import constants
 from mava.components.training import Utility
 from mava.components.training.base import BatchDQN
 from mava.core_jax import SystemTrainer
@@ -116,11 +117,11 @@ from mava.core_jax import SystemTrainer
 class MADQNEpochUpdateConfig:
     num_epochs: int = 2  # not used in the implementation whichout scan
     batch_size: int = 128
-    learning_rate: float = 1e-3  # This should be a param of optim
-    adam_epsilon: float = 1e-5  # This should be a param of optim
+    # learning_rate: float = 1e-3  # This should be a param of optim
+    # adam_epsilon: float = 1e-5  # This should be a param of optim
     target_update_period = 10
-    max_gradient_norm: float = jnp.inf  # This should be a param of optim
-    optimizer: Optional[optax_base.GradientTransformation] = (None,)
+    # max_gradient_norm: float = jnp.inf  # This should be a param of optim
+    # optimizer: Optional[optax_base.GradientTransformation] = (None,)
 
 
 class MADQNEpochUpdate(Utility):
@@ -139,23 +140,24 @@ class MADQNEpochUpdate(Utility):
         """_summary_"""
         trainer.store.num_epochs = self.config.num_epochs
 
-        # TODO: remove, ensure optimizer initialized somewhere else (only once)
-        if not self.config.optimizer:
-            trainer.store.optimizer = optax.chain(
-                optax.clip_by_global_norm(self.config.max_gradient_norm),
-                optax.adam(self.config.learning_rate),
-            )
-        else:
-            trainer.store.optimizer = self.config.optimizer
+        # TODO (sasha): remove, ensure optimizer initialized somewhere else (only once)
+        # if not self.config.optimizer:
+        #     trainer.store.optimizer = optax.chain(
+        #         optax.clip_by_global_norm(self.config.max_gradient_norm),
+        #         optax.adam(self.config.learning_rate),
+        #     )
+        # else:
+        #     trainer.store.optimizer = self.config.optimizer
+        #
+        # # Initialize optimizers.
+        # trainer.store.opt_states = {}
+        # for net_key in trainer.store.networks["networks"].keys():
+        #     trainer.store.opt_states[net_key] = trainer.store.optimizer.init(
+        #         trainer.store.networks["networks"][net_key].params
+        #     )  # pytype: disable=attribute-error
 
-        # Initialize optimizers.
-        trainer.store.opt_states = {}
-        for net_key in trainer.store.networks["networks"].keys():
-            trainer.store.opt_states[net_key] = trainer.store.optimizer.init(
-                trainer.store.networks["networks"][net_key].params
-            )  # pytype: disable=attribute-error
-
-        @jax.jit
+        # TODO (sasha): re jit this
+        # @jax.jit
         def model_update_epoch(
             carry: Tuple[Any, Any, KeyArray, Any, Any, Any, optax.OptState, BatchDQN],
             unused_t: Tuple[()],
@@ -167,7 +169,6 @@ class MADQNEpochUpdate(Utility):
             key, params, target_params, opt_states, batch, steps, probs, keys = carry
 
             # Calculate the gradients and agent metrics.
-            # TODO: why calculate gradients without jit?
             gradients, agent_metrics = trainer.store.grad_fn(
                 params,
                 target_params,
@@ -217,8 +218,9 @@ class MADQNEpochUpdate(Utility):
                 (
                     updates,
                     new_opt_states[agent_net_key],
-                ) = trainer.store.optimizer.update(
-                    gradients[agent_key], opt_states[agent_net_key]
+                ) = trainer.store.policy_optimiser.update(
+                    gradients[agent_key],
+                    opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
                 )
                 new_params[agent_net_key] = optax.apply_updates(
                     params[agent_net_key], updates

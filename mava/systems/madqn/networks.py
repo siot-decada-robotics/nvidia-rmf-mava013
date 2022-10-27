@@ -158,6 +158,7 @@ def make_discrete_networks(
     dummy_obs = utils.zeros_like(environment_spec.observations.observation)
     dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
 
+    print("KEY AT INIT:", key)
     network_key, key = jax.random.split(key)
     params = forward_fn.init(network_key, dummy_obs)  # type: ignore
 
@@ -168,7 +169,7 @@ def make_discrete_networks(
 def make_default_networks(
     environment_spec: mava_specs.MAEnvironmentSpec,
     agent_net_keys: Dict[str, str],
-    rng_key: List[int],
+    base_key: List[int],
     v_max: int,
     v_min: int,
     net_spec_keys: Dict[str, str] = {},
@@ -178,7 +179,7 @@ def make_default_networks(
         256,
     ),
     num_atoms: int = 51,
-) -> Dict[str, Any]:
+) -> Dict[str, DQNNetworks]:
     """Description here"""
 
     # Create agent_type specs.
@@ -192,13 +193,11 @@ def make_default_networks(
     for net_key in specs.keys():
         networks[net_key] = make_networks(
             specs[net_key],
-            key=rng_key,
+            key=base_key,
             policy_layer_sizes=policy_layer_sizes,
             v_max=v_max,
             v_min=v_min,
             num_atoms=num_atoms,
         )
 
-    return {
-        "networks": networks,
-    }
+    return networks

@@ -27,6 +27,7 @@ import tree
 from acme.jax import utils
 from jax import jit
 
+from mava import constants
 from mava.components.training.base import BatchDQN, TrainingStateDQN, Step
 from mava.core_jax import SystemTrainer
 
@@ -52,8 +53,9 @@ class MADQNStep(Step):
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """_summary_"""
 
-        @jit
-        @chex.assert_max_traces(n=1)
+        # TODO (sasha): jit
+        # @jit
+        # @chex.assert_max_traces(n=1)
         def sgd_step(
             states: TrainingStateDQN,
             sample: reverb.ReplaySample,
@@ -62,14 +64,27 @@ class MADQNStep(Step):
             # Extract the data.
             data = sample.data
             keys, probs, *_ = sample.info
+            keys, probs = jnp.array(keys), jnp.array(probs)
 
-            observations, new_observations, actions, rewards, discounts, _ = (
-                data.observations,
-                data.next_observations,
-                data.actions,
-                data.rewards,
-                data.discounts,
-                data.extras,
+            # TODO (sasha): why in the world must I explicitly make this stuff jnp arrays?
+            #  it should already be, but they seem to be tf.Tensors
+            (
+                observations,
+                new_observations,
+                actions,
+                rewards,
+                discounts,
+                _,
+            ) = jax.tree_map(
+                lambda x: jnp.array(x),
+                (
+                    data.observations,
+                    data.next_observations,
+                    data.actions,
+                    data.rewards,
+                    data.discounts,
+                    data.extras,
+                ),
             )
 
             discounts = tree.map_structure(
@@ -84,6 +99,7 @@ class MADQNStep(Step):
                 discounts=discounts,
             )
 
+            trajectories = jax.tree_map(lambda x: jnp.array(x), trajectories)
             batch = trajectories
             next_rng_key, rng_key = jax.random.split(states.random_key)
 
@@ -150,15 +166,25 @@ class MADQNStep(Step):
 
             # Repeat training for the given number of epoch, taking a random
             # permutation for every epoch.
-            networks = trainer.store.networks["networks"]
-            target_networks = trainer.store.target_networks["networks"]
-            params = {net_key: networks[net_key].params for net_key in networks.keys()}
+            networks = trainer.store.networks
+            target_networks = trainer.store.target_networks
+            params = {
+                net_key: networks[net_key].policy_params for net_key in networks.keys()
+            }
             target_params = {
-                net_key: target_networks[net_key].params
+                net_key: target_networks[net_key].policy_params
                 for net_key in target_networks.keys()
             }
-            opt_states = trainer.store.opt_states
-            random_key, _ = jax.random.split(trainer.store.key)
+
+            # trainer.store.policy_opt_states[net_key] = {
+            #     constants.OPT_STATE_DICT_KEY: builder.store.policy_optimiser.init(
+            #         builder.store.networks[net_key].policy_params
+            #     )
+            # }  # pytype: disable=attribute-error
+            opt_states = trainer.store.policy_opt_states  # trainer.store.opt_states
+            random_key, trainer.store.base_key = jax.random.split(
+                trainer.store.base_key
+            )
             # keys, probs, *_ = sample.info
 
             steps = trainer.store.trainer_counts["trainer_steps"]
@@ -176,9 +202,10 @@ class MADQNStep(Step):
             # priority_updates is a tuple of reverb keys and new priorities
             # converts device arrays to lists
             prio_updates_list = map(lambda x: x.tolist(), priority_updates)
+            # TODO (sasha): "trainer_0" is hard coded, need to update priorities per table
             # udpating the reverb table's priorities
             trainer.store.data_server_client.mutate_priorities(
-                table="trainer",
+                table="trainer_0",
                 updates=dict(zip(*prio_updates_list)),
             )
 
@@ -187,34 +214,43 @@ class MADQNStep(Step):
             # The variable client might lose reference to it when checkpointing.
             # We also need to add the optimizer and random_key to the variable
             # server.
-            trainer.store.key = new_states.random_key
+            trainer.store.base_key = new_states.random_key
 
-            networks = trainer.store.networks["networks"]
-            target_networks = trainer.store.target_networks["networks"]
+            networks = trainer.store.networks
+            target_networks = trainer.store.target_networks
 
-            params = {net_key: networks[net_key].params for net_key in networks.keys()}
+            params = {
+                net_key: networks[net_key].policy_params for net_key in networks.keys()
+            }
 
+            # TODO (sasha): this loop seems to have no effect?
             # Updating the networks:
             for net_key in params.keys():
                 # This below forloop is needed to not lose the param reference.
-                net_params = trainer.store.networks["networks"][net_key].params
+                net_params = trainer.store.networks[net_key].policy_params
                 for param_key in net_params.keys():
                     net_params[param_key] = new_states.params[net_key][param_key]
 
             # Update the optimizer
             for net_key in params.keys():
                 # This needs to be in the loop to not lose the reference.
-                trainer.store.opt_states[net_key] = new_states.opt_states[net_key]
+                # TODO (sasha): this could be an issue if not passing back new opt states as expected
+                trainer.store.policy_opt_states[net_key][
+                    constants.OPT_STATE_DICT_KEY
+                ] = new_states.opt_states[
+                    net_key
+                ]  # [constants.OPT_STATE_DICT_KEY]
 
             # Update the target networks
             target_params = {
-                net_key: target_networks[net_key].params
+                net_key: target_networks[net_key].policy_params
                 for net_key in target_networks.keys()
             }
 
+            # TODO (sasha): this loop seems to have no effect?
             for net_key in target_params.keys():
                 # This below forloop is needed to not lose the param reference.
-                net_params = trainer.store.target_networks["networks"][net_key].params
+                net_params = trainer.store.target_networks[net_key].policy_params
                 for param_key in net_params.keys():
                     net_params[param_key] = new_states.target_params[net_key][param_key]
 

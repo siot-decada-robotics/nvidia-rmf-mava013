@@ -56,7 +56,6 @@ class System(BaseSystem):
             None.
         """
         for component in self._design.get().values():
-            print(type(component), type(component.__init__), component)
             config_class = component.__init__.__annotations__["config"]
             input = {component.name(): config_class()}
             self.config.add(**input)

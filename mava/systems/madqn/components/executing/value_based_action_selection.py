@@ -93,9 +93,10 @@ class FeedforwardExecutorSelectActionValueBased(ExecutorSelectAction):
 
             action_info, policy_info = network.get_action(
                 observation=observation_data,
+                params=current_params["value_network"],
                 key=action_key,
                 epsilon=epsilon,
-                mask=utils.add_batch_dim(executor.store.observation.legal_actions),
+                mask=utils.add_batch_dim(observation.legal_actions),
             )
 
             return action_info, policy_info, base_key

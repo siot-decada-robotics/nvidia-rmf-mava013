@@ -31,7 +31,7 @@ from mava.core_jax import SystemBuilder, SystemTrainer
 from mava.utils.jax_training_utils import init_norm_params
 from mava.utils.sort_utils import sort_str_num
 
-
+# TODO (sasha): this is not a base trainer, it assumes policy and critic
 class BaseTrainerInit(Component):
     @abc.abstractmethod
     def __init__(
@@ -85,16 +85,18 @@ class BaseTrainerInit(Component):
         builder.store.policy_opt_states = {}
         builder.store.critic_opt_states = {}
         for net_key in builder.store.networks.keys():
+            print(builder.store.networks[net_key])
             builder.store.policy_opt_states[net_key] = {
                 constants.OPT_STATE_DICT_KEY: builder.store.policy_optimiser.init(
                     builder.store.networks[net_key].policy_params
                 )
             }  # pytype: disable=attribute-error
-            builder.store.critic_opt_states[net_key] = {
-                constants.OPT_STATE_DICT_KEY: builder.store.critic_optimiser.init(
-                    builder.store.networks[net_key].critic_params
-                )
-            }  # pytype: disable=attribute-error
+            if builder.store.has_critic:  # certain algorithms only have 1 network
+                builder.store.critic_opt_states[net_key] = {
+                    constants.OPT_STATE_DICT_KEY: builder.store.critic_optimiser.init(
+                        builder.store.networks[net_key].critic_params
+                    )
+                }  # pytype: disable=attribute-error
 
         # Initialise observations' normalisation parameters
         obs_norm_key = constants.OBS_NORM_STATE_DICT_KEY

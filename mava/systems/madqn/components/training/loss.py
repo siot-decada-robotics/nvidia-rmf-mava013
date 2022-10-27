@@ -62,7 +62,7 @@ class MADQNLoss(Loss):
 
         @chex.assert_max_traces(n=1)
         def loss_grad_fn(
-            trainer_network: Any,
+            trainer_network: Any,  # TODO (sasha): similar to PPO we should access networks from the store
             params: Any,
             target_params: Any,
             observations: Any,
@@ -176,6 +176,7 @@ class MADQNLoss(Loss):
                     next_observations[agent_key].legal_actions,
                 )
 
+                # TODO (sasha): is this not already in loss info?
                 if agent_key == "agent_0":
                     loss_info["joint"] = [loss_info[agent_key]["reverb_updates"]]
                 else:
@@ -186,7 +187,7 @@ class MADQNLoss(Loss):
 
         # Save the gradient function.
         trainer.store.grad_fn = jax.jit(
-            functools.partial(loss_grad_fn, trainer.store.networks["networks"])
+            functools.partial(loss_grad_fn, trainer.store.networks)
         )
 
     @staticmethod
