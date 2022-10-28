@@ -54,7 +54,7 @@ class MADQNStep(Step):
         """_summary_"""
 
         # TODO (sasha): jit
-        # @jit
+        @jit
         # @chex.assert_max_traces(n=1)
         def sgd_step(
             states: TrainingStateDQN,
@@ -68,23 +68,18 @@ class MADQNStep(Step):
 
             # TODO (sasha): why in the world must I explicitly make this stuff jnp arrays?
             #  it should already be, but they seem to be tf.Tensors
-            (
-                observations,
-                new_observations,
-                actions,
-                rewards,
-                discounts,
-                _,
-            ) = jax.tree_map(
-                lambda x: jnp.array(x),
-                (
-                    data.observations,
-                    data.next_observations,
-                    data.actions,
-                    data.rewards,
-                    data.discounts,
-                    data.extras,
-                ),
+
+            print(
+                data.observations.keys(),
+                [type(x.observation) for x in data.observations.values()],
+            )
+            (observations, new_observations, actions, rewards, discounts, _,) = (
+                data.observations,
+                data.next_observations,
+                data.actions,
+                data.rewards,
+                data.discounts,
+                data.extras,
             )
 
             discounts = tree.map_structure(
@@ -176,16 +171,10 @@ class MADQNStep(Step):
                 for net_key in target_networks.keys()
             }
 
-            # trainer.store.policy_opt_states[net_key] = {
-            #     constants.OPT_STATE_DICT_KEY: builder.store.policy_optimiser.init(
-            #         builder.store.networks[net_key].policy_params
-            #     )
-            # }  # pytype: disable=attribute-error
             opt_states = trainer.store.policy_opt_states  # trainer.store.opt_states
             random_key, trainer.store.base_key = jax.random.split(
                 trainer.store.base_key
             )
-            # keys, probs, *_ = sample.info
 
             steps = trainer.store.trainer_counts["trainer_steps"]
 
@@ -197,6 +186,10 @@ class MADQNStep(Step):
                 steps=steps,
             )
 
+            # print(
+            #     [type(x.observation) for x in sample.data.observations.values()],
+            # )
+            sample = jax.tree_map(lambda x: jnp.array(x), sample)
             new_states, metrics, priority_updates = sgd_step(states, sample)
 
             # priority_updates is a tuple of reverb keys and new priorities

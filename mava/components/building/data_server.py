@@ -32,6 +32,7 @@ from mava.core_jax import SystemBuilder
 
 # Check network type
 import mava.systems.madqn as dqn
+
 # from mava.systems.madqn.DQNNetworks import DQNNetworks
 from mava.utils import enums
 from mava.utils.builder_utils import convert_specs

@@ -117,28 +117,26 @@ class FeedforwardExecutorObserve(ExecutorObserve):
             executor.store.net_keys_to_ids,
         )
 
-        if hasattr(executor.store, "extras_finder"):
-            print(list(executor.store.next_extras_specs.keys()))
-            keys = list(executor.store.next_extras_specs.keys())
-            extras = executor.store.extras_finder(executor.store, keys)
-            executor.store.extras.update(extras)
+        # if hasattr(executor.store, "extras_finder"):
+        #     keys = list(executor.store.next_extras_specs.keys())
+        #     extras = executor.store.extras_finder(executor.store, keys)
+        #     executor.store.extras.update(extras)
+        #
+        #     executor.store.adder.add_first(
+        #         executor.store.timestep, executor.store.extras
+        #     )
+        #
+        #     executor.store.keys_available_as_next_extra = list(extras.keys())
+        #
+        # else:
+        # executor.store.extras set by Executor
+        executor.store.extras[
+            "network_int_keys"
+        ] = executor.store.network_int_keys_extras
 
-            executor.store.adder.add_first(
-                executor.store.timestep, executor.store.extras
-            )
-
-            executor.store.keys_available_as_next_extra = list(extras.keys())
-
-        else:
-            # executor.store.extras set by Executor
-            executor.store.extras[
-                "network_int_keys"
-            ] = executor.store.network_int_keys_extras
-
-            # executor.store.timestep set by Executor
-            executor.store.adder.add_first(
-                executor.store.timestep, executor.store.extras
-            )
+        print(f"FIRST extras {executor.store.extras}")
+        # executor.store.timestep set by Executor
+        executor.store.adder.add_first(executor.store.timestep, executor.store.extras)
 
     def on_execution_observe(self, executor: SystemExecutor) -> None:
         """Handle observations and pass along to the adder.
@@ -192,6 +190,7 @@ class FeedforwardExecutorObserve(ExecutorObserve):
             next_extras_keys = extras_keys
             extras = executor.store.extras_finder(executor.store, next_extras_keys)
 
+            print(f"dqn extras {executor.store.next_extras}")
             executor.store.adder.add(
                 actions=adder_actions,
                 next_timestep=executor.store.next_timestep,
@@ -206,13 +205,14 @@ class FeedforwardExecutorObserve(ExecutorObserve):
                 adder_actions[agent] = {
                     "actions_info": actions_info[agent],
                 }
+
                 executor.store.next_extras["policy_info"][agent] = policies_info[agent]
 
             executor.store.next_extras[
                 "network_int_keys"
             ] = executor.store.network_int_keys_extras
 
-            # print(f"PPO METHOD: {executor.store.next_extras}")
+            # print(f"ppo extras {executor.store.next_extras}")
             # executor.store.next_timestep set by Executor
             executor.store.adder.add(
                 adder_actions, executor.store.next_timestep, executor.store.next_extras

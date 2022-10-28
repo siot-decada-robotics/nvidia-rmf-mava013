@@ -455,6 +455,9 @@ class MAPGWithTrustRegionStep(Step):
                 observation_stats=observation_stats,
             )
 
+            # print(
+            #     [type(x.observation) for x in sample.data.observations.values()],
+            # )
             new_states, metrics = sgd_step(states, sample)
 
             # Set the new variables

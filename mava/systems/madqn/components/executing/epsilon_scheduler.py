@@ -45,7 +45,7 @@ class EpsilonScheduler(Component):
         total_steps = executor.store.executor_counts[
             "executor_steps"
         ]  # executor.store.steps_count
-        #print(total_steps)
+        # print(total_steps)
         executor.store.epsilon_scheduler.update(step=total_steps)
 
     @staticmethod
