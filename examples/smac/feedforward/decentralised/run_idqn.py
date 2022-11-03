@@ -85,7 +85,7 @@ def main(_: Any) -> None:
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
         run_evaluator=True,
-        sample_batch_size=32,
+        # sample_batch_size=32,
         num_executors=1,
         min_data_server_size=10,
         multi_process=False,

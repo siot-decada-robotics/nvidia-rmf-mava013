@@ -102,7 +102,7 @@ setup(
     install_requires=[
         # TODO Pin acme to commit.
         "dm-acme @ git+https://github.com/deepmind/acme.git#egg=dm-acme",
-        'dm-launchpad==0.5.2',
+        # 'dm-launchpad==0.5.2',
         "absl-py",
         "dm_env",
         "dm-tree",
