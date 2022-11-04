@@ -33,7 +33,7 @@ import mava.components.training.model_updating  # To avoid circular imports
 from mava import constants
 from mava.callbacks import Callback
 from mava.components.training.advantage_estimation import GAE
-from mava.components.training.base import Batch, DQNTrainingState, TrainingState
+from mava.components.training.base import Batch, QmixTrainingState, TrainingState
 from mava.components.training.step import Step
 from mava.core_jax import SystemTrainer
 from mava.utils.jax_training_utils import denormalize, normalize
@@ -41,14 +41,14 @@ import rlax
 
 
 @dataclass
-class IDQNStepConfig:
+class IRDQNStepConfig:
     target_update_period: int = 100
 
 
-class IDQNStep(Step):
+class IRDQNStep(Step):
     def __init__(
         self,
-        config: IDQNStepConfig = IDQNStepConfig(),
+        config: IRDQNStepConfig = IRDQNStepConfig(),
     ):
         """Component defines the MAPGWithTrustRegion SGD step.
 
@@ -70,7 +70,7 @@ class IDQNStep(Step):
 
         @jit
         def sgd_step(
-            states: DQNTrainingState, sample: reverb.ReplaySample
+            states: QmixTrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
             """Performs a minibatch SGD step.
 
@@ -85,11 +85,10 @@ class IDQNStep(Step):
             # Extract the data.
             data = sample.data
 
-            observations, actions, rewards, next_observations, discounts, _ = (
+            observations, actions, rewards, discounts, extras = (
                 data.observations,
                 data.actions,
                 data.rewards,
-                data.next_observations,
                 data.discounts,
                 data.extras,
             )
@@ -97,6 +96,8 @@ class IDQNStep(Step):
             # policy_opt_states = trainer.store.policy_opt_states
             target_policy_params = states.target_policy_params
             policy_params = states.policy_params
+            hyper_net_params = states.hyper_net_params
+            target_hyper_net_params = states.target_hyper_net_params
             policy_opt_states = states.policy_opt_states
 
             # # TODO (Ruan): Double check this
@@ -104,11 +105,14 @@ class IDQNStep(Step):
 
             policy_gradients, policy_agent_metrics = trainer.store.policy_grad_fn(
                 policy_params,
+                hyper_net_params,
                 target_policy_params,
+                target_hyper_net_params,
+                extras["policy_states"],
+                extras["s_t"],
                 observations,
                 actions,
                 rewards,
-                next_observations,
                 discounts,
             )
 
@@ -146,10 +150,12 @@ class IDQNStep(Step):
                 self.config.target_update_period,
             )
 
+            metrics = {**metrics, **policy_agent_metrics}
+
             # Set the metrics
             metrics = jax.tree_util.tree_map(jnp.mean, metrics)
 
-            new_states = DQNTrainingState(
+            new_states = QmixTrainingState(
                 policy_params=policy_params,
                 target_policy_params=target_policy_params,
                 policy_opt_states=policy_opt_states,
@@ -171,6 +177,7 @@ class IDQNStep(Step):
             # Repeat training for the given number of epoch, taking a random
             # permutation for every epoch.
             networks = trainer.store.networks
+
             policy_params = {
                 net_key: networks[net_key].policy_params for net_key in networks.keys()
             }
@@ -178,15 +185,17 @@ class IDQNStep(Step):
                 net_key: networks[net_key].target_policy_params
                 for net_key in networks.keys()
             }
+            hyper_net_params = trainer.store.mixing_net.hyper_params
 
             policy_opt_states = trainer.store.policy_opt_states
 
             _, random_key = jax.random.split(trainer.store.base_key)
 
             steps = trainer.store.trainer_counts["trainer_steps"]
-            states = DQNTrainingState(
+            states = QmixTrainingState(
                 policy_params=policy_params,
                 target_policy_params=target_policy_params,
+                hyper_net_params=hyper_net_params,
                 policy_opt_states=policy_opt_states,
                 random_key=random_key,
                 trainer_iteration=steps,

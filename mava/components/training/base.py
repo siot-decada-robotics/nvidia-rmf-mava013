@@ -66,3 +66,15 @@ class DQNTrainingState(NamedTuple):
     policy_opt_states: Dict[str, optax.OptState]
     random_key: Any
     trainer_iteration: int
+
+
+class QmixTrainingState(NamedTuple):
+    """Training state consists of network parameters and optimiser state."""
+
+    policy_params: Any
+    target_policy_params: Any
+    hyper_net_params: Any
+    target_hyper_net_params: Any
+    policy_opt_states: Dict[str, optax.OptState]
+    random_key: Any
+    trainer_iteration: int
