@@ -18,6 +18,6 @@ from dataclasses import dataclass
 
 
 @dataclass
-class IDRQNDefaultConfig:
+class QmixConfig:
     sample_batch_size: int = 32
     # use_next_extras: bool = False

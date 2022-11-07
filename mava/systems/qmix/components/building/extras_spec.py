@@ -45,7 +45,7 @@ class ExtrasSpec(Component):
         return "extras_spec"
 
 
-class DRQNExtrasSpec(ExtrasSpec):
+class QmixExtrasSpec(ExtrasSpec):
     def __init__(
         self,
         config: SimpleNamespace = SimpleNamespace(),

@@ -45,7 +45,7 @@ class IRDQNStepConfig:
     target_update_period: int = 100
 
 
-class IRDQNStep(Step):
+class QmixStep(Step):
     def __init__(
         self,
         config: IRDQNStepConfig = IRDQNStepConfig(),

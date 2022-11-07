@@ -18,14 +18,12 @@ import imp
 from typing import Any, Tuple
 
 from mava.components import building, executing, training, updating
-from mava.components.building.adders import ParallelTransitionAdder
 from mava.components.building.guardrails import ComponentDependencyGuardrails
 from mava.specs import DesignSpec
 from mava.systems import System
-from mava.systems.idqn.components.building.extras_spec import DQNExtrasSpec
 from mava.systems.idrqn.components.building.extras_spec import DRQNExtrasSpec
-from mava.systems.idrqn.config import IDRQNDefaultConfig
 from mava.systems.ippo.components import ExtrasLogProbSpec
+from mava.systems.qmix.config import QmixConfig
 
 from mava.systems.idqn.components import executing as dqn_executing
 from mava.systems.idqn.components import building as dqn_building
@@ -33,10 +31,12 @@ from mava.systems.idqn.components import training as dqn_training
 
 from mava.systems.idrqn.components import executing as drqn_executing
 from mava.systems.idrqn.components import training as drqn_training
+from mava.systems.idrqn.components import building as drqn_building
+
+from mava.systems.qmix.components import training as qmix_training
 
 
-
-class IDRQNSystem(System):
+class QmixSystem(System):
     @staticmethod
     def design() -> Tuple[DesignSpec, Any]:
         """System design for IPPO with single optimiser.
@@ -49,7 +49,7 @@ class IDRQNSystem(System):
             default_params: default IPPO configuration
         """
         # Set the default configs
-        default_params = IDRQNDefaultConfig()
+        default_params = QmixConfig()
 
         # Default system processes
         # System initialization
@@ -73,10 +73,10 @@ class IDRQNSystem(System):
 
         # Trainer
         trainer_process = DesignSpec(
-            trainer_init=dqn_training.SingleTrainerInit,
-            loss=drqn_training.IRDQNLoss,
+            trainer_init=qmix_training.QmixSingleTrainerInit,
+            loss=qmix_training.QmixLoss,
             # epoch_update=training.MAPGEpochUpdate,
-            sgd_step=drqn_training.IRDQNStep,
+            sgd_step=qmix_training.QmixStep,
             step=training.DefaultTrainerStep,
             trainer_dataset=building.TrajectoryDataset,
         ).get()
@@ -87,7 +87,7 @@ class IDRQNSystem(System):
             data_server_adder_signature=building.ParallelSequenceAdderSignature,
             data_server_remover=building.reverb_components.FIFORemover,
             data_server_sampler=building.reverb_components.UniformSampler,
-            extras_spec=DRQNExtrasSpec,
+            extras_spec=drqn_building.DRQNExtrasSpec,
         ).get()
 
         # Parameter Server

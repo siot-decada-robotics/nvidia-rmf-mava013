@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import jax
 import distrax
 import haiku as hk
-from mava.specs import EnvironmentSpec
+from mava.specs import MAEnvironmentSpec
 
 from acme.jax import utils
 
@@ -150,7 +150,7 @@ class MixingNetwork:
 
 
 def make_mixing_network(
-    environment_spec: EnvironmentSpec,
+    environment_spec: MAEnvironmentSpec,
     hidden_dim: int,
     output_dim: int,
     num_agents: int,
@@ -181,7 +181,7 @@ def make_mixing_network(
         net = hk.Sequential([hk.Linear(output_dim), jax.nn.relu, hk.Linear(1)])
         return net(env_states)
 
-    dummy_env_state = utils.zeros_like(environment_spec.extras_spec()["s_t"])
+    dummy_env_state = utils.zeros_like(environment_spec.get_extras_specs()["s_t"])
 
     hyper_w1_params = hyper_w1_net.init(network_key, dummy_env_state)  # type: ignore
     hyper_w2_params = hyper_w2_net.init(network_key, dummy_env_state)  # type: ignore

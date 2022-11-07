@@ -10,7 +10,7 @@ from mava.utils.sort_utils import sort_str_num
 from mava.components.training.trainer import BaseTrainerInit
 
 
-class TrainerInit(BaseTrainerInit):
+class QmixTrainerInit(BaseTrainerInit):
     def on_building_init_end(self, builder: SystemBuilder) -> None:
         """Set up the networks during the build."""
         unique_net_keys = builder.store.unique_net_keys
@@ -61,7 +61,7 @@ class TrainerInit(BaseTrainerInit):
             }  # pytype: disable=attribute-error
 
 
-class SingleTrainerInit(TrainerInit):
+class QmixSingleTrainerInit(QmixTrainerInit):
     def __init__(self, config: SimpleNamespace = SimpleNamespace()):
         """Initialises a single trainer.
 
@@ -84,4 +84,4 @@ class SingleTrainerInit(TrainerInit):
         # Setup trainer_networks
         unique_net_keys = builder.store.unique_net_keys
         builder.store.trainer_networks = {"trainer_0": unique_net_keys}
-        super(SingleTrainerInit, self).on_building_init_end(builder)
+        super(QmixSingleTrainerInit, self).on_building_init_end(builder)

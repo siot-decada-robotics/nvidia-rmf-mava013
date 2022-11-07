@@ -28,7 +28,7 @@ from mava.callbacks import Callback
 from mava.components import Component, training
 from mava.components.training.losses import Loss
 from mava.core_jax import SystemTrainer
-from mava.systems.idqn.components.training import IDQNLossConfig
+from mava.systems.idqn.components.training.loss import IDQNLossConfig
 from haiku._src.basic import merge_leading_dims
 
 
