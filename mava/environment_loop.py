@@ -23,6 +23,7 @@ import dm_env
 import jax
 import numpy as np
 from acme.utils import counting, loggers
+from mava.utils.lp_utils import send_info_to_main
 
 import mava
 from mava.utils.training_utils import check_count_condition
@@ -259,6 +260,9 @@ class ParallelEnvironmentLoop(acme.core.Worker):
                     # Check for extra logs
                     if hasattr(self._environment, "get_interval_stats"):
                         results.update(self._environment.get_interval_stats())
+
+                    # Send the info to main.
+                    send_info_to_main({"done": False, "mean_return": results["mean_episode_return"]})
                     self._logger.write(results)
                 else:
                     result = self.run_episode()

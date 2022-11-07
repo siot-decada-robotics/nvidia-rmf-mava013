@@ -152,8 +152,6 @@ class Distributor(Component):
         """
         builder.store.program.launch()
 
-        builder.store.return_info = wait_for_results()
-
     @staticmethod
     def name() -> str:
         """Static method that returns component name."""

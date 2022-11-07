@@ -246,6 +246,3 @@ class Builder(SystemBuilder, BuilderHookMixin):
 
         # end of system launch
         self.on_building_launch_end()
-
-        # optionally return information from the run
-        return self.store.return_info
