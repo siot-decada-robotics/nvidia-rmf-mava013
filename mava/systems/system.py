@@ -172,4 +172,4 @@ class System(BaseSystem):
             )
 
         # Launch system
-        self._builder.launch()
+        return self._builder.launch()

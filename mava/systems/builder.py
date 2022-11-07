@@ -43,6 +43,7 @@ class Builder(SystemBuilder, BuilderHookMixin):
 
         self.callbacks = components
         self.store.global_config = global_config
+        self.store.return_info = None
 
         self.on_building_init_start()
 
@@ -246,21 +247,5 @@ class Builder(SystemBuilder, BuilderHookMixin):
         # end of system launch
         self.on_building_launch_end()
 
-
-        
-    import tensorflow as tf
-    tf.print("Ready to receive message")
-
-    from multiprocessing.connection import Listener
-
-    address = ('localhost', 8000)     # family is deduced to be 'AF_INET'
-    listener = Listener(address, authkey=b'secret password')
-   
-    tf.print("Waiting for connection.")
-    conn = listener.accept()
-    tf.print('connection accepted from', listener.last_accepted)
-    msg = conn.recv()
-    # do something with msg
-    tf.print("Message received: ", msg)
-     
-    listener.close()
+        # optionally return information from the run
+        return self.store.return_info

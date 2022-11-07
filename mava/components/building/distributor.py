@@ -24,6 +24,7 @@ from mava.components import Component
 from mava.components.training.trainer import BaseTrainerInit
 from mava.core_jax import SystemBuilder
 from mava.systems.launcher import Launcher, NodeType
+from mava.utils.lp_utils import wait_for_results
 
 
 @dataclass
@@ -150,6 +151,8 @@ class Distributor(Component):
             None.
         """
         builder.store.program.launch()
+
+        builder.store.return_info = wait_for_results()
 
     @staticmethod
     def name() -> str:

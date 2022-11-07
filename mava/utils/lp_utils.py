@@ -24,6 +24,7 @@ import psutil
 from absl import flags, logging
 from acme.utils import counting
 from launchpad.nodes.python.local_multi_processing import PythonProcess
+from multiprocessing.connection import Listener
 
 from mava.core_jax import SystemParameterServer
 from mava.utils.training_utils import non_blocking_sleep
@@ -88,6 +89,24 @@ def partial_kwargs(function: Callable[..., Any], **kwargs: Any) -> Callable[...,
     return functools.partial(function, **kwargs)
 
 
+def send_info_to_main(info):
+    from multiprocessing.connection import Client
+    address = ('localhost', 8000)
+    conn = Client(address, authkey=b'secret password')
+    conn.send(info)
+    conn.close()
+
+def wait_for_results():
+    address = ('localhost', 8000)     # family is deduced to be 'AF_INET'
+    listener = Listener(address, authkey=b'secret password')
+    conn = listener.accept()
+    msg = conn.recv()
+     
+    listener.close()
+
+    return msg
+
+
 def termination_fn(
     parameter_server: SystemParameterServer,
 ) -> None:
@@ -97,16 +116,9 @@ def termination_fn(
         parameter_server: SystemParameterServer in order to get main pid
     """
 
-    from multiprocessing.connection import Client
-    import tensorflow as tf
-
-    tf.print("Ready to send message")
-    address = ('localhost', 8000)
-    conn = Client(address, authkey=b'secret password')
-    tf.print(parameter_server.store.parameters.keys())
     eval_steps = parameter_server.store.parameters["evaluator_steps"]
-    conn.send({"done": True, "evaluator_steps": eval_steps})
-    conn.close()
+    send_info_to_main({"eval_steps": eval_steps})
+   
 
     if parameter_server.store.manager_pid:
         # parent_pid: the pid of the main thread process
