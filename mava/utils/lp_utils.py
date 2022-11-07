@@ -96,6 +96,18 @@ def termination_fn(
     Args:
         parameter_server: SystemParameterServer in order to get main pid
     """
+
+    from multiprocessing.connection import Client
+    import tensorflow as tf
+
+    tf.print("Ready to send message")
+    address = ('localhost', 8000)
+    conn = Client(address, authkey=b'secret password')
+    tf.print(parameter_server.store.parameters.keys())
+    eval_steps = parameter_server.store.parameters["evaluator_steps"]
+    conn.send({"done": True, "evaluator_steps": eval_steps})
+    conn.close()
+
     if parameter_server.store.manager_pid:
         # parent_pid: the pid of the main thread process
         parent_pid = parameter_server.store.manager_pid
