@@ -25,17 +25,13 @@ from mava.systems import idrqn
 from mava.systems import qmix
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
+from mava.utils.environments.smac_utils import make_environment
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
-    "env_name",
-    "simple_spread",
-    "Debugging environment name (str).",
-)
-flags.DEFINE_string(
-    "action_space",
-    "discrete",
-    "Environment action space type (str).",
+    "map_name",
+    "3m",
+    "Starcraft 2 micromanagement map name (str).",
 )
 
 flags.DEFINE_string(
@@ -53,17 +49,13 @@ def main(_: Any) -> None:
         _ : _
     """
     # Environment.
-    environment_factory = functools.partial(
-        debugging_utils.make_environment,
-        env_name=FLAGS.env_name,
-        action_space=FLAGS.action_space,
-        return_state_info=True,
-    )
+    # Environment.
+    environment_factory = functools.partial(make_environment, map_name=FLAGS.map_name)
 
     # Networks.
     def network_factory(*args: Any, **kwargs: Any) -> Any:
         return qmix.make_default_networks(  # type: ignore
-            policy_layer_sizes=(64, 64),
+            policy_layer_sizes=(64,),
             *args,
             **kwargs,
         )
@@ -98,7 +90,7 @@ def main(_: Any) -> None:
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
         run_evaluator=True,
-        epsilon_decay_timesteps=1000,
+        epsilon_decay_timesteps=50000,
         sample_batch_size=64,
         num_executors=4,
         multi_process=True,

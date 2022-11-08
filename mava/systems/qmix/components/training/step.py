@@ -68,7 +68,7 @@ class QmixStep(Step):
             None.
         """
 
-        # @jit
+        @jit
         def sgd_step(
             states: QmixTrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
@@ -254,7 +254,8 @@ class QmixStep(Step):
 
             # for hparam in trainer.store.mixer_network.hyper_params.keys():
             # TODO (sasha): I don't think this will update properly
-            trainer.store.mixer_network.hyper_params = new_states.hyper_params
+            trainer.store.mixing_net.hyper_params = new_states.hyper_net_params
+            trainer.store.mixing_net.target_hyper_params = new_states.target_hyper_net_params
 
             trainer.store.mixer_opt_state[
                 constants.OPT_STATE_DICT_KEY
