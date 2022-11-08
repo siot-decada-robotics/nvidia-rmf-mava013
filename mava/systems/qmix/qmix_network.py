@@ -50,7 +50,7 @@ class MixingNetwork:
         self.hyper_b2_net = hyper_b2_net
 
         self.output_dim = output_dim
-
+        # TODO (sasha): params first
         def forward_fn(env_states, agent_q_values, hyper_params: HyperParams):
             b, t, num_agents = agent_q_values.shape[:3]
 

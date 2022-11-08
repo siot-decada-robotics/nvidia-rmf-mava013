@@ -65,10 +65,11 @@ class QmixSystem(System):
             executor_select_action=drqn_executing.IRDQNExecutorSelectAction,
             executor_adder=building.ParallelSequenceAdder,
             adder_priority=building.UniformAdderPriority,
-            rate_limiter=building.reverb_components.SampleToInsertRateLimiter,
+            rate_limiter=building.reverb_components.MinSizeRateLimiter,
             executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
             networks=building.DefaultNetworks,
             optimisers=dqn_building.Optimiser,
+            mixer_optimiser=qmix_building.MixerOptimiser,
         ).get()
 
         # Trainer

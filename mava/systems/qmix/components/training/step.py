@@ -68,7 +68,7 @@ class QmixStep(Step):
             None.
         """
 
-        @jit
+        # @jit
         def sgd_step(
             states: QmixTrainingState, sample: reverb.ReplaySample
         ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
@@ -99,11 +99,15 @@ class QmixStep(Step):
             hyper_net_params = states.hyper_net_params
             target_hyper_net_params = states.target_hyper_net_params
             policy_opt_states = states.policy_opt_states
+            mixer_opt_state = states.mixer_opt_state
 
             # # TODO (Ruan): Double check this
             # agent_nets = trainer.store.trainer_agent_net_keys
 
-            policy_gradients, policy_agent_metrics = trainer.store.policy_grad_fn(
+            (
+                policy_gradients,
+                mixer_gradients,
+            ), policy_agent_metrics = trainer.store.policy_grad_fn(
                 policy_params,
                 hyper_net_params,
                 target_policy_params,
@@ -117,8 +121,7 @@ class QmixStep(Step):
             )
 
             metrics = {}
-            for agent_key in trainer.store.trainer_agents:
-                agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
+            for agent_net_key in trainer.store.trainer_agent_net_keys.values():
                 # Update the policy networks and optimisers.
                 # Apply updates
                 # TODO (dries): Use one optimiser per network type here and not
@@ -127,7 +130,7 @@ class QmixStep(Step):
                     policy_updates,
                     policy_opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
                 ) = trainer.store.policy_optimiser.update(
-                    policy_gradients[agent_key],
+                    policy_gradients[agent_net_key],
                     policy_opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
                 )
                 policy_params[agent_net_key] = optax.apply_updates(
@@ -142,10 +145,20 @@ class QmixStep(Step):
                 # ] = optax.global_norm(policy_updates)
                 # metrics[agent_key] = policy_agent_metrics[agent_key]
 
+            # Mixer update
+            (
+                mixer_updates,
+                mixer_opt_state[constants.OPT_STATE_DICT_KEY],
+            ) = trainer.store.mixer_optimiser.update(
+                mixer_gradients,
+                mixer_opt_state[constants.OPT_STATE_DICT_KEY],
+            )
+            hyper_net_params = optax.apply_updates(hyper_net_params, mixer_updates)
+
             # update target net
-            target_policy_params = rlax.periodic_update(
-                policy_params,
-                target_policy_params,
+            target_policy_params, target_hyper_net_params = rlax.periodic_update(
+                (policy_params, hyper_net_params),
+                (target_policy_params, target_hyper_net_params),
                 states.trainer_iteration,
                 self.config.target_update_period,
             )
@@ -155,10 +168,14 @@ class QmixStep(Step):
             # Set the metrics
             metrics = jax.tree_util.tree_map(jnp.mean, metrics)
 
+            # TODO (sasha): rename hyper net params to mixer params
             new_states = QmixTrainingState(
                 policy_params=policy_params,
                 target_policy_params=target_policy_params,
+                hyper_net_params=hyper_net_params,
+                target_hyper_net_params=target_hyper_net_params,
                 policy_opt_states=policy_opt_states,
+                mixer_opt_state=mixer_opt_state,
                 random_key=states.random_key,
                 trainer_iteration=states.trainer_iteration,
             )
@@ -189,6 +206,7 @@ class QmixStep(Step):
             target_hyper_net_params = trainer.store.mixing_net.target_hyper_params
 
             policy_opt_states = trainer.store.policy_opt_states
+            mixer_opt_state = trainer.store.mixer_opt_state
 
             _, random_key = jax.random.split(trainer.store.base_key)
 
@@ -199,6 +217,7 @@ class QmixStep(Step):
                 hyper_net_params=hyper_net_params,
                 target_hyper_net_params=target_hyper_net_params,
                 policy_opt_states=policy_opt_states,
+                mixer_opt_state=mixer_opt_state,
                 random_key=random_key,
                 trainer_iteration=steps,
             )
@@ -232,6 +251,14 @@ class QmixStep(Step):
                 trainer.store.policy_opt_states[net_key][
                     constants.OPT_STATE_DICT_KEY
                 ] = new_states.policy_opt_states[net_key][constants.OPT_STATE_DICT_KEY]
+
+            # for hparam in trainer.store.mixer_network.hyper_params.keys():
+            # TODO (sasha): I don't think this will update properly
+            trainer.store.mixer_network.hyper_params = new_states.hyper_params
+
+            trainer.store.mixer_opt_state[
+                constants.OPT_STATE_DICT_KEY
+            ] = new_states.mixer_opt_state[constants.OPT_STATE_DICT_KEY]
 
             return metrics
 

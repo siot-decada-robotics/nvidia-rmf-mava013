@@ -92,15 +92,19 @@ class QmixLoss(Loss):
                 all_discounts: jnp.ndarray,
             ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
                 """Inner policy loss function: see outer function for parameters."""
+                # unpack parameters
                 policy_params, hyper_params = params
                 target_policy_params, target_hyper_params = target_params
+
                 num_agents = len(all_actions)
                 b, t = list(all_actions.values())[0].shape[:2]
 
-                all_q_tm1 = jnp.zeros((b, t, num_agents, 1), dtype=jnp.float32)
+                all_q_tm1 = jnp.zeros((b, t - 1, num_agents, 1), dtype=jnp.float32)
                 all_q_t = jnp.zeros_like(all_q_tm1)
                 rewards = jnp.zeros_like(all_q_tm1)
                 discounts = jnp.zeros_like(all_q_tm1)
+
+                mixer = trainer.store.mixing_net
 
                 for i, agent_key in enumerate(trainer.store.trainer_agents):
                     agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
@@ -111,11 +115,11 @@ class QmixLoss(Loss):
                     policy_states = all_policy_states[agent_key]
 
                     # Use the state at the start of the sequence and unroll the policy.
-                    policy_net_core = lambda x, y: network.forward(
-                        policy_params, [x, y]
+                    policy_net_core = lambda obs, states: network.forward(
+                        policy_params[agent_net_key], obs, states
                     )
-                    target_policy_net_core = lambda x, y: network.forward(
-                        target_policy_params, [x, y]
+                    target_policy_net_core = lambda obs, states: network.forward(
+                        target_policy_params[agent_net_key], obs, states
                     )
 
                     online_qs, _ = hk.static_unroll(
@@ -141,27 +145,29 @@ class QmixLoss(Loss):
                     )
 
                     num_actions = q_t_value.shape[-1]
-                    next_actions = jnp.argmax(q_t_selector, keepdims=True)
+                    next_actions = jnp.argmax(q_t_selector, axis=-1)
                     one_hot_next_actions = jax.nn.one_hot(next_actions, num_actions)
                     q_t = jnp.sum(
                         q_t_value * one_hot_next_actions, axis=-1, keepdims=True
                     )
 
-                    actions = all_actions[agent_key]
+                    actions = all_actions[agent_key][:, :-1]
                     one_hot_actions = jax.nn.one_hot(actions, num_actions)
                     q_tm1 = jnp.sum(q_tm1 * one_hot_actions, axis=-1, keepdims=True)
 
                     all_q_tm1.at[:, :, i].set(q_tm1)
                     all_q_t.at[:, :, i].set(q_t)
 
-                    rewards.at[:, :, i].set(all_rewards[agent_key])
-                    discounts.at[:, :, i].set(all_discounts[agent_key])
+                    agent_reward = jnp.expand_dims(all_rewards[agent_key][:, :-1], axis=-1)
+                    agent_discount = jnp.expand_dims(all_discounts[agent_key][:, :-1], axis=-1)
+                    rewards.at[:, :, i].set(agent_reward)
+                    discounts.at[:, :, i].set(agent_discount)
 
-                rewards = jnp.sum(rewards, axis=2, keepdims=True)
-                discounts = jnp.sum(discounts, axis=2, keepdims=True)
+                rewards = jnp.sum(rewards, axis=2)
+                discounts = jnp.sum(discounts, axis=2)
 
-                mixed_q_tm1 = network.mixing(hyper_params, env_states, q_tm1)
-                mixed_q_t = network.mixing(target_hyper_params, env_states, q_t)
+                mixed_q_tm1 = mixer.forward(env_states[:,:-1], all_q_tm1, hyper_params)
+                mixed_q_t = mixer.forward(env_states[:,1:], all_q_t, target_hyper_params)
 
                 target = jax.lax.stop_gradient(
                     rewards + discounts * self.config.gamma * mixed_q_t
