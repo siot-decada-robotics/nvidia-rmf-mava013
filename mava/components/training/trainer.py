@@ -100,12 +100,13 @@ class BaseTrainerInit(Component):
         obs_norm_key = constants.OBS_NORM_STATE_DICT_KEY
         builder.store.norm_params = {}
         builder.store.norm_params[obs_norm_key] = {}
-        for agent in builder.store.agents:
-            obs_shape = builder.store.ma_environment_spec._agent_environment_specs[
-                agent
-            ].observations.observation.shape
+        if builder.store.global_config.normalize_observations:
+            for agent in builder.store.agents:
+                obs_shape = builder.store.ma_environment_spec._agent_environment_specs[
+                    agent
+                ].observations.observation.shape
 
-            builder.store.norm_params[obs_norm_key][agent] = init_norm_params(obs_shape)
+                builder.store.norm_params[obs_norm_key][agent] = init_norm_params(obs_shape)
 
         # Initialise target values normalisation parameters here
         values_norm_key = constants.VALUES_NORM_STATE_DICT_KEY

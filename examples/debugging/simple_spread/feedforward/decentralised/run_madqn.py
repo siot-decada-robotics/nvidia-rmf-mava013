@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example running IPPO on debug MPE environments."""
+"""Example running MADQN on debug MPE environments."""
 import functools
 from datetime import datetime
 from typing import Any
@@ -21,9 +21,10 @@ from typing import Any
 import optax
 from absl import app, flags
 
-from mava.systems import ippo
+from mava.systems import madqn
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
+from mava.utils.schedules.linear_epsilon_scheduler import LinearEpsilonScheduler
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -60,15 +61,12 @@ def main(_: Any) -> None:
 
     # Networks.
     def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return ippo.make_default_networks(  # type: ignore
-            policy_layer_sizes=(64, 64),
-            critic_layer_sizes=(64, 64, 64),
-            *args,
-            **kwargs,
+        return madqn.make_default_networks(
+            policy_layer_sizes=(64, 64, 64), v_max=40, v_min=0, **kwargs
         )
 
-    # Used for checkpoints, tensorboard logging and env monitoring
-    experiment_path = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
+    # Checkpointer appends "Checkpoints" to checkpoint_dir
+    # checkpoint_subpath = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
     log_every = 10
@@ -81,33 +79,37 @@ def main(_: Any) -> None:
         time_delta=log_every,
     )
 
-    # Optimisers.
-    policy_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+    # Optimizer.
+    lr = 1e-3
+    optimizer = optax.chain(
+        optax.adam(learning_rate=lr),
     )
 
-    critic_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
-    )
-
+    # epsilon scheduler
+    epsilon_scheduler = LinearEpsilonScheduler(1.0, 0.05, 2000)
     # Create the system.
-    system = ippo.IPPOSystem()
+    system = madqn.MADQNSystem()
 
     # Build the system.
     system.build(
+        epsilon_scheduler=epsilon_scheduler,
         environment_factory=environment_factory,
         network_factory=network_factory,
         logger_factory=logger_factory,
-        experiment_path=experiment_path,
-        policy_optimiser=policy_optimiser,
-        critic_optimiser=critic_optimiser,
-        run_evaluator=True,
-        sample_batch_size=10,
-        num_epochs=10,
-        num_executors=1,
-        sequence_length = 201,
+        # checkpoint_subpath=checkpoint_subpath,
+        policy_optimiser=optimizer,
+        executor_parameter_update_period=10,
         multi_process=True,
-        clip_value=False,
+        run_evaluator=True,
+        num_executors=1,
+        sample_batch_size=256,
+        target_update_period=100,
+        min_data_server_size=1000,
+        n_step=1,
+        priority_exponent=0.7,
+        importance_sampling_exponent=0.7,
+        # use_next_extras=False,
+        # terminal="gnome-terminal"
     )
 
     # Launch the system.
