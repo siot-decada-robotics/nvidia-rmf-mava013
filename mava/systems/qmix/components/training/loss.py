@@ -60,6 +60,7 @@ class QmixLoss(Loss):
             target_policy_params: Any,
             target_hyper_params: Any,
             policy_states: Any,
+            env_states: Any,
             observations: Any,
             actions: Dict[str, jnp.ndarray],
             rewards: Dict[str, jnp.ndarray],
@@ -83,8 +84,8 @@ class QmixLoss(Loss):
             def policy_loss_fn(
                 params: Any,
                 target_params: Any,
-                env_states: Any,
                 all_policy_states: Any,
+                env_states: Any,
                 all_observations: Any,
                 all_actions: jnp.ndarray,
                 all_rewards: jnp.ndarray,
@@ -93,8 +94,8 @@ class QmixLoss(Loss):
                 """Inner policy loss function: see outer function for parameters."""
                 policy_params, hyper_params = params
                 target_policy_params, target_hyper_params = target_params
-                num_agents = len(actions)
-                b, t = list(actions.values())[0].shape[:2]
+                num_agents = len(all_actions)
+                b, t = list(all_actions.values())[0].shape[:2]
 
                 all_q_tm1 = jnp.zeros((b, t, num_agents, 1), dtype=jnp.float32)
                 all_q_t = jnp.zeros_like(all_q_tm1)
@@ -175,6 +176,7 @@ class QmixLoss(Loss):
                 (policy_params, hyper_params),
                 (target_policy_params, target_hyper_params),
                 policy_states,
+                env_states,
                 observations,
                 actions,
                 rewards,

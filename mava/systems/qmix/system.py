@@ -21,8 +21,6 @@ from mava.components import building, executing, training, updating
 from mava.components.building.guardrails import ComponentDependencyGuardrails
 from mava.specs import DesignSpec
 from mava.systems import System
-from mava.systems.idrqn.components.building.extras_spec import DRQNExtrasSpec
-from mava.systems.ippo.components import ExtrasLogProbSpec
 from mava.systems.qmix.config import QmixConfig
 
 from mava.systems.idqn.components import executing as dqn_executing
@@ -34,6 +32,8 @@ from mava.systems.idrqn.components import training as drqn_training
 from mava.systems.idrqn.components import building as drqn_building
 
 from mava.systems.qmix.components import training as qmix_training
+from mava.systems.qmix.components import building as qmix_building
+from mava.systems.qmix.components import updating as qmix_updating
 
 
 class QmixSystem(System):
@@ -87,12 +87,12 @@ class QmixSystem(System):
             data_server_adder_signature=building.ParallelSequenceAdderSignature,
             data_server_remover=building.reverb_components.FIFORemover,
             data_server_sampler=building.reverb_components.UniformSampler,
-            extras_spec=drqn_building.DRQNExtrasSpec,
+            extras_spec=qmix_building.QmixExtrasSpec,
         ).get()
 
         # Parameter Server
         parameter_server_process = DesignSpec(
-            parameter_server=updating.DefaultParameterServer,
+            parameter_server=qmix_updating.QmixParameterServer,
             executor_parameter_client=building.ExecutorParameterClient,
             trainer_parameter_client=building.TrainerParameterClient,
             termination_condition=updating.CountConditionTerminator,

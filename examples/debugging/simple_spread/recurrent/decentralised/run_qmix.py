@@ -57,6 +57,7 @@ def main(_: Any) -> None:
         debugging_utils.make_environment,
         env_name=FLAGS.env_name,
         action_space=FLAGS.action_space,
+        return_state_info=True,
     )
 
     # Networks.
@@ -99,10 +100,10 @@ def main(_: Any) -> None:
         run_evaluator=True,
         sample_batch_size=64,
         num_executors=1,
-        multi_process=False,
+        multi_process=True,
         samples_per_insert=32,
         # min_data_server_size=10,
-        # terminal="gnome-terminal"
+        terminal="gnome-terminal",
         sequence_length=20,
         period=10,
     )

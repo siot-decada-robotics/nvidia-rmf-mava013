@@ -8,11 +8,12 @@ import jax
 import distrax
 import haiku as hk
 from mava.specs import MAEnvironmentSpec
+from chex import dataclass
 
 from acme.jax import utils
 
 
-@dataclasses.dataclass
+@dataclass
 class HyperParams:
     hyper_w1_params: networks_lib.Params
     hyper_w2_params: networks_lib.Params
@@ -36,10 +37,10 @@ class MixingNetwork:
         output_dim: int,
     ) -> None:
         self.hyper_params = HyperParams(
-            hyper_w1_params,
-            hyper_w2_params,
-            hyper_b1_params,
-            hyper_b2_params,
+            hyper_w1_params=hyper_w1_params,
+            hyper_w2_params=hyper_w2_params,
+            hyper_b1_params=hyper_b1_params,
+            hyper_b2_params=hyper_b2_params,
         )
         self.target_hyper_params = copy.deepcopy(self.hyper_params)
 

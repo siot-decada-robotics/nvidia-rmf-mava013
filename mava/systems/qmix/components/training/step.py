@@ -186,6 +186,7 @@ class QmixStep(Step):
                 for net_key in networks.keys()
             }
             hyper_net_params = trainer.store.mixing_net.hyper_params
+            target_hyper_net_params = trainer.store.mixing_net.target_hyper_params
 
             policy_opt_states = trainer.store.policy_opt_states
 
@@ -196,6 +197,7 @@ class QmixStep(Step):
                 policy_params=policy_params,
                 target_policy_params=target_policy_params,
                 hyper_net_params=hyper_net_params,
+                target_hyper_net_params=target_hyper_net_params,
                 policy_opt_states=policy_opt_states,
                 random_key=random_key,
                 trainer_iteration=steps,

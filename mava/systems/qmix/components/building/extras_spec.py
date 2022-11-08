@@ -45,6 +45,7 @@ class ExtrasSpec(Component):
         return "extras_spec"
 
 
+# TODO (sasha): really don't want to have to copy this code for 1 line
 class QmixExtrasSpec(ExtrasSpec):
     def __init__(
         self,
@@ -78,7 +79,7 @@ class QmixExtrasSpec(ExtrasSpec):
         builder.store.extras_spec.update(net_spec)
 
         # Get the policy state specs
-        networks = builder.store.network_factory()
+        networks, _ = builder.store.network_factory()
         net_states = {}
         for agent_key, network_key in builder.store.agent_net_keys.items():
 
