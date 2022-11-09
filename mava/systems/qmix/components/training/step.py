@@ -15,15 +15,16 @@
 
 """Trainer components for gradient step calculations."""
 import abc
-from distutils.command.config import config
 import time
 from dataclasses import dataclass
+from distutils.command.config import config
 from typing import Any, Dict, List, Tuple, Type
 
 import jax
 import jax.numpy as jnp
 import optax
 import reverb
+import rlax
 import tree
 from acme.jax import utils
 from jax import jit
@@ -37,7 +38,6 @@ from mava.components.training.base import Batch, QmixTrainingState, TrainingStat
 from mava.components.training.step import Step
 from mava.core_jax import SystemTrainer
 from mava.utils.jax_training_utils import denormalize, normalize
-import rlax
 
 
 @dataclass
@@ -252,10 +252,30 @@ class QmixStep(Step):
                     constants.OPT_STATE_DICT_KEY
                 ] = new_states.policy_opt_states[net_key][constants.OPT_STATE_DICT_KEY]
 
-            # for hparam in trainer.store.mixer_network.hyper_params.keys():
+            mixer_param_names = [
+                "hyper_w1_params",
+                "hyper_w2_params",
+                "hyper_b1_params",
+                "hyper_b2_params",
+            ]
+            for param_name in mixer_param_names:
+                params = getattr(trainer.store.mixing_net.hyper_params, param_name)
+                for param_key in params.keys():
+                    params[param_key] = getattr(
+                        new_states.hyper_net_params, param_name
+                    )[param_key]
+
+                target_params = getattr(
+                    trainer.store.mixing_net.target_hyper_params, param_name
+                )
+                for param_key in params.keys():
+                    target_params[param_key] = getattr(
+                        new_states.target_hyper_net_params, param_name
+                    )[param_key]
+
             # TODO (sasha): I don't think this will update properly
-            trainer.store.mixing_net.hyper_params = new_states.hyper_net_params
-            trainer.store.mixing_net.target_hyper_params = new_states.target_hyper_net_params
+            # trainer.store.mixing_net.hyper_params = new_states.hyper_net_params
+            # trainer.store.mixing_net.target_hyper_params = new_states.target_hyper_net_params
 
             trainer.store.mixer_opt_state[
                 constants.OPT_STATE_DICT_KEY

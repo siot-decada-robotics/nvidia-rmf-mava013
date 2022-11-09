@@ -15,15 +15,16 @@
 
 """Trainer components for gradient step calculations."""
 import abc
-from distutils.command.config import config
 import time
 from dataclasses import dataclass
+from distutils.command.config import config
 from typing import Any, Dict, List, Tuple, Type
 
 import jax
 import jax.numpy as jnp
 import optax
 import reverb
+import rlax
 import tree
 from acme.jax import utils
 from jax import jit
@@ -37,7 +38,6 @@ from mava.components.training.base import Batch, DQNTrainingState, TrainingState
 from mava.components.training.step import Step
 from mava.core_jax import SystemTrainer
 from mava.utils.jax_training_utils import denormalize, normalize
-import rlax
 
 
 @dataclass
@@ -112,8 +112,7 @@ class IRDQNStep(Step):
             )
 
             metrics = {}
-            for agent_key in trainer.store.trainer_agents:
-                agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
+            for agent_net_key in trainer.store.trainer_agent_net_keys.values():
                 # Update the policy networks and optimisers.
                 # Apply updates
                 # TODO (dries): Use one optimiser per network type here and not
@@ -122,7 +121,7 @@ class IRDQNStep(Step):
                     policy_updates,
                     policy_opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
                 ) = trainer.store.policy_optimiser.update(
-                    policy_gradients[agent_key],
+                    policy_gradients[agent_net_key],
                     policy_opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
                 )
                 policy_params[agent_net_key] = optax.apply_updates(

@@ -21,8 +21,7 @@ from typing import Any
 import optax
 from absl import app, flags
 
-from mava.systems import idrqn
-from mava.systems import qmix
+from mava.systems import idrqn, qmix
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
 
@@ -104,7 +103,7 @@ def main(_: Any) -> None:
         multi_process=True,
         samples_per_insert=32,
         min_data_server_size=100,
-        terminal="gnome-terminal",
+        # terminal="gnome-terminal",
         sequence_length=20,
         period=10,
     )
