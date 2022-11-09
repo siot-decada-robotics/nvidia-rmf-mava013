@@ -21,7 +21,7 @@ from typing import Any
 import optax
 from absl import app, flags
 
-from mava.systems import idrqn, qmix
+from mava.systems import ippo
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
 
@@ -42,7 +42,7 @@ flags.DEFINE_string(
     str(datetime.now()),
     "Experiment identifier that can be used to continue experiments.",
 )
-flags.DEFINE_string("base_dir", "logs", "Base dir to store experiments.")
+flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
 def main(_: Any) -> None:
@@ -56,13 +56,13 @@ def main(_: Any) -> None:
         debugging_utils.make_environment,
         env_name=FLAGS.env_name,
         action_space=FLAGS.action_space,
-        return_state_info=True,
     )
 
     # Networks.
     def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return qmix.make_default_networks(  # type: ignore
+        return ippo.make_default_networks(  # type: ignore
             policy_layer_sizes=(64, 64),
+            critic_layer_sizes=(64, 64, 64),
             *args,
             **kwargs,
         )
@@ -71,7 +71,16 @@ def main(_: Any) -> None:
     experiment_path = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
-    log_every = 2
+    log_every = 10
+
+    # Pass custom logger config for evaluator to use.
+    # A custom json path can also be passed in.
+    logger_config = {
+        "evaluator": {
+            "to_json": True,
+        },
+    }
+
     logger_factory = functools.partial(
         logger_utils.make_logger,
         directory=FLAGS.base_dir,
@@ -86,26 +95,31 @@ def main(_: Any) -> None:
         optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
     )
 
+    critic_optimiser = optax.chain(
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+    )
+
     # Create the system.
-    system = qmix.QmixSystem()
+    system = ippo.IPPOSystem()
 
     # Build the system.
     system.build(
         environment_factory=environment_factory,
         network_factory=network_factory,
         logger_factory=logger_factory,
+        logger_config=logger_config,
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
+        critic_optimiser=critic_optimiser,
         run_evaluator=True,
-        epsilon_decay_timesteps=1000,
-        sample_batch_size=64,
-        num_executors=4,
+        sample_batch_size=5,
+        num_epochs=15,
+        num_executors=1,
         multi_process=True,
-        samples_per_insert=32,
-        min_data_server_size=100,
-        # terminal="gnome-terminal",
-        sequence_length=20,
-        period=10,
+        clip_value=False,
+        evaluation_interval={"executor_steps": 10000},
+        evaluation_duration={"evaluator_episodes": 3},
+        json_path=f"{FLAGS.base_dir}/JSON_DIR",
     )
 
     # Launch the system.

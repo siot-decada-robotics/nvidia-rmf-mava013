@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Example running IPPO on debug MPE environments."""
+"""Example running IPPO on MPE environments."""
 import functools
 from datetime import datetime
 from typing import Any
@@ -21,20 +21,20 @@ from typing import Any
 import optax
 from absl import app, flags
 
-from mava.systems import idrqn, qmix
-from mava.utils.environments import debugging_utils
+from mava.systems import ippo
+from mava.utils.environments import pettingzoo_utils
 from mava.utils.loggers import logger_utils
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
-    "env_name",
-    "simple_spread",
-    "Debugging environment name (str).",
+    "env_class",
+    "mpe",
+    "Pettingzoo environment class, e.g. atari (str).",
 )
 flags.DEFINE_string(
-    "action_space",
-    "discrete",
-    "Environment action space type (str).",
+    "env_name",
+    "simple_reference_v2",
+    "Pettingzoo environment name, e.g. pong (str).",
 )
 
 flags.DEFINE_string(
@@ -42,27 +42,24 @@ flags.DEFINE_string(
     str(datetime.now()),
     "Experiment identifier that can be used to continue experiments.",
 )
-flags.DEFINE_string("base_dir", "logs", "Base dir to store experiments.")
+
+flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
 def main(_: Any) -> None:
-    """Run main script
-
-    Args:
-        _ : _
-    """
+    """Run main script."""
     # Environment.
     environment_factory = functools.partial(
-        debugging_utils.make_environment,
+        pettingzoo_utils.make_environment,
+        env_class=FLAGS.env_class,
         env_name=FLAGS.env_name,
-        action_space=FLAGS.action_space,
-        return_state_info=True,
     )
 
     # Networks.
     def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return qmix.make_default_networks(  # type: ignore
-            policy_layer_sizes=(64, 64),
+        return ippo.make_default_networks(  # type: ignore
+            policy_layer_sizes=(64,),
+            critic_layer_sizes=(256,),
             *args,
             **kwargs,
         )
@@ -71,7 +68,7 @@ def main(_: Any) -> None:
     experiment_path = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
-    log_every = 2
+    log_every = 10
     logger_factory = functools.partial(
         logger_utils.make_logger,
         directory=FLAGS.base_dir,
@@ -86,8 +83,12 @@ def main(_: Any) -> None:
         optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
     )
 
+    critic_optimiser = optax.chain(
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+    )
+
     # Create the system.
-    system = qmix.QmixSystem()
+    system = ippo.IPPOSystem()
 
     # Build the system.
     system.build(
@@ -96,16 +97,12 @@ def main(_: Any) -> None:
         logger_factory=logger_factory,
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
+        critic_optimiser=critic_optimiser,
         run_evaluator=True,
-        epsilon_decay_timesteps=1000,
-        sample_batch_size=64,
-        num_executors=4,
+        sample_batch_size=5,
+        num_epochs=15,
+        num_executors=1,
         multi_process=True,
-        samples_per_insert=32,
-        min_data_server_size=100,
-        # terminal="gnome-terminal",
-        sequence_length=20,
-        period=10,
     )
 
     # Launch the system.

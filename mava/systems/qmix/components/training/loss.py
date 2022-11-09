@@ -23,13 +23,13 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 import rlax
+from haiku._src.basic import merge_leading_dims
 
 from mava.callbacks import Callback
 from mava.components import Component, training
 from mava.components.training.losses import Loss
 from mava.core_jax import SystemTrainer
 from mava.systems.idqn.components.training.loss import IDQNLossConfig
-from haiku._src.basic import merge_leading_dims
 
 
 class QmixLoss(Loss):
@@ -99,10 +99,10 @@ class QmixLoss(Loss):
                 num_agents = len(all_actions)
                 b, t = list(all_actions.values())[0].shape[:2]
 
-                all_q_tm1 = jnp.zeros((b, t - 1, num_agents, 1), dtype=jnp.float32)
-                all_q_t = jnp.zeros_like(all_q_tm1)
-                rewards = jnp.zeros_like(all_q_tm1)
-                discounts = jnp.zeros_like(all_q_tm1)
+                q_tm1 = jnp.zeros((b, t - 1, num_agents, 1), dtype=jnp.float32)
+                q_t = jnp.zeros_like(q_tm1)
+                rewards = jnp.zeros_like(q_tm1)
+                discounts = jnp.zeros_like(q_tm1)
 
                 mixer = trainer.store.mixing_net
 
@@ -136,7 +136,7 @@ class QmixLoss(Loss):
                         time_major=False,
                     )
 
-                    q_tm1 = online_qs[:, :-1]
+                    agent_q_tm1 = online_qs[:, :-1]
                     q_t_selector = online_qs[:, 1:]
                     q_t_value = target_qs[:, 1:]
 
@@ -147,36 +147,41 @@ class QmixLoss(Loss):
                     num_actions = q_t_value.shape[-1]
                     next_actions = jnp.argmax(q_t_selector, axis=-1)
                     one_hot_next_actions = jax.nn.one_hot(next_actions, num_actions)
-                    q_t = jnp.sum(
+                    agent_q_t = jnp.sum(
                         q_t_value * one_hot_next_actions, axis=-1, keepdims=True
                     )
 
                     actions = all_actions[agent_key][:, :-1]
                     one_hot_actions = jax.nn.one_hot(actions, num_actions)
-                    q_tm1 = jnp.sum(q_tm1 * one_hot_actions, axis=-1, keepdims=True)
+                    agent_q_tm1 = jnp.sum(
+                        agent_q_tm1 * one_hot_actions, axis=-1, keepdims=True
+                    )
 
-                    all_q_tm1.at[:, :, i].set(q_tm1)
-                    all_q_t.at[:, :, i].set(q_t)
+                    q_tm1 = q_tm1.at[:, :, i].set(agent_q_tm1)
+                    q_t = q_t.at[:, :, i].set(agent_q_t)
 
-                    agent_reward = jnp.expand_dims(all_rewards[agent_key][:, :-1], axis=-1)
-                    agent_discount = jnp.expand_dims(all_discounts[agent_key][:, :-1], axis=-1)
-                    rewards.at[:, :, i].set(agent_reward)
-                    discounts.at[:, :, i].set(agent_discount)
+                    agent_reward = jnp.expand_dims(
+                        all_rewards[agent_key][:, :-1], axis=-1
+                    )
+                    agent_discount = jnp.expand_dims(
+                        all_discounts[agent_key][:, :-1], axis=-1
+                    )
+                    rewards = rewards.at[:, :, i].set(agent_reward)
+                    discounts = discounts.at[:, :, i].set(agent_discount)
 
                 rewards = jnp.sum(rewards, axis=2)
                 discounts = jnp.sum(discounts, axis=2)
 
-                mixed_q_tm1 = mixer.forward(env_states[:,:-1], all_q_tm1, hyper_params)
-                mixed_q_t = mixer.forward(env_states[:,1:], all_q_t, target_hyper_params)
+                mixed_q_tm1 = mixer.forward(env_states[:, :-1], q_tm1, hyper_params)
+                mixed_q_t = mixer.forward(env_states[:, 1:], q_t, target_hyper_params)
 
                 target = jax.lax.stop_gradient(
                     rewards + discounts * self.config.gamma * mixed_q_t
                 )
                 error = 0.5 * (mixed_q_tm1 - target) ** 2
                 loss = jnp.mean(error)
-                # TODO grad for mixing net?
 
-                return loss, {}  # loss_info_policy
+                return loss, {"total_loss": loss}
 
             policy_grads, loss_info_policy = jax.grad(policy_loss_fn, has_aux=True)(
                 (policy_params, hyper_params),
