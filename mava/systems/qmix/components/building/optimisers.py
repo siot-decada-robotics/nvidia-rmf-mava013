@@ -11,7 +11,7 @@ from mava.core_jax import SystemBuilder
 class MixerOptimisersConfig:
     mixer_learning_rate: float = 1e-3
     mixer_adam_epsilon: float = 1e-5
-    mixer_max_gradient_norm: float = 0.5
+    mixer_max_gradient_norm: float = 10.0
     mixer_optimiser: Optional[optax_base.GradientTransformation] = None
 
 class MixerOptimiser(Optimisers):

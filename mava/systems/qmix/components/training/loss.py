@@ -79,8 +79,6 @@ class QmixLoss(Loss):
             Returns:
                 Tuple[policy gradients, policy loss information]
             """
-            policy_grads = {}
-
             def policy_loss_fn(
                 params: Any,
                 target_params: Any,
@@ -169,11 +167,16 @@ class QmixLoss(Loss):
                     rewards = rewards.at[:, :, i].set(agent_reward)
                     discounts = discounts.at[:, :, i].set(agent_discount)
 
-                rewards = jnp.sum(rewards, axis=2)
-                discounts = jnp.sum(discounts, axis=2)
+                rewards = jnp.mean(rewards, axis=2)
+
+                # discounts = jnp.sum(discounts, axis=2) 
+                discounts = jnp.mean(discounts, axis=2) # discounts should be zero or one
 
                 mixed_q_tm1 = mixer.forward(env_states[:, :-1], q_tm1, hyper_params)
                 mixed_q_t = mixer.forward(env_states[:, 1:], q_t, target_hyper_params)
+
+                # mixed_q_tm1 = jnp.sum(q_tm1, axis=2)
+                # mixed_q_t = jnp.sum(q_t, axis=2)
 
                 target = jax.lax.stop_gradient(
                     rewards + discounts * self.config.gamma * mixed_q_t
