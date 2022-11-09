@@ -504,21 +504,6 @@ class MAPGWithTrustRegionStep(Step):
                     constants.OPT_STATE_DICT_KEY
                 ] = new_states.critic_opt_states[net_key][constants.OPT_STATE_DICT_KEY]
 
-            # Update the observation normalization parameters
-            obs_norm_key = constants.OBS_NORM_STATE_DICT_KEY
-            for agent in trainer.store.trainer_agent_net_keys.keys():
-                for param_key in new_states.observation_stats[agent].keys():
-                    trainer.store.norm_params[obs_norm_key][agent][
-                        param_key
-                    ] = new_states.observation_stats[agent][param_key]
-
-            # update the running target stats
-            values_norm_key = constants.VALUES_NORM_STATE_DICT_KEY
-            for agent in trainer.store.trainer_agent_net_keys.keys():
-                for param_key in new_states.target_value_stats[agent].keys():
-                    trainer.store.norm_params[values_norm_key][agent][
-                        param_key
-                    ] = new_states.target_value_stats[agent][param_key]
 
             return metrics
 
