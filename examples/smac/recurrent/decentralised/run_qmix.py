@@ -21,11 +21,10 @@ from typing import Any
 import optax
 from absl import app, flags
 
-from mava.systems import idrqn
-from mava.systems import qmix
+from mava.systems import idrqn, qmix
 from mava.utils.environments import debugging_utils
-from mava.utils.loggers import logger_utils
 from mava.utils.environments.smac_utils import make_environment
+from mava.utils.loggers import logger_utils
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -79,6 +78,9 @@ def main(_: Any) -> None:
         optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
     )
 
+    mixer_optimiser = optax.chain(
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+    )
     # Create the system.
     system = qmix.QmixSystem()
 
@@ -89,10 +91,11 @@ def main(_: Any) -> None:
         logger_factory=logger_factory,
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
+        mixer_optimiser=mixer_optimiser,
         run_evaluator=True,
         epsilon_decay_timesteps=50000,
         sample_batch_size=64,
-        num_executors=4,
+        num_executors=1,
         multi_process=True,
         samples_per_insert=32,
         min_data_server_size=100,

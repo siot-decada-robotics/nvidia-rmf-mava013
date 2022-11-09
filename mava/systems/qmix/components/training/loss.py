@@ -56,9 +56,9 @@ class QmixLoss(Loss):
 
         def policy_loss_grad_fn(
             policy_params: Any,
-            hyper_params: Any,
+            mixer_params: Any,
             target_policy_params: Any,
-            target_hyper_params: Any,
+            target_mixer_params: Any,
             policy_states: Any,
             env_states: Any,
             observations: Any,
@@ -79,6 +79,7 @@ class QmixLoss(Loss):
             Returns:
                 Tuple[policy gradients, policy loss information]
             """
+
             def policy_loss_fn(
                 params: Any,
                 target_params: Any,
@@ -91,8 +92,8 @@ class QmixLoss(Loss):
             ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
                 """Inner policy loss function: see outer function for parameters."""
                 # unpack parameters
-                policy_params, hyper_params = params
-                target_policy_params, target_hyper_params = target_params
+                policy_params, mixer_params = params
+                target_policy_params, target_mixer_params = target_params
 
                 num_agents = len(all_actions)
                 b, t = list(all_actions.values())[0].shape[:2]
@@ -168,12 +169,11 @@ class QmixLoss(Loss):
                     discounts = discounts.at[:, :, i].set(agent_discount)
 
                 rewards = jnp.mean(rewards, axis=2)
+                # discounts should be zero or one
+                discounts = jnp.mean(discounts, axis=2)
 
-                # discounts = jnp.sum(discounts, axis=2) 
-                discounts = jnp.mean(discounts, axis=2) # discounts should be zero or one
-
-                mixed_q_tm1 = mixer.forward(env_states[:, :-1], q_tm1, hyper_params)
-                mixed_q_t = mixer.forward(env_states[:, 1:], q_t, target_hyper_params)
+                mixed_q_tm1 = mixer.forward(env_states[:, :-1], q_tm1, mixer_params)
+                mixed_q_t = mixer.forward(env_states[:, 1:], q_t, target_mixer_params)
 
                 # mixed_q_tm1 = jnp.sum(q_tm1, axis=2)
                 # mixed_q_t = jnp.sum(q_t, axis=2)
@@ -187,8 +187,8 @@ class QmixLoss(Loss):
                 return loss, {"total_loss": loss}
 
             policy_grads, loss_info_policy = jax.grad(policy_loss_fn, has_aux=True)(
-                (policy_params, hyper_params),
-                (target_policy_params, target_hyper_params),
+                (policy_params, mixer_params),
+                (target_policy_params, target_mixer_params),
                 policy_states,
                 env_states,
                 observations,

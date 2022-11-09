@@ -73,8 +73,8 @@ class QmixTrainingState(NamedTuple):
 
     policy_params: Any
     target_policy_params: Any
-    hyper_net_params: Any
-    target_hyper_net_params: Any
+    mixer_params: Any
+    target_mixer_params: Any
     policy_opt_states: Dict[str, optax.OptState]
     mixer_opt_state: Dict[str, optax.OptState]
     random_key: Any
