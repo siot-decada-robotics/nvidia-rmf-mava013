@@ -62,7 +62,7 @@ def main(_: Any) -> None:
     # Networks.
     def network_factory(*args: Any, **kwargs: Any) -> Any:
         return qmix.make_default_networks(  # type: ignore
-            policy_layer_sizes=(64, 64),
+            policy_layer_sizes=(64,),
             *args,
             **kwargs,
         )
@@ -85,6 +85,9 @@ def main(_: Any) -> None:
     policy_optimiser = optax.chain(
         optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
     )
+    mixer_optimiser = optax.chain(
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+    )
 
     # Create the system.
     system = qmix.QmixSystem()
@@ -96,14 +99,15 @@ def main(_: Any) -> None:
         logger_factory=logger_factory,
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
+        mixer_optimiser=mixer_optimiser,
         run_evaluator=True,
-        epsilon_decay_timesteps=1000,
+        epsilon_decay_timesteps=50000,
         sample_batch_size=64,
-        num_executors=4,
+        num_executors=1,
         multi_process=True,
         samples_per_insert=32,
         min_data_server_size=100,
-        # terminal="gnome-terminal",
+        terminal="gnome-terminal",
         sequence_length=20,
         period=10,
     )

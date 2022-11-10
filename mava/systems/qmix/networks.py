@@ -27,12 +27,8 @@ from acme.jax import utils
 from dm_env import specs as dm_specs
 
 from mava import specs as mava_specs
-from mava.systems.qmix.qmix_network import (
-    make_mixing_network,
-    MixingNetwork,
-)
-from mava.systems.idrqn.networks import make_networks
-from mava.systems.idrqn.networks import IDRQNNetwork
+from mava.systems.idrqn.networks import IDRQNNetwork, make_networks
+from mava.systems.qmix.qmix_network import MixingNetwork, make_mixing_network
 from mava.utils.jax_training_utils import action_mask_categorical_policies
 
 Array = dm_specs.Array
@@ -232,12 +228,14 @@ def make_default_networks(
 
     num_agents = len(agent_net_keys)
 
-    # TODO (sasha): key not being split properly
+    # TODO (sasha): is this split correctly, where is base key from?
+    policy_key, mixing_key = jax.random.split(base_key)
+
     networks: Dict[str, Any] = {}
     for net_key in specs.keys():
         networks[net_key] = make_networks(
             specs[net_key],
-            base_key=base_key,
+            base_key=policy_key,
             policy_layer_sizes=policy_layer_sizes,
             recurrent_layer_dim=recurrent_layer_dim,
             activation_function=activation_function,
@@ -248,7 +246,7 @@ def make_default_networks(
         mixing_hidden_dim,
         mixing_output_dim,
         num_agents,
-        base_key,  # TODO (sasha): need to split this key properly
+        mixing_key,
     )
 
     return networks, mixing_net

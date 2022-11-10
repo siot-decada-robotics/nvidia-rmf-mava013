@@ -96,8 +96,8 @@ class QmixStep(Step):
             # policy_opt_states = trainer.store.policy_opt_states
             target_policy_params = states.target_policy_params
             policy_params = states.policy_params
-            hyper_net_params = states.hyper_net_params
-            target_hyper_net_params = states.target_hyper_net_params
+            mixer_params = states.mixer_params
+            target_mixer_params = states.target_mixer_params
             policy_opt_states = states.policy_opt_states
             mixer_opt_state = states.mixer_opt_state
 
@@ -109,9 +109,9 @@ class QmixStep(Step):
                 mixer_gradients,
             ), policy_agent_metrics = trainer.store.policy_grad_fn(
                 policy_params,
-                hyper_net_params,
+                mixer_params,
                 target_policy_params,
-                target_hyper_net_params,
+                target_mixer_params,
                 extras["policy_states"],
                 extras["s_t"],
                 observations,
@@ -153,12 +153,12 @@ class QmixStep(Step):
                 mixer_gradients,
                 mixer_opt_state[constants.OPT_STATE_DICT_KEY],
             )
-            hyper_net_params = optax.apply_updates(hyper_net_params, mixer_updates)
+            mixer_params = optax.apply_updates(mixer_params, mixer_updates)
 
             # update target net
-            target_policy_params, target_hyper_net_params = rlax.periodic_update(
-                (policy_params, hyper_net_params),
-                (target_policy_params, target_hyper_net_params),
+            target_policy_params, target_mixer_params = rlax.periodic_update(
+                (policy_params, mixer_params),
+                (target_policy_params, target_mixer_params),
                 states.trainer_iteration,
                 self.config.target_update_period,
             )
@@ -172,8 +172,8 @@ class QmixStep(Step):
             new_states = QmixTrainingState(
                 policy_params=policy_params,
                 target_policy_params=target_policy_params,
-                hyper_net_params=hyper_net_params,
-                target_hyper_net_params=target_hyper_net_params,
+                mixer_params=mixer_params,
+                target_mixer_params=target_mixer_params,
                 policy_opt_states=policy_opt_states,
                 mixer_opt_state=mixer_opt_state,
                 random_key=states.random_key,
@@ -202,8 +202,8 @@ class QmixStep(Step):
                 net_key: networks[net_key].target_policy_params
                 for net_key in networks.keys()
             }
-            hyper_net_params = trainer.store.mixing_net.hyper_params
-            target_hyper_net_params = trainer.store.mixing_net.target_hyper_params
+            mixer_params = trainer.store.mixing_net.hyper_params
+            target_mixer_params = trainer.store.mixing_net.target_hyper_params
 
             policy_opt_states = trainer.store.policy_opt_states
             mixer_opt_state = trainer.store.mixer_opt_state
@@ -214,8 +214,8 @@ class QmixStep(Step):
             states = QmixTrainingState(
                 policy_params=policy_params,
                 target_policy_params=target_policy_params,
-                hyper_net_params=hyper_net_params,
-                target_hyper_net_params=target_hyper_net_params,
+                mixer_params=mixer_params,
+                target_mixer_params=target_mixer_params,
                 policy_opt_states=policy_opt_states,
                 mixer_opt_state=mixer_opt_state,
                 random_key=random_key,
@@ -252,30 +252,30 @@ class QmixStep(Step):
                     constants.OPT_STATE_DICT_KEY
                 ] = new_states.policy_opt_states[net_key][constants.OPT_STATE_DICT_KEY]
 
-            mixer_param_names = [
-                "hyper_w1_params",
-                "hyper_w2_params",
-                "hyper_b1_params",
-                "hyper_b2_params",
-            ]
-            for param_name in mixer_param_names:
-                params = getattr(trainer.store.mixing_net.hyper_params, param_name)
-                for param_key in params.keys():
-                    params[param_key] = getattr(
-                        new_states.hyper_net_params, param_name
-                    )[param_key]
-
-                target_params = getattr(
-                    trainer.store.mixing_net.target_hyper_params, param_name
-                )
-                for param_key in params.keys():
-                    target_params[param_key] = getattr(
-                        new_states.target_hyper_net_params, param_name
-                    )[param_key]
+            # mixer_param_names = [
+            #     "hyper_w1_params",
+            #     "hyper_w2_params",
+            #     "hyper_b1_params",
+            #     "hyper_b2_params",
+            # ]
+            # for param_name in mixer_param_names:
+            #     params = getattr(trainer.store.mixing_net.hyper_params, param_name)
+            #     for param_key in params.keys():
+            #         params[param_key] = getattr(
+            #             new_states.hyper_net_params, param_name
+            #         )[param_key]
+            #
+            #     target_params = getattr(
+            #         trainer.store.mixing_net.target_hyper_params, param_name
+            #     )
+            #     for param_key in params.keys():
+            #         target_params[param_key] = getattr(
+            #             new_states.target_hyper_net_params, param_name
+            #         )[param_key]
 
             # TODO (sasha): I don't think this will update properly
-            # trainer.store.mixing_net.hyper_params = new_states.hyper_net_params
-            # trainer.store.mixing_net.target_hyper_params = new_states.target_hyper_net_params
+            trainer.store.mixing_net.hyper_params = new_states.mixer_params
+            trainer.store.mixing_net.target_hyper_params = new_states.mixer_params
 
             trainer.store.mixer_opt_state[
                 constants.OPT_STATE_DICT_KEY
