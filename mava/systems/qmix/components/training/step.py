@@ -57,6 +57,10 @@ class QmixStep(Step):
         """
         self.config = config
 
+    def on_building_init_end(self, builder) -> None:
+        super().on_building_init_end(builder)
+        builder.store.trainer_iter = 0
+
     # flake8: noqa: C901
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """Define and store the SGD step function for MAPGWithTrustRegion.
@@ -156,9 +160,17 @@ class QmixStep(Step):
             mixer_params = optax.apply_updates(mixer_params, mixer_updates)
 
             # update target net
-            target_policy_params, target_mixer_params = rlax.periodic_update(
-                (policy_params, mixer_params),
-                (target_policy_params, target_mixer_params),
+            target_policy_params = rlax.periodic_update(
+                policy_params,
+                target_policy_params, 
+                states.trainer_iteration,
+                self.config.target_update_period,
+            )
+
+            # update target net
+            target_mixer_params = rlax.periodic_update(
+                mixer_params,
+                target_mixer_params, 
                 states.trainer_iteration,
                 self.config.target_update_period,
             )
@@ -210,7 +222,8 @@ class QmixStep(Step):
 
             _, random_key = jax.random.split(trainer.store.base_key)
 
-            steps = trainer.store.trainer_counts["trainer_steps"]
+            # steps = trainer.store.trainer_counts["trainer_steps"]
+            trainer.store.trainer_iter += 1
             states = QmixTrainingState(
                 policy_params=policy_params,
                 target_policy_params=target_policy_params,
@@ -219,7 +232,7 @@ class QmixStep(Step):
                 policy_opt_states=policy_opt_states,
                 mixer_opt_state=mixer_opt_state,
                 random_key=random_key,
-                trainer_iteration=steps,
+                trainer_iteration=trainer.store.trainer_iter,
             )
 
             new_states, metrics = sgd_step(states, sample)
@@ -252,34 +265,26 @@ class QmixStep(Step):
                     constants.OPT_STATE_DICT_KEY
                 ] = new_states.policy_opt_states[net_key][constants.OPT_STATE_DICT_KEY]
 
-            # mixer_param_names = [
-            #     "hyper_w1_params",
-            #     "hyper_w2_params",
-            #     "hyper_b1_params",
-            #     "hyper_b2_params",
-            # ]
-            # for param_name in mixer_param_names:
-            #     params = getattr(trainer.store.mixing_net.hyper_params, param_name)
-            #     for param_key in params.keys():
-            #         params[param_key] = getattr(
-            #             new_states.hyper_net_params, param_name
-            #         )[param_key]
-            #
-            #     target_params = getattr(
-            #         trainer.store.mixing_net.target_hyper_params, param_name
-            #     )
-            #     for param_key in params.keys():
-            #         target_params[param_key] = getattr(
-            #             new_states.target_hyper_net_params, param_name
-            #         )[param_key]
+            mixer_param_names = [
+                "hyper_w1_params",
+                "hyper_w2_params",
+                "hyper_b1_params",
+                "hyper_b2_params",
+            ]
+            for param_name in mixer_param_names:
+                params = trainer.store.mixing_net.hyper_params[param_name]
+                for param_key in params.keys():
+                    params[param_key] = new_states.mixer_params[param_name][param_key]
+            
+                target_params = trainer.store.mixing_net.target_hyper_params[param_name]
+                for param_key in params.keys():
+                    target_params[param_key] = new_states.target_mixer_params[param_name][param_key]
 
             # TODO (sasha): I don't think this will update properly
-            trainer.store.mixing_net.hyper_params = new_states.mixer_params
-            trainer.store.mixing_net.target_hyper_params = new_states.mixer_params
+            # trainer.store.mixing_net.hyper_params = new_states.mixer_params
+            # trainer.store.mixing_net.target_hyper_params = new_states.mixer_params
 
-            trainer.store.mixer_opt_state[
-                constants.OPT_STATE_DICT_KEY
-            ] = new_states.mixer_opt_state[constants.OPT_STATE_DICT_KEY]
+            trainer.store.mixer_opt_state[constants.OPT_STATE_DICT_KEY] = new_states.mixer_opt_state[constants.OPT_STATE_DICT_KEY]
 
             return metrics
 

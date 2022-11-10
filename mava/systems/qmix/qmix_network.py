@@ -13,14 +13,6 @@ from chex import dataclass
 from acme.jax import utils
 
 
-@dataclass
-class HyperParams:
-    hyper_w1_params: networks_lib.Params
-    hyper_w2_params: networks_lib.Params
-    hyper_b1_params: networks_lib.Params
-    hyper_b2_params: networks_lib.Params
-
-
 @dataclasses.dataclass
 class MixingNetwork:
     # TODO make more general mixing with bigger hypernet
@@ -36,12 +28,13 @@ class MixingNetwork:
         hyper_b2_params,
         output_dim: int,
     ) -> None:
-        self.hyper_params = HyperParams(
-            hyper_w1_params=hyper_w1_params,
-            hyper_w2_params=hyper_w2_params,
-            hyper_b1_params=hyper_b1_params,
-            hyper_b2_params=hyper_b2_params,
-        )
+        self.hyper_params = {
+            "hyper_w1_params":hyper_w1_params,
+            "hyper_w2_params":hyper_w2_params,
+            "hyper_b1_params":hyper_b1_params,
+            "hyper_b2_params":hyper_b2_params,
+        }
+
         self.target_hyper_params = copy.deepcopy(self.hyper_params)
 
         self.hyper_w1_net = hyper_w1_net
@@ -51,22 +44,22 @@ class MixingNetwork:
 
         self.output_dim = output_dim
         # TODO (sasha): params first
-        def forward_fn(env_states, agent_q_values, hyper_params: HyperParams):
+        def forward_fn(env_states, agent_q_values, hyper_params):
             b, t, num_agents = agent_q_values.shape[:3]
 
             agent_q_values = jnp.reshape(agent_q_values, (-1, 1, num_agents))
             env_states = jnp.reshape(env_states, (-1, env_states.shape[-1]))
 
-            w1 = hyper_w1_net.apply(hyper_params.hyper_w1_params, env_states)
+            w1 = hyper_w1_net.apply(hyper_params["hyper_w1_params"], env_states)
             w1 = jnp.abs(jnp.reshape(w1, (-1, num_agents, self.output_dim)))
 
-            b1 = hyper_b1_net.apply(hyper_params.hyper_b1_params, env_states)
+            b1 = hyper_b1_net.apply(hyper_params["hyper_b1_params"], env_states)
             b1 = jnp.reshape(b1, (-1, 1, self.output_dim))
 
-            w2 = hyper_w2_net.apply(hyper_params.hyper_w2_params, env_states)
+            w2 = hyper_w2_net.apply(hyper_params["hyper_w2_params"], env_states)
             w2 = jnp.abs(jnp.reshape(w2, (-1, self.output_dim, 1)))
 
-            b2 = hyper_b2_net.apply(hyper_params.hyper_b2_params, env_states)
+            b2 = hyper_b2_net.apply(hyper_params["hyper_b2_params"], env_states)
             b2 = jnp.reshape(b2, (-1, 1, 1))
 
             hidden = jax.nn.elu(jnp.matmul(agent_q_values, w1) + b1)

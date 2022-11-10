@@ -61,11 +61,9 @@ class QmixTrainerInit(BaseTrainerInit):
             }  # pytype: disable=attribute-error
 
         # Wrap opt_states in a mutable type (dict) since optax return an immutable tuple
-        builder.store.mixer_opt_state = {
-            constants.OPT_STATE_DICT_KEY: builder.store.mixer_optimiser.init(
-                builder.store.mixing_net.hyper_params
-            )
-        }
+        builder.store.mixer_opt_state = {constants.OPT_STATE_DICT_KEY: builder.store.mixer_optimiser.init(
+                                            builder.store.mixing_net.hyper_params
+                                        )}
 
 
 class QmixSingleTrainerInit(QmixTrainerInit):

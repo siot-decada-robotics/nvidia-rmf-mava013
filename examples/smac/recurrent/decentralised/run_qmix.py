@@ -29,7 +29,7 @@ from mava.utils.loggers import logger_utils
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "map_name",
-    "3m",
+    "8m",
     "Starcraft 2 micromanagement map name (str).",
 )
 
@@ -75,11 +75,11 @@ def main(_: Any) -> None:
 
     # Optimisers.
     policy_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-5e-4)
     )
 
     mixer_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-5e-4)
     )
     # Create the system.
     system = qmix.QmixSystem()
@@ -93,11 +93,11 @@ def main(_: Any) -> None:
         policy_optimiser=policy_optimiser,
         mixer_optimiser=mixer_optimiser,
         run_evaluator=True,
-        epsilon_decay_timesteps=50000,
-        sample_batch_size=64,
-        num_executors=1,
+        epsilon_decay_timesteps=10000,
+        sample_batch_size=32,
+        num_executors=3,
         multi_process=True,
-        samples_per_insert=32,
+        samples_per_insert=8,
         min_data_server_size=100,
         terminal="gnome-terminal",
         sequence_length=20,

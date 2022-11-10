@@ -81,8 +81,10 @@ class QmixLoss(Loss):
             """
 
             def policy_loss_fn(
-                params: Any,
-                target_params: Any,
+                policy_params: Any,
+                mixer_params: Any,
+                target_policy_params: Any,
+                target_mixer_params: Any,
                 all_policy_states: Any,
                 env_states: Any,
                 all_observations: Any,
@@ -91,10 +93,6 @@ class QmixLoss(Loss):
                 all_discounts: jnp.ndarray,
             ) -> Tuple[jnp.ndarray, Dict[str, jnp.ndarray]]:
                 """Inner policy loss function: see outer function for parameters."""
-                # unpack parameters
-                policy_params, mixer_params = params
-                target_policy_params, target_mixer_params = target_params
-
                 num_agents = len(all_actions)
                 b, t = list(all_actions.values())[0].shape[:2]
 
@@ -186,9 +184,11 @@ class QmixLoss(Loss):
 
                 return loss, {"total_loss": loss}
 
-            policy_grads, loss_info_policy = jax.grad(policy_loss_fn, has_aux=True)(
-                (policy_params, mixer_params),
-                (target_policy_params, target_mixer_params),
+            (policy_grads, mixer_grads), loss_info_policy = jax.grad(policy_loss_fn, argnums=(0,1), has_aux=True)(
+                policy_params, 
+                mixer_params,
+                target_policy_params, 
+                target_mixer_params,
                 policy_states,
                 env_states,
                 observations,
@@ -197,7 +197,7 @@ class QmixLoss(Loss):
                 discounts,
             )
 
-            return policy_grads, loss_info_policy
+            return (policy_grads, mixer_grads), loss_info_policy
 
         # Save the gradient funcitons.
         trainer.store.policy_grad_fn = policy_loss_grad_fn

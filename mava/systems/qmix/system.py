@@ -39,14 +39,14 @@ from mava.systems.qmix.components import updating as qmix_updating
 class QmixSystem(System):
     @staticmethod
     def design() -> Tuple[DesignSpec, Any]:
-        """System design for IPPO with single optimiser.
+        """System design for QMIX.
 
         Args:
             None.
 
         Returns:
-            system: design spec for IPPO
-            default_params: default IPPO configuration
+            system: design spec for QMIX
+            default_params: default QMIX configuration
         """
         # Set the default configs
         default_params = QmixConfig()
