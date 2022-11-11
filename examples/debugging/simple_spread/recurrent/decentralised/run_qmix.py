@@ -105,9 +105,10 @@ def main(_: Any) -> None:
         sample_batch_size=64,
         num_executors=1,
         multi_process=True,
-        samples_per_insert=32,
+        samples_per_insert=16,
         min_data_server_size=100,
         terminal="gnome-terminal",
+        max_size=5_000,
         sequence_length=20,
         period=10,
     )

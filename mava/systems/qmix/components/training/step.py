@@ -15,6 +15,7 @@
 
 """Trainer components for gradient step calculations."""
 import abc
+from functools import partial
 import time
 from dataclasses import dataclass
 from distutils.command.config import config
@@ -71,234 +72,294 @@ class QmixStep(Step):
         Returns:
             None.
         """
+        trainer.store.step_fn = partial(self.step, trainer=trainer)
 
-        @jit
-        def sgd_step(
-            states: QmixTrainingState, sample: reverb.ReplaySample
-        ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
-            """Performs a minibatch SGD step.
+    @partial(jit, static_argnames=["self", "trainer"])
+    def sgd_step(
+        self,
+        states: QmixTrainingState,
+        sample: reverb.ReplaySample,
+        trainer: SystemTrainer,
+    ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
+        """Performs a minibatch SGD step.
 
-            Args:
-                states: Training states (network params and optimiser states).
-                sample: Reverb sample.
+        Args:
+            states: Training states (network params and optimiser states).
+            sample: Reverb sample.
+            trainer: SystemTrainer.
 
-            Returns:
-                Tuple[new state, metrics].
-            """
+        Returns:
+            Tuple[new state, metrics].
+        """
+        observations, actions, rewards, discounts, extras = self.get_data(sample)
 
-            # Extract the data.
-            data = sample.data
+        params, target_params = self.get_params_from_state(states)
+        opt_states = self.extract_opt_state(states)
 
-            observations, actions, rewards, discounts, extras = (
-                data.observations,
-                data.actions,
-                data.rewards,
-                data.discounts,
-                data.extras,
+        grads, grad_metrics = self.grad(
+            trainer.store.policy_grad_fn,
+            params,
+            target_params,
+            observations,
+            actions,
+            rewards,
+            discounts,
+            extras,
+        )
+
+        params, target_params, opt_states, update_metrics = self.update_policies(
+            trainer, grads, params, target_params, opt_states, states.trainer_iteration
+        )
+
+        metrics = self.format_metrics(grad_metrics, update_metrics)
+
+        new_states = self.make_training_state(
+            params,
+            target_params,
+            opt_states,
+            states.random_key,
+            states.trainer_iteration,
+        )
+        return new_states, metrics
+
+    def step(
+        self, sample: reverb.ReplaySample, trainer: SystemTrainer
+    ) -> Tuple[Dict[str, jnp.ndarray]]:
+        """Step over the reverb sample and update the parameters / optimiser states.
+
+        Args:
+            sample: Reverb sample.
+
+        Returns:
+            Metrics from SGD step.
+        """
+
+        params, target_params = self.get_params_from_store(trainer)
+
+        opt_states = self.get_opt_states(trainer)
+
+        _, random_key = jax.random.split(trainer.store.base_key)
+        trainer.store.trainer_iter += 1
+        states = self.make_training_state(
+            params, target_params, opt_states, random_key, trainer.store.trainer_iter
+        )
+
+        new_states, metrics = self.sgd_step(states, sample, trainer)
+
+        self.update_store(new_states, trainer)
+
+        return metrics
+
+    # ------------------- Step utility methods -------------------
+    def get_params_from_store(self, trainer: SystemTrainer):
+        networks = trainer.store.networks
+
+        policy_params = {
+            net_key: networks[net_key].policy_params for net_key in networks.keys()
+        }
+        target_policy_params = {
+            net_key: networks[net_key].target_policy_params
+            for net_key in networks.keys()
+        }
+        mixer_params = trainer.store.mixing_net.hyper_params
+        target_mixer_params = trainer.store.mixing_net.target_hyper_params
+
+        policies = (policy_params, mixer_params)
+        targets = (target_policy_params, target_mixer_params)
+
+        return policies, targets
+
+    def get_opt_states(self, trainer: SystemTrainer):
+        return trainer.store.policy_opt_states, trainer.store.mixer_opt_state
+
+    def make_training_state(
+        self, policy_params, target_params, opt_states, random_key, trainer_iteration
+    ):
+        q_policy_params, mixer_params = policy_params
+        q_target_policy_params, target_mixer_params = target_params
+        policy_opt_states, mixer_opt_state = opt_states
+
+        return QmixTrainingState(
+            policy_params=q_policy_params,
+            target_policy_params=q_target_policy_params,
+            mixer_params=mixer_params,
+            target_mixer_params=target_mixer_params,
+            policy_opt_states=policy_opt_states,
+            mixer_opt_state=mixer_opt_state,
+            random_key=random_key,
+            trainer_iteration=trainer_iteration,
+        )
+
+    def update_store(self, new_states: QmixTrainingState, trainer: SystemTrainer):
+        trainer.store.base_key = new_states.random_key
+
+        for net_key in trainer.store.networks.keys():
+            # UPDATING THE PARAMETERS IN THE NETWORK IN THE STORE
+
+            # The for loop below is needed to not lose the param reference.
+            net_params = trainer.store.networks[net_key].policy_params
+            for param_key in net_params.keys():
+                net_params[param_key] = new_states.policy_params[net_key][param_key]
+
+            target_net_params = trainer.store.networks[net_key].target_policy_params
+            for param_key in target_net_params.keys():
+                target_net_params[param_key] = new_states.target_policy_params[net_key][
+                    param_key
+                ]
+
+            # Update the policy optimiser
+            # The opt_states need to be wrapped in a dict so as not to lose
+            # the reference.
+            trainer.store.policy_opt_states[net_key][
+                constants.OPT_STATE_DICT_KEY
+            ] = new_states.policy_opt_states[net_key][constants.OPT_STATE_DICT_KEY]
+
+        mixer_param_names = [
+            "hyper_w1_params",
+            "hyper_w2_params",
+            "hyper_b1_params",
+            "hyper_b2_params",
+        ]
+        for param_name in mixer_param_names:
+            params = trainer.store.mixing_net.hyper_params[param_name]
+            for param_key in params.keys():
+                params[param_key] = new_states.mixer_params[param_name][param_key]
+
+            target_params = trainer.store.mixing_net.target_hyper_params[param_name]
+            for param_key in params.keys():
+                target_params[param_key] = new_states.target_mixer_params[param_name][
+                    param_key
+                ]
+
+        # TODO (sasha): I don't think this will update properly
+        # trainer.store.mixing_net.hyper_params = new_states.mixer_params
+        # trainer.store.mixing_net.target_hyper_params = new_states.mixer_params
+
+        trainer.store.mixer_opt_state[
+            constants.OPT_STATE_DICT_KEY
+        ] = new_states.mixer_opt_state[constants.OPT_STATE_DICT_KEY]
+
+    # ------------------- sgd_step utils -------------------
+    def get_data(self, sample: reverb.ReplaySample):
+        # Extract the data.
+        data = sample.data
+
+        return (
+            data.observations,
+            data.actions,
+            data.rewards,
+            data.discounts,
+            data.extras,
+        )
+
+    def get_params_from_state(self, states: QmixTrainingState):
+        return (states.policy_params, states.mixer_params,), (
+            states.target_policy_params,
+            states.target_mixer_params,
+        )
+
+    def extract_opt_state(self, states: QmixTrainingState):
+        return states.policy_opt_states, states.mixer_opt_state
+
+    def grad(
+        self,
+        grad_fn,
+        policy_params,
+        target_policy_params,
+        observations,
+        actions,
+        rewards,
+        discounts,
+        extras,
+    ):
+        q_policy_params, mixer_params = policy_params
+        q_target_policy_params, target_mixer_params = target_policy_params
+        return grad_fn(
+            q_policy_params,
+            mixer_params,
+            q_target_policy_params,
+            target_mixer_params,
+            extras["policy_states"],
+            extras["s_t"],
+            observations,
+            actions,
+            rewards,
+            discounts,
+        )
+
+    def update_policies(
+        self,
+        trainer: SystemTrainer,
+        grads,
+        params,
+        target_params,
+        opt_states,
+        trainer_iter,
+    ):
+        # TODO (sasha): this should possibly return metrics also?
+        policy_gradients, mixer_gradients = grads
+
+        q_policy_params, mixer_params = params
+        q_target_policy_params, target_mixer_params = target_params
+
+        policy_opt_states, mixer_opt_state = opt_states
+
+        metrics = {}
+        for agent_net_key in trainer.store.trainer_agent_net_keys.values():
+            # Update the policy networks and optimisers.
+            (
+                policy_updates,
+                policy_opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
+            ) = trainer.store.policy_optimiser.update(
+                policy_gradients[agent_net_key],
+                policy_opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
+            )
+            q_policy_params[agent_net_key] = optax.apply_updates(
+                q_policy_params[agent_net_key], policy_updates
             )
 
-            # policy_opt_states = trainer.store.policy_opt_states
-            target_policy_params = states.target_policy_params
-            policy_params = states.policy_params
-            mixer_params = states.mixer_params
-            target_mixer_params = states.target_mixer_params
-            policy_opt_states = states.policy_opt_states
-            mixer_opt_state = states.mixer_opt_state
+        # Mixer update
+        (
+            mixer_updates,
+            mixer_opt_state[constants.OPT_STATE_DICT_KEY],
+        ) = trainer.store.mixer_optimiser.update(
+            mixer_gradients,
+            mixer_opt_state[constants.OPT_STATE_DICT_KEY],
+        )
+        mixer_params = optax.apply_updates(mixer_params, mixer_updates)
 
-            # # TODO (Ruan): Double check this
-            # agent_nets = trainer.store.trainer_agent_net_keys
+        # update target q net
+        q_target_policy_params = rlax.periodic_update(
+            q_policy_params,
+            q_target_policy_params,
+            trainer_iter,
+            self.config.target_update_period,
+        )
 
+        # update target mixer net
+        target_mixer_params = rlax.periodic_update(
+            mixer_params,
+            target_mixer_params,
+            trainer_iter,
+            self.config.target_update_period,
+        )
+
+        return (
+            (q_policy_params, mixer_params),
             (
-                policy_gradients,
-                mixer_gradients,
-            ), policy_agent_metrics = trainer.store.policy_grad_fn(
-                policy_params,
-                mixer_params,
-                target_policy_params,
+                q_target_policy_params,
                 target_mixer_params,
-                extras["policy_states"],
-                extras["s_t"],
-                observations,
-                actions,
-                rewards,
-                discounts,
-            )
+            ),
+            (policy_opt_states, mixer_opt_state),
+            metrics,
+        )
 
-            metrics = {}
-            for agent_net_key in trainer.store.trainer_agent_net_keys.values():
-                # Update the policy networks and optimisers.
-                # Apply updates
-                # TODO (dries): Use one optimiser per network type here and not
-                # just one.
-                (
-                    policy_updates,
-                    policy_opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
-                ) = trainer.store.policy_optimiser.update(
-                    policy_gradients[agent_net_key],
-                    policy_opt_states[agent_net_key][constants.OPT_STATE_DICT_KEY],
-                )
-                policy_params[agent_net_key] = optax.apply_updates(
-                    policy_params[agent_net_key], policy_updates
-                )
-
-                # policy_agent_metrics[agent_key]["norm_policy_grad"] = optax.global_norm(
-                #     policy_gradients[agent_key]
-                # )
-                # policy_agent_metrics[agent_key][
-                #     "norm_policy_updates"
-                # ] = optax.global_norm(policy_updates)
-                # metrics[agent_key] = policy_agent_metrics[agent_key]
-
-            # Mixer update
-            (
-                mixer_updates,
-                mixer_opt_state[constants.OPT_STATE_DICT_KEY],
-            ) = trainer.store.mixer_optimiser.update(
-                mixer_gradients,
-                mixer_opt_state[constants.OPT_STATE_DICT_KEY],
-            )
-            mixer_params = optax.apply_updates(mixer_params, mixer_updates)
-
-            # update target net
-            target_policy_params = rlax.periodic_update(
-                policy_params,
-                target_policy_params, 
-                states.trainer_iteration,
-                self.config.target_update_period,
-            )
-
-            # update target net
-            target_mixer_params = rlax.periodic_update(
-                mixer_params,
-                target_mixer_params, 
-                states.trainer_iteration,
-                self.config.target_update_period,
-            )
-
-            metrics = {**metrics, **policy_agent_metrics}
-
-            # Set the metrics
-            metrics = jax.tree_util.tree_map(jnp.mean, metrics)
-
-            # TODO (sasha): rename hyper net params to mixer params
-            new_states = QmixTrainingState(
-                policy_params=policy_params,
-                target_policy_params=target_policy_params,
-                mixer_params=mixer_params,
-                target_mixer_params=target_mixer_params,
-                policy_opt_states=policy_opt_states,
-                mixer_opt_state=mixer_opt_state,
-                random_key=states.random_key,
-                trainer_iteration=states.trainer_iteration,
-            )
-            return new_states, metrics
-
-        def step(sample: reverb.ReplaySample) -> Tuple[Dict[str, jnp.ndarray]]:
-            """Step over the reverb sample and update the parameters / optimiser states.
-
-            Args:
-                sample: Reverb sample.
-
-            Returns:
-                Metrics from SGD step.
-            """
-
-            # Repeat training for the given number of epoch, taking a random
-            # permutation for every epoch.
-            networks = trainer.store.networks
-
-            policy_params = {
-                net_key: networks[net_key].policy_params for net_key in networks.keys()
-            }
-            target_policy_params = {
-                net_key: networks[net_key].target_policy_params
-                for net_key in networks.keys()
-            }
-            mixer_params = trainer.store.mixing_net.hyper_params
-            target_mixer_params = trainer.store.mixing_net.target_hyper_params
-
-            policy_opt_states = trainer.store.policy_opt_states
-            mixer_opt_state = trainer.store.mixer_opt_state
-
-            _, random_key = jax.random.split(trainer.store.base_key)
-
-            # steps = trainer.store.trainer_counts["trainer_steps"]
-            trainer.store.trainer_iter += 1
-            states = QmixTrainingState(
-                policy_params=policy_params,
-                target_policy_params=target_policy_params,
-                mixer_params=mixer_params,
-                target_mixer_params=target_mixer_params,
-                policy_opt_states=policy_opt_states,
-                mixer_opt_state=mixer_opt_state,
-                random_key=random_key,
-                trainer_iteration=trainer.store.trainer_iter,
-            )
-
-            new_states, metrics = sgd_step(states, sample)
-
-            # Set the new variables
-            # TODO (dries): key is probably not being store correctly.
-            # The variable client might lose reference to it when checkpointing.
-            # We also need to add the optimiser and random_key to the variable
-            # server.
-            trainer.store.base_key = new_states.random_key
-
-            for net_key in policy_params.keys():
-                # UPDATING THE PARAMETERS IN THE NETWORK IN THE STORE
-
-                # The for loop below is needed to not lose the param reference.
-                net_params = trainer.store.networks[net_key].policy_params
-                for param_key in net_params.keys():
-                    net_params[param_key] = new_states.policy_params[net_key][param_key]
-
-                target_net_params = trainer.store.networks[net_key].target_policy_params
-                for param_key in target_net_params.keys():
-                    target_net_params[param_key] = new_states.target_policy_params[
-                        net_key
-                    ][param_key]
-
-                # Update the policy optimiser
-                # The opt_states need to be wrapped in a dict so as not to lose
-                # the reference.
-                trainer.store.policy_opt_states[net_key][
-                    constants.OPT_STATE_DICT_KEY
-                ] = new_states.policy_opt_states[net_key][constants.OPT_STATE_DICT_KEY]
-
-            mixer_param_names = [
-                "hyper_w1_params",
-                "hyper_w2_params",
-                "hyper_b1_params",
-                "hyper_b2_params",
-            ]
-            for param_name in mixer_param_names:
-                params = trainer.store.mixing_net.hyper_params[param_name]
-                for param_key in params.keys():
-                    params[param_key] = new_states.mixer_params[param_name][param_key]
-            
-                target_params = trainer.store.mixing_net.target_hyper_params[param_name]
-                for param_key in params.keys():
-                    target_params[param_key] = new_states.target_mixer_params[param_name][param_key]
-
-            # TODO (sasha): I don't think this will update properly
-            # trainer.store.mixing_net.hyper_params = new_states.mixer_params
-            # trainer.store.mixing_net.target_hyper_params = new_states.mixer_params
-
-            trainer.store.mixer_opt_state[constants.OPT_STATE_DICT_KEY] = new_states.mixer_opt_state[constants.OPT_STATE_DICT_KEY]
-
-            return metrics
-
-        trainer.store.step_fn = step
+    def format_metrics(self, grad_metrics, update_metrics):
+        return jax.tree_map(jnp.mean, {**grad_metrics, **update_metrics})
 
     @staticmethod
     def required_components() -> List[Type[Callback]]:
         """List of other Components required in the system for this Component to function.
-
-        GAE required to set up trainer.store.gae_fn.
-        MAPGEpochUpdate required for config num_epochs, num_minibatches,
-        and trainer.store.epoch_update_fn.
-        MinibatchUpdate required to set up trainer.store.opt_states.
-        ParallelSequenceAdder required for config sequence_length.
 
         Returns:
             List of required component classes.

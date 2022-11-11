@@ -184,10 +184,12 @@ class QmixLoss(Loss):
 
                 return loss, {"total_loss": loss}
 
-            (policy_grads, mixer_grads), loss_info_policy = jax.grad(policy_loss_fn, argnums=(0,1), has_aux=True)(
-                policy_params, 
+            (policy_grads, mixer_grads), loss_info_policy = jax.grad(
+                policy_loss_fn, argnums=(0, 1), has_aux=True
+            )(
+                policy_params,
                 mixer_params,
-                target_policy_params, 
+                target_policy_params,
                 target_mixer_params,
                 policy_states,
                 env_states,

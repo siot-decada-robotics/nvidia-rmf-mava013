@@ -99,7 +99,7 @@ def main(_: Any) -> None:
         multi_process=True,
         samples_per_insert=8,
         min_data_server_size=100,
-        terminal="gnome-terminal",
+        # terminal="gnome-terminal",
         sequence_length=20,
         period=10,
     )
