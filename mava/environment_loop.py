@@ -280,7 +280,9 @@ class ParallelEnvironmentLoop(acme.core.Worker):
                         results.update(interval_stats)
 
                         # Send the info to main.
-                        send_info_to_main({"done": False, "mean_return": results["mean_episode_return"]})
+                        send_info_to_main({"done": False, "mean_return": results["mean_episode_return"]}, port=self._executor.store.port)
+
+                        
                         
                         interval_stats_json = {
                             "eval_" + str(k): v for k, v in interval_stats.items()

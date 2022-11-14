@@ -89,15 +89,15 @@ def partial_kwargs(function: Callable[..., Any], **kwargs: Any) -> Callable[...,
     return functools.partial(function, **kwargs)
 
 
-def send_info_to_main(info):
+def send_info_to_main(info, port=8000):
     from multiprocessing.connection import Client
-    address = ('localhost', 8000)
+    address = ('localhost', port)
     conn = Client(address, authkey=b'secret password')
     conn.send(info)
     conn.close()
 
-def wait_for_results():
-    address = ('localhost', 8000)     # family is deduced to be 'AF_INET'
+def wait_for_results(port=8000):
+    address = ('localhost', port)     # family is deduced to be 'AF_INET'
     listener = Listener(address, authkey=b'secret password')
     conn = listener.accept()
     msg = conn.recv()
@@ -117,7 +117,7 @@ def termination_fn(
     """
     
     # Indicate that we are done in the main process.
-    send_info_to_main({"done": True})
+    send_info_to_main({"done": True}, port=parameter_server.store.port)
 
     if parameter_server.store.manager_pid:
         # parent_pid: the pid of the main thread process

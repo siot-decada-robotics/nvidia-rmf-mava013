@@ -38,6 +38,7 @@ class DistributorConfig:
     single_process_max_episodes: Optional[int] = None
     is_test: Optional[bool] = False
     wait: Optional[bool] = False
+    port: Optional[int] = None
 
 
 class Distributor(Component):
@@ -63,6 +64,11 @@ class Distributor(Component):
         Returns:
             None.
         """
+
+        # Setup socket port for communicating with the main thread.
+        builder.store.port = self.config.port
+
+        # Create the launcher.
         builder.store.program = Launcher(
             multi_process=self.config.multi_process,
             nodes_on_gpu=self.config.nodes_on_gpu,
