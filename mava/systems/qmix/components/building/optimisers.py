@@ -3,9 +3,10 @@ from typing import Optional
 
 import optax
 from optax._src import base as optax_base
-from mava.components.building.optimisers import Optimisers
 
+from mava.components.building.optimisers import Optimisers
 from mava.core_jax import SystemBuilder
+
 
 @dataclass
 class MixerOptimisersConfig:
@@ -13,6 +14,7 @@ class MixerOptimisersConfig:
     mixer_adam_epsilon: float = 1e-5
     mixer_max_gradient_norm: float = 10.0
     mixer_optimiser: Optional[optax_base.GradientTransformation] = None
+
 
 class MixerOptimiser(Optimisers):
     def __init__(
@@ -45,8 +47,7 @@ class MixerOptimiser(Optimisers):
         else:
             builder.store.mixer_optimiser = self.config.mixer_optimiser
 
-    
     @staticmethod
     def name() -> str:
         """Static method that returns component name."""
-        return "mixer_optimiser" 
+        return "mixer_optimiser"

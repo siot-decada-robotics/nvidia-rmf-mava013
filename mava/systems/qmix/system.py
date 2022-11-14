@@ -14,26 +14,19 @@
 # limitations under the License.
 
 """Jax IDQN system."""
-import imp
 from typing import Any, Tuple
 
 from mava.components import building, executing, training, updating
 from mava.components.building.guardrails import ComponentDependencyGuardrails
 from mava.specs import DesignSpec
 from mava.systems import System
-from mava.systems.qmix.config import QmixConfig
-
-from mava.systems.idqn.components import executing as dqn_executing
 from mava.systems.idqn.components import building as dqn_building
-from mava.systems.idqn.components import training as dqn_training
-
-from mava.systems.idrqn.components import executing as drqn_executing
-from mava.systems.idrqn.components import training as drqn_training
 from mava.systems.idrqn.components import building as drqn_building
-
-from mava.systems.qmix.components import training as qmix_training
+from mava.systems.idrqn.components import executing as drqn_executing
 from mava.systems.qmix.components import building as qmix_building
+from mava.systems.qmix.components import training as qmix_training
 from mava.systems.qmix.components import updating as qmix_updating
+from mava.systems.qmix.config import QmixConfig
 
 
 class QmixSystem(System):
@@ -76,7 +69,6 @@ class QmixSystem(System):
         trainer_process = DesignSpec(
             trainer_init=qmix_training.QmixSingleTrainerInit,
             loss=qmix_training.QmixLoss,
-            # epoch_update=training.MAPGEpochUpdate,
             sgd_step=qmix_training.QmixStep,
             step=training.DefaultTrainerStep,
             trainer_dataset=building.TrajectoryDataset,

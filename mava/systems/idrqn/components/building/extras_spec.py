@@ -24,6 +24,7 @@ from dm_env import specs
 from mava.components import Component
 from mava.core_jax import SystemBuilder
 
+
 # TODO make this a common component
 class ExtrasSpec(Component):
     @abc.abstractmethod
@@ -78,7 +79,7 @@ class DRQNExtrasSpec(ExtrasSpec):
         builder.store.extras_spec.update(net_spec)
 
         # Get the policy state specs
-        networks = builder.store.network_factory()
+        networks = self.get_network(builder)
         net_states = {}
         for agent_key, network_key in builder.store.agent_net_keys.items():
 
@@ -91,3 +92,6 @@ class DRQNExtrasSpec(ExtrasSpec):
 
         # TODO (sasha): do we need to do the update twice?
         builder.store.extras_spec.update(net_spec)
+
+    def get_network(self, builder):
+        return builder.store.network_factory()

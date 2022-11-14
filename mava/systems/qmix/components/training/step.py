@@ -83,7 +83,7 @@ class QmixStep(VDNStep):
                 params[param_key] = new_states.mixer_params[param_name][param_key]
 
             target_params = trainer.store.mixing_net.target_hyper_params[param_name]
-            for param_key in params.keys():
+            for param_key in target_params.keys():
                 target_params[param_key] = new_states.target_mixer_params[param_name][
                     param_key
                 ]
@@ -110,6 +110,7 @@ class QmixStep(VDNStep):
 
     def grad(
         self,
+        trainer,
         grad_fn,
         policy_params,
         target_policy_params,
@@ -119,19 +120,16 @@ class QmixStep(VDNStep):
         discounts,
         extras,
     ):
-        q_policy_params, mixer_params = policy_params
-        q_target_policy_params, target_mixer_params = target_policy_params
         return grad_fn(
-            q_policy_params,
-            mixer_params,
-            q_target_policy_params,
-            target_mixer_params,
-            extras["policy_states"],
-            extras["s_t"],
-            observations,
-            actions,
-            rewards,
-            discounts,
+            trainer=trainer,
+            params=policy_params,
+            target_params=target_policy_params,
+            policy_states=extras["policy_states"],
+            env_states=extras["s_t"],
+            observations=observations,
+            actions=actions,
+            rewards=rewards,
+            discounts=discounts,
         )
 
     def update_policies(

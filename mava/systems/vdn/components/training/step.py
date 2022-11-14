@@ -83,6 +83,7 @@ class VDNStep(Step):
         opt_states = self.extract_opt_state(states)
 
         grads, grad_metrics = self.grad(
+            trainer,
             trainer.store.policy_grad_fn,
             params,
             target_params,
@@ -209,6 +210,7 @@ class VDNStep(Step):
 
     def grad(
         self,
+        trainer,
         grad_fn,
         policy_params,
         target_policy_params,
@@ -219,13 +221,15 @@ class VDNStep(Step):
         extras,
     ):
         return grad_fn(
-            policy_params,
-            target_policy_params,
-            extras["policy_states"],
-            observations,
-            actions,
-            rewards,
-            discounts,
+            trainer=trainer,
+            params=policy_params,
+            target_params=target_policy_params,
+            policy_states=extras["policy_states"],
+            env_states=None,
+            observations=observations,
+            actions=actions,
+            rewards=rewards,
+            discounts=discounts,
         )
 
     def update_policies(
