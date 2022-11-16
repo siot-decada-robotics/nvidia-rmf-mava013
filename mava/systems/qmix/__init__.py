@@ -1,2 +1,2 @@
+from .networks import make_mixing_network
 from .system import QmixSystem
-from .networks import make_default_networks

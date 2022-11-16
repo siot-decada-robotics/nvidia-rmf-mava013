@@ -21,12 +21,12 @@ from mava.components.building.guardrails import ComponentDependencyGuardrails
 from mava.specs import DesignSpec
 from mava.systems import System
 from mava.systems.idqn.components import building as dqn_building
+from mava.systems.idqn.config import IDQNDefaultConfig
 from mava.systems.idrqn.components import building as drqn_building
 from mava.systems.idrqn.components import executing as drqn_executing
+from mava.systems.idrqn.components import training as drqn_training
 from mava.systems.qmix.components import building as qmix_building
 from mava.systems.qmix.components import training as qmix_training
-from mava.systems.qmix.components import updating as qmix_updating
-from mava.systems.qmix.config import QmixConfig
 
 
 class QmixSystem(System):
@@ -42,7 +42,7 @@ class QmixSystem(System):
             default_params: default QMIX configuration
         """
         # Set the default configs
-        default_params = QmixConfig()
+        default_params = IDQNDefaultConfig()
 
         # Default system processes
         # System initialization
@@ -67,7 +67,8 @@ class QmixSystem(System):
 
         # Trainer
         trainer_process = DesignSpec(
-            trainer_init=qmix_training.QmixSingleTrainerInit,
+            trainer_init=drqn_training.SingleTrainerInit,
+            mixer_init=qmix_building.MixerInit,
             loss=qmix_training.QmixLoss,
             sgd_step=qmix_training.QmixStep,
             step=training.DefaultTrainerStep,
@@ -80,12 +81,12 @@ class QmixSystem(System):
             data_server_adder_signature=building.ParallelSequenceAdderSignature,
             data_server_remover=building.reverb_components.FIFORemover,
             data_server_sampler=building.reverb_components.UniformSampler,
-            extras_spec=qmix_building.QmixExtrasSpec,
+            extras_spec=drqn_building.DRQNExtrasSpec,
         ).get()
 
         # Parameter Server
         parameter_server_process = DesignSpec(
-            parameter_server=qmix_updating.QmixParameterServer,
+            parameter_server=updating.DefaultParameterServer,
             executor_parameter_client=building.ExecutorParameterClient,
             trainer_parameter_client=building.TrainerParameterClient,
             termination_condition=updating.CountConditionTerminator,

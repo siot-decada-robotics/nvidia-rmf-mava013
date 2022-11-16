@@ -1,2 +1,2 @@
-from .extras_spec import QmixExtrasSpec
+from .mixer_init import MixerInit
 from .optimisers import MixerOptimiser

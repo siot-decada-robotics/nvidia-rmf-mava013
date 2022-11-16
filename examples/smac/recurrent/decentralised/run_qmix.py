@@ -48,12 +48,11 @@ def main(_: Any) -> None:
         _ : _
     """
     # Environment.
-    # Environment.
     environment_factory = functools.partial(make_environment, map_name=FLAGS.map_name)
 
     # Networks.
     def network_factory(*args: Any, **kwargs: Any) -> Any:
-        return qmix.make_default_networks(  # type: ignore
+        return idrqn.make_default_networks(  # type: ignore
             policy_layer_sizes=(64,),
             *args,
             **kwargs,
@@ -63,7 +62,7 @@ def main(_: Any) -> None:
     experiment_path = f"{FLAGS.base_dir}/{FLAGS.mava_id}"
 
     # Log every [log_every] seconds.
-    log_every = 2
+    log_every = 10
     logger_factory = functools.partial(
         logger_utils.make_logger,
         directory=FLAGS.base_dir,
@@ -75,11 +74,11 @@ def main(_: Any) -> None:
 
     # Optimisers.
     policy_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-5e-4)
+        optax.clip_by_global_norm(10.0), optax.scale_by_adam(), optax.scale(-1e-3)
     )
 
     mixer_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-5e-4)
+        optax.clip_by_global_norm(10.0), optax.scale_by_adam(), optax.scale(-1e-3)
     )
     # Create the system.
     system = qmix.QmixSystem()
@@ -88,12 +87,13 @@ def main(_: Any) -> None:
     system.build(
         environment_factory=environment_factory,
         network_factory=network_factory,
+        mixer_factory=qmix.make_mixing_network,
         logger_factory=logger_factory,
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
         mixer_optimiser=mixer_optimiser,
         run_evaluator=True,
-        epsilon_decay_timesteps=10000,
+        epsilon_decay_timesteps=10_000,
         sample_batch_size=32,
         num_executors=1,
         multi_process=True,
