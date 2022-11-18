@@ -15,6 +15,7 @@
 
 """Example running IPPO on debug MPE environments."""
 import functools
+import os
 from datetime import datetime
 from typing import Any
 
@@ -99,10 +100,12 @@ def main(_: Any) -> None:
         sample_batch_size=128,
         num_executors=1,
         multi_process=True,
-        # min_data_server_size=10,
-        # terminal="gnome-terminal",
-        trainer_parameter_update_period=5,
-        samples_per_insert=32,
+        min_data_server_size=10,
+        terminal="gnome-terminal",
+        # trainer_parameter_update_period=500,
+        # executor_parameter_update_period=1,
+        # executor_parameter_update_period=5,
+        # samples_per_insert=32,
     )
 
     # Launch the system.
