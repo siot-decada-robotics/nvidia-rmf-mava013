@@ -21,7 +21,7 @@ from typing import Any
 import optax
 from absl import app, flags
 
-from mava.systems import idrqn, qmix
+from mava.systems import idrqn, vdn
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
 
@@ -85,22 +85,17 @@ def main(_: Any) -> None:
     policy_optimiser = optax.chain(
         optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
     )
-    mixer_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
-    )
 
     # Create the system.
-    system = qmix.QmixSystem()
+    system = vdn.VDNSystem()
 
     # Build the system.
     system.build(
         environment_factory=environment_factory,
         network_factory=network_factory,
-        mixer_factory=qmix.make_mixing_network,
         logger_factory=logger_factory,
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
-        mixer_optimiser=mixer_optimiser,
         run_evaluator=True,
         epsilon_decay_timesteps=50000,
         sample_batch_size=64,
