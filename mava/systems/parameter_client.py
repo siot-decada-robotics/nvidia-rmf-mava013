@@ -80,17 +80,22 @@ class ParameterClient:
         # blocking the actor.
         self._executor = futures.ThreadPoolExecutor(max_workers=1)
         self._async_add_buffer: Dict[str, Any] = {}
-        self._async_request = lambda: self._executor.submit(self._request)
-        self._async_adjust = lambda: self._executor.submit(self._adjust)
-        self._async_adjust_param: Any = lambda params: self._executor.submit(
-            self._adjust_param(params)  # type: ignore
-        )
-        self._async_adjust_and_request = lambda: self._executor.submit(
-            self._adjust_and_request
-        )
-        self._async_add: Any = lambda params: self._executor.submit(
-            self._add(params)  # type: ignore
-        )
+        # self._async_request = lambda: self._executor.submit(self._request)
+        # self._async_adjust = lambda: self._executor.submit(self._adjust)
+        # self._async_adjust_param: Any = lambda params: self._executor.submit(
+        #     self._adjust_param(params)  # type: ignore
+        # )
+        # self._async_adjust_and_request = lambda: self._executor.submit(
+        #     self._adjust_and_request
+        # )
+        # self._async_add: Any = lambda params: self._executor.submit(
+        #     self._add(params)  # type: ignore
+        # )
+        self._async_request = self._request
+        self._async_adjust = self._adjust
+        self._async_adjust_param = self._adjust_param
+        self._async_adjust_and_request = self._adjust_and_request
+        self._async_add = self._add
 
         # Initialize this client's future to None to indicate to the `update()`
         # method that there is no pending/running request.
@@ -128,9 +133,9 @@ class ParameterClient:
             self._get_future = self._async_request()
             self._get_call_counter = 0
 
-        if self._get_future is not None and self._get_future.done():
+        if self._get_future is not None:  # and self._get_future.done():
             # The active request is done so copy the result and remove the future.\
-            self._copy(self._get_future.result())
+            self._copy(self._get_future)
             self._get_future = None
 
     def set_async(self, params: Dict[str, Any] = None) -> None:
@@ -154,7 +159,7 @@ class ParameterClient:
                 self._set_future = self._async_adjust_param(params)
             self._set_call_counter = 0
             return
-        if self._set_future is not None and self._set_future.done():
+        if self._set_future is not None:  # and self._set_future.done():
             self._set_future = None
 
     def set_and_get_async(self) -> None:
@@ -174,7 +179,7 @@ class ParameterClient:
             self._set_get_future = self._async_adjust_and_request()
             self._set_get_call_counter = 0
             return
-        if self._set_get_future is not None and self._set_get_future.done():
+        if self._set_get_future is not None:  # and self._set_get_future.done():
             self._set_get_future = None
 
     def add_async(self, params: Dict[str, Any]) -> None:
@@ -183,7 +188,7 @@ class ParameterClient:
         Returns:
             None.
         """
-        if self._add_future is not None and self._add_future.done():
+        if self._add_future is not None:  # and self._add_future.done():
             self._add_future = None
 
         names = params.keys()
