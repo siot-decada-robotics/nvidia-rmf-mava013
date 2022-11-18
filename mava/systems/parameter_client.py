@@ -15,7 +15,6 @@
 
 """Parameter client for Jax system. Adapted from Deepmind's Acme library"""
 
-import time
 from concurrent import futures
 from typing import Any, Dict, List, Optional, Union
 
@@ -33,8 +32,8 @@ class ParameterClient:
         self,
         client: ParameterServer,
         parameters: Dict[str, Any],
-        get_keys: List[str] = None,
-        set_keys: List[str] = None,
+        get_keys: Union[List[str], None] = None,
+        set_keys: Union[List[str], None] = None,
         update_period: int = 1,
         devices: Dict[str, Optional[Union[str, jax.xla.Device]]] = {},
     ):
@@ -79,7 +78,7 @@ class ParameterClient:
 
         # Create a single background thread to fetch parameters without necessarily
         # blocking the actor.
-        self._executor = futures.ThreadPoolExecutor(max_workers=4)
+        # self._executor = futures.ThreadPoolExecutor(max_workers=4)
         self._async_add_buffer: Dict[str, Any] = {}
         # self._async_request = lambda: self._executor.submit(self._request)
         self._async_request = lambda: client.futures.get_parameters(self._get_keys)
@@ -87,9 +86,9 @@ class ParameterClient:
         self._async_adjust = lambda: client.futures.set_parameters(
             {key: self._parameters[key] for key in self._set_keys},
         )
-        self._async_adjust_and_request = lambda: self._executor.submit(
-            self._adjust_and_request
-        )
+        # self._async_adjust_and_request = lambda: self._executor.submit(
+        #     self._adjust_and_request
+        # )
         # self._async_add: Any = lambda params: self._executor.submit(
         #     self._add(params)  # type: ignore
         # )
@@ -122,9 +121,11 @@ class ParameterClient:
         self._client.futures.set_parameters(
             {key: self._parameters[key] for key in self._set_keys},
         )
+        # not sure how these futures will interact
+        # will it fetch the parameters set above?
         get_future = self._client.futures.get_parameters(self._get_keys)
-        get_future.add_done_callback(lambda fut: self._copy(fut))
-        # self._copy()
+        get_future.add_done_callback(lambda ctx: self._copy(ctx.result()))
+
         return get_future
 
     def get_async(self) -> None:
