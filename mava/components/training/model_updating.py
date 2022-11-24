@@ -237,7 +237,6 @@ class EpochUpdate(Utility):
     def required_components() -> List[Type[Callback]]:
         """List of other Components required in the system for this Component to function.
 
-        Step required to set up trainer.store.full_batch_size.
         MinibatchUpdate required to set up trainer.store.minibatch_update_fn.
 
         Returns:
@@ -295,24 +294,23 @@ class MAPGEpochUpdate(EpochUpdate):
 
             base_key, shuffle_key = jax.random.split(key)
 
-            # TODO (dries): This assert is ugly. Is there a better way to do this check?
-            # Maybe using a tree map of some sort?
-            # shapes = jax.tree_util.tree_map(
-            #         lambda x: x.shape[0]==trainer.store.full_batch_size, batch
-            #     )
-            # assert ...
-            assert (
-                list(batch.observations.values())[0].observation.shape[0]
-                == trainer.store.full_batch_size
-            )
+            # Note (dries): This computation is only performed once at compilation tome
+            # and not at every epoch step.
+            batch_shape = jax.tree_util.tree_leaves(
+                list(batch.observations.values())[0].observation
+            )[0].shape[0]
 
-            permutation = jax.random.permutation(
-                shuffle_key, trainer.store.full_batch_size
-            )
+            permutation = jax.random.permutation(shuffle_key, batch_shape)
 
             shuffled_batch = jax.tree_util.tree_map(
                 lambda x: jnp.take(x, permutation, axis=0), batch
             )
+
+            # Flatten the batch.
+            shuffled_batch = jax.tree_util.tree_map(
+                lambda x: x.reshape((-1,) + x.shape[2:]), shuffled_batch
+            )
+
             minibatches = jax.tree_util.tree_map(
                 lambda x: jnp.reshape(
                     x, [self.config.num_minibatches, -1] + list(x.shape[1:])

@@ -191,21 +191,6 @@ class MAPGWithTrustRegionStep(Step):
         """
         self.config = config
 
-    def on_training_init_start(self, trainer: SystemTrainer) -> None:
-        """Compute and store full batch size.
-
-        Args:
-            trainer: SystemTrainer.
-
-        Returns:
-            None.
-        """
-        # Note (dries): Assuming the batch and sequence dimensions are flattened.
-        trainer.store.full_batch_size = (
-            trainer.store.global_config.sample_batch_size
-            * (trainer.store.global_config.sequence_length - 1)
-        )
-
     # flake8: noqa: C901
     def on_training_step_fn(self, trainer: SystemTrainer) -> None:
         """Define and store the SGD step function for MAPGWithTrustRegion.
@@ -361,21 +346,14 @@ class MAPGWithTrustRegionStep(Step):
                 behavior_values=behavior_values,
             )
 
-            # Concatenate all trajectories. Reshape from [num_sequences, num_steps,..]
-            # to [num_sequences * num_steps,..]
             agent_0_t_vals = list(target_values.values())[0]
             assert len(agent_0_t_vals) > 1
-            num_sequences = agent_0_t_vals.shape[0]
-            num_steps = agent_0_t_vals.shape[1]
-            batch_size = num_sequences * num_steps
+            batch_size = agent_0_t_vals.shape[0]
+
             assert batch_size % trainer.store.global_config.num_minibatches == 0, (
                 "Num minibatches must divide batch size. Got batch_size={}"
                 " num_minibatches={}."
             ).format(batch_size, trainer.store.global_config.num_minibatches)
-
-            batch = jax.tree_util.tree_map(
-                lambda x: x.reshape((batch_size,) + x.shape[2:]), trajectories
-            )
 
             (
                 new_key,
@@ -392,7 +370,7 @@ class MAPGWithTrustRegionStep(Step):
                     states.critic_params,
                     states.policy_opt_states,
                     states.critic_opt_states,
-                    batch,
+                    trajectories,
                 ),
                 (),
                 length=trainer.store.global_config.num_epochs,
