@@ -61,8 +61,6 @@ def main(_: Any) -> None:
             critic_layer_sizes=[64, 64],
             policy_recurrent_layer_sizes=[64],
             policy_layers_after_recurrent=[64],
-            # critic_recurrent_layer_sizes=[64],
-            # critic_layers_after_recurrent=[64],
             orthogonal_initialisation=True,
             policy_network_head_weight_gain=0.01,
             *args,
