@@ -109,7 +109,7 @@ def main(_: Any) -> None:
         critic_optimiser=critic_optimiser,
         run_evaluator=True,
         # sample_batch_size=320,
-        sample_batch_size=5,
+        epoch_batch_size=5,
         max_queue_size=40,
         # max_queue_size=640,
         num_epochs=15,
