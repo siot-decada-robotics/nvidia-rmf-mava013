@@ -177,7 +177,7 @@ class QmixStep(VDNStep):
         mixer_params = optax.apply_updates(mixer_params, mixer_updates)
 
         # update target mixer net
-        target_mixer_params = rlax.periodic_update(
+        target_mixer_params = optax.periodic_update(
             mixer_params,
             target_mixer_params,
             trainer_iter,

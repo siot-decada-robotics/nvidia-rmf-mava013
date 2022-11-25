@@ -93,7 +93,7 @@ class SMACWrapper(ParallelEnvWrapper):
 
         # Possibly add state information to extras
         if self._return_state_info:
-            state = self.get_state()
+            state = self._environment.get_state()
             extras = {"s_t": state}
         else:
             extras = {}
@@ -131,7 +131,7 @@ class SMACWrapper(ParallelEnvWrapper):
 
         # Possibly add state information to extras
         if self._return_state_info:
-            state = self.get_state()
+            state = self._environment.get_state()
             extras = {"s_t": state}
         else:
             extras = {}
@@ -243,17 +243,15 @@ class SMACWrapper(ParallelEnvWrapper):
         Returns:
             types.Observation: spec for environment.
         """
-        self._environment.reset()
-
-        observations = self._environment.get_obs()
-        legal_actions = self._get_legal_actions()
+        observation_spec = np.zeros(self._environment.get_obs_size(), np.float32)
+        legal_actions_spec = np.zeros(self._environment.n_actions, np.int64)
 
         observation_specs = {}
         for i, agent in enumerate(self._agents):
 
             observation_specs[agent] = types.OLT(
-                observation=observations[i],
-                legal_actions=legal_actions[i],
+                observation=observation_spec,
+                legal_actions=legal_actions_spec,
                 terminal=np.asarray([True], dtype=np.float32),
             )
 

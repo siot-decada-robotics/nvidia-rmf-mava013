@@ -256,7 +256,7 @@ class VDNStep(Step):
             )
 
         # update target q net
-        target_params = rlax.periodic_update(
+        target_params = optax.periodic_update(
             params,
             target_params,
             trainer_iter,

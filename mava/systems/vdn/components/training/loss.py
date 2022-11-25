@@ -181,11 +181,14 @@ class VDNLoss(Loss):
             # mixed_q_tm1 = jnp.sum(q_tm1, axis=2)
             # mixed_q_t = jnp.sum(q_t, axis=2)
 
+            mask = jnp.sum(env_states[:,:-1], axis=-1, keepdims=True) != 0.0
+
             target = jax.lax.stop_gradient(
                 rewards + discounts * self.config.gamma * mixed_q_t
             )
             error = 0.5 * (mixed_q_tm1 - target) ** 2
-            loss = jnp.mean(error)
+            # loss = jnp.mean(error)
+            loss = jnp.sum(error * mask) / jnp.sum(mask)
 
             return loss, {"total_loss": loss}
 

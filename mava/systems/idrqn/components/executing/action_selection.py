@@ -121,7 +121,7 @@ class IRDQNExecutorSelectAction(ExecutorSelectAction):
             # long, we should vectorize this.
             for agent, observation in observations.items():
                 network = networks[agent_net_keys[agent]]
-                actions_info[agent], new_policy_states[agent], base_key = select_action(
+                actions_info[agent], new_policy_state, base_key = select_action(
                     observation=observation,
                     # TODO (sasha): why does the PPO system not need to index
                     #  ["policy_network"] into this dict?
@@ -133,6 +133,7 @@ class IRDQNExecutorSelectAction(ExecutorSelectAction):
                     base_key=base_key,
                     epsilon=epsilon,
                 )
+                new_policy_states[agent] = new_policy_state[0]
             return actions_info, new_policy_states, base_key
 
         # executor.store.select_actions_fn = jax.jit(select_actions)

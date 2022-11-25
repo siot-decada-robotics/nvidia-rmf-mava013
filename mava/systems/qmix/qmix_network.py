@@ -45,8 +45,9 @@ class MixingNetwork:
         self.output_dim = output_dim
         # TODO (sasha): params first
         def forward_fn(env_states, agent_q_values, hyper_params):
+            agent_q_values = jnp.squeeze(agent_q_values)
             b, t, num_agents = agent_q_values.shape[:3]
-
+            env_states = jnp.ones_like(env_states)
             agent_q_values = jnp.reshape(agent_q_values, (-1, 1, num_agents))
             env_states = jnp.reshape(env_states, (-1, env_states.shape[-1]))
 

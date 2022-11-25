@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Dict
 
 import dm_env
 import numpy as np
+from mava import types
 
 from mava.types import OLT
 
@@ -129,12 +130,19 @@ class ConcatAgentIdToObservation:
         Returns:
             types.Observation: spec for environment.
         """
-        timestep = self.reset()
-        if type(timestep) == tuple:
-            timestep, _ = timestep
+        old_obs_spec = self._environment.observation_spec()
 
-        observations = timestep.observation
-        return observations
+        observation_specs = {}
+        for i, agent in enumerate(self._agents):
+            obs = old_obs_spec[agent].observation
+            
+            observation_specs[agent] = types.OLT(
+                observation=np.concatenate([np.zeros(len(self._agents), dtype=obs.dtype), obs]),
+                legal_actions=old_obs_spec[agent].legal_actions,
+                terminal=np.asarray([True], dtype=np.float32),
+            )
+
+        return observation_specs
 
     @property
     def obs_normalisation_start_index(self) -> int:
@@ -242,12 +250,19 @@ class ConcatPrevActionToObservation:
         Returns:
             types.Observation: spec for environment.
         """
-        timestep = self.reset()
-        if type(timestep) == tuple:
-            timestep, _ = timestep
+        old_obs_spec = self._environment.observation_spec()
 
-        observations = timestep.observation
-        return observations
+        observation_specs = {}
+        for i, agent in enumerate(self._agents):
+            obs = old_obs_spec[agent].observation
+            
+            observation_specs[agent] = types.OLT(
+                observation=np.concatenate([np.zeros(len(self._agents), dtype=obs.dtype), obs]),
+                legal_actions=old_obs_spec[agent].legal_actions,
+                terminal=np.asarray([True], dtype=np.float32),
+            )
+
+        return observation_specs
 
     @property
     def obs_normalisation_start_index(self) -> int:

@@ -19,6 +19,7 @@ import abc
 import copy
 from types import SimpleNamespace
 from typing import Any, Dict, List, Type
+import numpy as np
 
 from mava.callbacks import Callback
 from mava.components import Component
@@ -39,6 +40,7 @@ class IDRQNExecutorObserve(FeedforwardExecutorObserve):
             config: SimpleNamespace.
         """
         self.config = config
+        
 
     def on_execution_observe_first(self, executor: SystemExecutor) -> None:
         """Handle first observation in episode and give to adder.
@@ -51,7 +53,6 @@ class IDRQNExecutorObserve(FeedforwardExecutorObserve):
         Returns:
             None.
         """
-
         # Initialise the recurrent states of the agents
         executor.store.policy_states = {}
         for agent in executor.store.agent_net_keys.keys():
@@ -80,6 +81,15 @@ class IDRQNExecutorObserve(FeedforwardExecutorObserve):
         ] = executor.store.network_int_keys_extras
 
         executor.store.extras["policy_states"] = executor.store.policy_states
+
+        # if  not hasattr(executor.store, "temp_counts"):
+        #     executor.store.temp_counts = 0
+        # for i in range(len(executor.store.timestep.observation.keys())):
+        #     agent = "agent_" + str(i)
+        #     obs = executor.store.timestep.observation[agent]
+        #     executor.store.timestep.observation[agent] = obs._replace(observation=obs.observation*0 + executor.store.temp_counts)
+        # s_t = executor.store.extras["s_t"]
+        # executor.store.extras["s_t"] = np.zeros_like(s_t) + executor.store.temp_counts
 
         # executor.store.timestep set by Executor
         executor.store.adder.add_first(executor.store.timestep, executor.store.extras)
@@ -111,6 +121,16 @@ class IDRQNExecutorObserve(FeedforwardExecutorObserve):
 
         # executor.store.extras set by Executor
         executor.store.next_extras["policy_states"] = executor.store.policy_states
+
+        # exscutor.store.temp_counts += 1
+
+        # for i in range(len(executor.store.timestep.observation.keys())):
+        #     agent = "agent_" + str(i)
+        #     obs = executor.store.next_timestep.observation[agent]
+        #     executor.store.next_timestep.observation[agent] = obs._replace(observation=obs.observation*0 + executor.store.temp_counts)
+        #     adder_actions[agent]["actions_info"] = adder_actions[agent]["actions_info"]*0 + executor.store.temp_counts
+        # s_t = executor.store.next_extras["s_t"]
+        # executor.store.next_extras["s_t"] = np.zeros_like(s_t) + executor.store.temp_counts
 
         executor.store.adder.add(
             adder_actions, executor.store.next_timestep, executor.store.next_extras

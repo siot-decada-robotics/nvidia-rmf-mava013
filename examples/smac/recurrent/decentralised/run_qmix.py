@@ -48,7 +48,7 @@ def main(_: Any) -> None:
         _ : _
     """
     # Environment.
-    environment_factory = functools.partial(make_environment, map_name=FLAGS.map_name)
+    environment_factory = functools.partial(make_environment, map_name=FLAGS.map_name)#, concat_agent_id=True)
 
     # Networks.
     def network_factory(*args: Any, **kwargs: Any) -> Any:
@@ -95,13 +95,14 @@ def main(_: Any) -> None:
         run_evaluator=True,
         epsilon_decay_timesteps=10_000,
         sample_batch_size=32,
-        num_executors=1,
+        num_executors=3,
         multi_process=True,
         samples_per_insert=8,
         min_data_server_size=10,
         # terminal="gnome-terminal",
         sequence_length=20,
         period=10,
+        use_next_extras=True
     )
 
     # Launch the system.
