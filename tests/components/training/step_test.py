@@ -189,7 +189,7 @@ class MockTrainer(Trainer):
             global_config=SimpleNamespace(
                 num_minibatches=1,
                 num_epochs=2,
-                sample_batch_size=2,
+                epoch_batch_size=2,
                 sequence_length=3,
                 normalize_observations=False,
                 normalize_target_values=False,
@@ -278,7 +278,7 @@ def test_on_training_init_start(
 
     mapg_with_trust_region_step.on_training_init_start(trainer=mock_trainer)
 
-    assert mock_trainer.store.full_batch_size == 4
+    assert mock_trainer.store.global_config.epoch_batch_size == 2
 
 
 def test_on_training_step_fn(
@@ -311,7 +311,7 @@ def test_step(mock_trainer: Trainer) -> None:
     # Step with policy states
     states = jnp.zeros((1, 5))
     policy_states = {"agent_0": states, "agent_1": states, "agent_2": states}
-    dummy_sample.data.extras["policy_states"] = policy_states
+    dummy_sample.data.next_extras["policy_states"] = policy_states
     metrics = mock_trainer.store.step_fn(dummy_sample)
 
     # Check that metrics were correctly computed
