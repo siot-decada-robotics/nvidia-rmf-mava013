@@ -22,6 +22,7 @@ from typing import Any
 import optax
 from absl import app, flags
 
+from mava.components.training.losses import HuberValueLoss
 from mava.systems import ippo
 from mava.utils.environments.smac_utils import make_environment
 from mava.utils.loggers import logger_utils
@@ -83,6 +84,7 @@ def main(_: Any) -> None:
 
     # Create the system.
     system = ippo.IPPOSystem()
+    system.update(HuberValueLoss)
 
     # Build the system.
     system.build(
