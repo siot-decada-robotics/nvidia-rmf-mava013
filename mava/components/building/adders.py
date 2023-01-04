@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Dict, List, Type
 
+from acme.adders.reverb import EndBehavior
+
 from mava import specs
 from mava.adders import reverb as reverb_adders
 from mava.callbacks import Callback
@@ -228,6 +230,7 @@ class ParallelTransitionAdderSignature(AdderSignature):
 class ParallelSequenceAdderConfig:
     sequence_length: int = 20
     period: int = 10
+    end_of_episode_behavior: EndBehavior = EndBehavior.ZERO_PAD
 
 
 class ParallelSequenceAdder(Adder):
@@ -268,6 +271,7 @@ class ParallelSequenceAdder(Adder):
             sequence_length=self.config.sequence_length,
             table_network_config=builder.store.table_network_config,
             period=self.config.period,
+            end_of_episode_behavior=self.config.end_of_episode_behavior,
         )
 
         builder.store.adder = adder

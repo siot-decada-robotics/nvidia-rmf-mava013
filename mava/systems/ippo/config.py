@@ -16,6 +16,8 @@
 """Default hyperparameters for IPPO system."""
 from dataclasses import dataclass
 
+from acme.adders.reverb import EndBehavior
+
 
 @dataclass
 class IPPODefaultConfig:
@@ -23,3 +25,4 @@ class IPPODefaultConfig:
     sequence_length: int = 20
     period: int = 10
     system_name: str = "IPPO"
+    end_of_episode_behavior: EndBehavior = EndBehavior.CONTINUE
