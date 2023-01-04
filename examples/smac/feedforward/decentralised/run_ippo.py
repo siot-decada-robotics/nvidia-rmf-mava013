@@ -40,6 +40,8 @@ flags.DEFINE_string(
 )
 flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
+BATCH_SIZE = 256
+
 
 def main(_: Any) -> None:
     """Example running feedforward IPPO on SMAC environment."""
@@ -72,11 +74,11 @@ def main(_: Any) -> None:
 
     # Optimisers.
     policy_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+        optax.clip_by_global_norm(10.0), optax.scale_by_adam(), optax.scale(-1e-4)
     )
 
     critic_optimiser = optax.chain(
-        optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
+        optax.clip_by_global_norm(10.0), optax.scale_by_adam(), optax.scale(-1e-4)
     )
 
     # Create the system.
@@ -91,10 +93,28 @@ def main(_: Any) -> None:
         policy_optimiser=policy_optimiser,
         critic_optimiser=critic_optimiser,
         run_evaluator=True,
-        epoch_batch_size=5,
-        num_epochs=15,
-        num_executors=1,
+        epoch_batch_size=BATCH_SIZE,
+        max_queue_size=BATCH_SIZE * 2,
+        num_epochs=2,
+        num_executors=5,
         multi_process=True,
+        evaluation_interval={"executor_steps": 10000},
+        evaluation_duration={"evaluator_episodes": 10},
+        huber_delta=10.0,
+        clip_value=False,
+        clipping_epsilon=0.2,
+        entropy_cost=3e-4,
+        executor_parameter_update_period=20,
+        normalize_advantage=False,
+        normalise_target_values=False,
+        normalise_observations=False,
+        num_minibatches=8,
+        sequence_length=10,
+        period=10,
+        trainer_parameter_update_period=5,
+        value_clip_parameter=0.2,
+        value_cost=1.0,
+        max_gradient_norm=0.5,
     )
 
     # Launch the system.
