@@ -21,6 +21,7 @@ from mava.components.building.guardrails import ComponentDependencyGuardrails
 from mava.specs import DesignSpec
 from mava.systems import System
 from mava.systems.idqn.components import building as dqn_building
+from mava.systems.idqn.components import executing as dqn_executing
 from mava.systems.idrqn.components import executing as drqn_executing
 from mava.systems.idrqn.components import training as drqn_training
 from mava.systems.idrqn.components.building.extras_spec import DRQNExtrasSpec
@@ -60,6 +61,7 @@ class IDRQNSystem(System):
             executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
             networks=building.DefaultNetworks,
             optimisers=dqn_building.Optimiser,
+            epsilon_scheduler=dqn_executing.EpsilonScheduler,
         ).get()
 
         # Trainer

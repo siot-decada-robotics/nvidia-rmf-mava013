@@ -15,36 +15,22 @@
 
 """Execution components for system builders"""
 
-from dataclasses import dataclass
-from typing import Any, Dict, Tuple
+from typing import Dict, Tuple
 
+import chex
 import jax
 from acme.jax import networks as networks_lib
 from acme.jax import utils
 
-from mava.components.executing.action_selection import ExecutorSelectAction
 from mava.core_jax import SystemExecutor
+from mava.systems.idqn.components.executing.action_selection import (
+    DQNFeedforwardExecutorSelectAction,
+)
+from mava.systems.idrqn.idrqn_network import IDRQNNetwork
 from mava.types import NestedArray
 
 
-@dataclass
-class IDRQNActionSelectionConf:
-    epsilon_min: float = 0.05
-    epsilon_decay_timesteps: int = 10_000
-
-
-class IRDQNExecutorSelectAction(ExecutorSelectAction):
-    def __init__(
-        self,
-        config: IDRQNActionSelectionConf = IDRQNActionSelectionConf(),
-    ):
-        """Component defines hooks for the executor selecting actions.
-
-        Args:
-            config: SimpleNamespace.
-        """
-        self.config = config
-
+class IRDQNExecutorSelectAction(DQNFeedforwardExecutorSelectAction):
     def on_execution_init_end(self, executor: SystemExecutor) -> None:
         """Create function that is used to select actions.
 
@@ -55,17 +41,21 @@ class IRDQNExecutorSelectAction(ExecutorSelectAction):
             None.
         """
         # Epsilon Scheduling
-        executor.store.num_action_selections = 0.0
+        executor.store.action_selection_step = 0
 
         networks = executor.store.networks
         agent_net_keys = executor.store.agent_net_keys
 
+        # The base executor requires this to be set, so we set it and forget it,
+        # as Q networks don't need to return log probs
+        executor.store.policies_info = None
+
         def select_action(
-            observation: NestedArray,
-            current_params: NestedArray,
-            policy_state: NestedArray,
-            network: Any,
-            base_key: networks_lib.PRNGKey,
+            observation: networks_lib.Observation,
+            current_params: networks_lib.Params,
+            policy_state: chex.Array,
+            network: IDRQNNetwork,
+            base_key: chex.PRNGKey,
             epsilon: float,
         ) -> Tuple[NestedArray, NestedArray, networks_lib.PRNGKey]:
             """Action selection across a single agent.
@@ -119,18 +109,21 @@ class IRDQNExecutorSelectAction(ExecutorSelectAction):
             # long, we should vectorize this.
             for agent, observation in observations.items():
                 network = networks[agent_net_keys[agent]]
-                actions_info[agent], new_policy_states[agent], base_key = select_action(
+                current_agent_params = current_params[agent_net_keys[agent]]
+
+                (
+                    actions_info[agent],
+                    new_policy_states[agent],
+                    base_key,
+                ) = select_action(
                     observation=observation,
-                    # TODO (sasha): why does the PPO system not need to index
-                    #  ["policy_network"] into this dict?
-                    current_params=current_params[agent_net_keys[agent]][
-                        "policy_network"
-                    ],
+                    current_params=current_agent_params["policy_network"],
                     policy_state=policy_states[agent],
                     network=network,
                     base_key=base_key,
                     epsilon=epsilon,
                 )
+
             return actions_info, new_policy_states, base_key
 
         executor.store.select_actions_fn = jax.jit(select_actions)
@@ -147,6 +140,8 @@ class IRDQNExecutorSelectAction(ExecutorSelectAction):
             None.
         """
 
+        executor.store.action_selection_step += 1
+
         # Dict with params per network
         current_agent_params = {
             network: executor.store.networks[network].get_params()
@@ -154,22 +149,12 @@ class IRDQNExecutorSelectAction(ExecutorSelectAction):
         }
 
         # Epsilon Scheduling
-        # TODO add epsilon to logs
-        executor.store.num_action_selections += 1.0
-        epsilon = max(
-            self.config.epsilon_min,
-            1.0
-            - (1.0 / self.config.epsilon_decay_timesteps)
-            * executor.store.num_action_selections,
-        )
-        if executor._evaluator:
+        epsilon = executor.store.epsilon_scheduler(executor.store.action_selection_step)
+        if executor.store.is_evaluator:
             epsilon = 0.0
 
         executor.store.episode_metrics["epsilon"] = epsilon
 
-        # TODO (sasha): the base executor requires this to be set,
-        #  so maybe set it once and forget or refactor the base executor?
-        executor.store.policies_info = None
         (
             executor.store.actions_info,
             executor.store.policy_states,

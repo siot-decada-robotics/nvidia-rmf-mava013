@@ -18,6 +18,7 @@
 from types import SimpleNamespace
 from typing import Dict, Tuple
 
+import chex
 import jax
 import jax.numpy as jnp
 from acme.jax import networks as networks_lib
@@ -60,7 +61,7 @@ class DQNFeedforwardExecutorSelectAction(ExecutorSelectAction):
             observation: networks_lib.Observation,
             current_params: networks_lib.Params,
             network: IDQNNetwork,
-            base_key: jax.random.KeyArray,
+            base_key: chex.PRNGKey,
             epsilon: float,
         ) -> Tuple[jnp.ndarray, jax.random.KeyArray]:
             """Action selection across a single agent.
