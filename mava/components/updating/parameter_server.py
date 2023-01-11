@@ -16,9 +16,11 @@
 """Parameter server Component for Mava systems."""
 import abc
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Sequence, Type, Union
 
 import numpy as np
+from chex import Array
 
 from mava.callbacks import Callback
 from mava.components.building.networks import Networks
@@ -97,8 +99,11 @@ class DefaultParameterServer(ParameterServer):
 
         Args:
             config: ParameterServerConfig.
+            calculate_absolute_metric: Flag to stop terminating the
+        system before the calculation of the absolute metric
         """
         self.config = config
+        self.calculate_absolute_metric = False
 
     def on_parameter_server_init_start(self, server: SystemParameterServer) -> None:
         """Register parameters and network params to track.
@@ -107,6 +112,9 @@ class DefaultParameterServer(ParameterServer):
             server: SystemParameterServer.
         """
         networks = server.store.network_factory()
+
+        # Store net_keys
+        server.store.agents_net_keys = list(networks.keys())
 
         # Create parameters
         server.store.parameters = {
@@ -117,19 +125,14 @@ class DefaultParameterServer(ParameterServer):
             "executor_episodes": np.zeros(1, dtype=np.int32),
             "executor_steps": np.zeros(1, dtype=np.int32),
         }
-        # Network parameters
-        for agent_net_key in networks.keys():
-            server.store.parameters[f"policy_network-{agent_net_key}"] = networks[
-                agent_net_key
-            ].policy_params
-            server.store.parameters[
-                f"policy_opt_state-{agent_net_key}"
-            ] = server.store.policy_opt_states[agent_net_key]
+        server.store.parameters.update(
+            self._get_network_parameters(server.store, networks)
+        )
 
         server.store.experiment_path = self.config.experiment_path
 
-        # Interrupt the system in case evaluator or trainer failed
-        server.store.parameters["evaluator_or_trainer_failed"] = False
+        # Interrupt the system flag
+        server.store.parameters["terminate"] = False
 
         # Interrupt the system in case all the executors failed
         server.store.parameters["num_executor_failed"] = 0
@@ -155,8 +158,8 @@ class DefaultParameterServer(ParameterServer):
                 get_params[var_key] = server.store.parameters[var_key]
         server.store.get_parameters = get_params
 
-        # Interrupt the system in case the evaluator or the trainer failed
-        if server.store.parameters["evaluator_or_trainer_failed"]:
+        # Interrupt the system flag
+        if server.store.parameters["terminate"]:
             termination_fn(server)
 
         # Interrupt the system in case all the executors failed
@@ -207,27 +210,34 @@ class DefaultParameterServer(ParameterServer):
             assert var_key in server.store.parameters
             server.store.parameters[var_key] += params[var_key]
 
+    def _get_network_parameters(
+        self, store: SimpleNamespace, networks: Dict
+    ) -> Dict[str, Array]:
+        parameters = {}
+        for agent_net_key in networks.keys():
+            agent_net = networks[agent_net_key]
+            parameters[f"policy_network-{agent_net_key}"] = agent_net.policy_params
+            parameters[f"policy_opt_state-{agent_net_key}"] = store.policy_opt_states[
+                agent_net_key
+            ]
+
+        return parameters
+
 
 class ActorCriticParameterServer(DefaultParameterServer):
-    def on_parameter_server_init_start(self, server: SystemParameterServer) -> None:
-        """Register parameters and network params to track.
-
-        Args:
-            server: SystemParameterServer.
-        """
-        super().on_parameter_server_init_start(server)
-        networks = server.store.network_factory()
-
-        # Store critic params (policy params storage done in super class)
+    def _get_network_parameters(
+        self, store: SimpleNamespace, networks: Dict
+    ) -> Dict[str, Array]:
+        parameters = {}
         for agent_net_key in networks.keys():
-            server.store.parameters[f"critic_network-{agent_net_key}"] = networks[
+            agent_net = networks[agent_net_key]
+            parameters[f"policy_network-{agent_net_key}"] = agent_net.policy_params
+            parameters[f"critic_network-{agent_net_key}"] = agent_net.critic_params
+            parameters[f"policy_opt_state-{agent_net_key}"] = store.policy_opt_states[
                 agent_net_key
-            ].critic_params
+            ]
+            parameters[f"critic_opt_state-{agent_net_key}"] = store.critic_opt_states[
+                agent_net_key
+            ]
 
-            server.store.parameters[
-                f"critic_opt_state-{agent_net_key}"
-            ] = server.store.critic_opt_states[agent_net_key]
-
-        # TODO: normalisation should have its own component?
-        # Normalization parameters
-        server.store.parameters["norm_params"] = server.store.norm_params
+        return parameters

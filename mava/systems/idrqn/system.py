@@ -14,26 +14,17 @@
 # limitations under the License.
 
 """Jax IDQN system."""
-import imp
 from typing import Any, Tuple
 
 from mava.components import building, executing, training, updating
-from mava.components.building.adders import ParallelTransitionAdder
 from mava.components.building.guardrails import ComponentDependencyGuardrails
 from mava.specs import DesignSpec
 from mava.systems import System
-from mava.systems.idqn.components.building.extras_spec import DQNExtrasSpec
-from mava.systems.idrqn.components.building.extras_spec import DRQNExtrasSpec
-from mava.systems.idrqn.config import IDRQNDefaultConfig
-from mava.systems.ippo.components import ExtrasLogProbSpec
-
-from mava.systems.idqn.components import executing as dqn_executing
 from mava.systems.idqn.components import building as dqn_building
-from mava.systems.idqn.components import training as dqn_training
-
 from mava.systems.idrqn.components import executing as drqn_executing
 from mava.systems.idrqn.components import training as drqn_training
-
+from mava.systems.idrqn.components.building.extras_spec import DRQNExtrasSpec
+from mava.systems.idrqn.config import IDRQNDefaultConfig
 
 
 class IDRQNSystem(System):
@@ -73,7 +64,7 @@ class IDRQNSystem(System):
 
         # Trainer
         trainer_process = DesignSpec(
-            trainer_init=dqn_training.SingleTrainerInit,
+            trainer_init=training.SingleTrainerInit,
             loss=drqn_training.IRDQNLoss,
             # epoch_update=training.MAPGEpochUpdate,
             sgd_step=drqn_training.IRDQNStep,

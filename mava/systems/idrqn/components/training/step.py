@@ -14,30 +14,21 @@
 # limitations under the License.
 
 """Trainer components for gradient step calculations."""
-import abc
-from distutils.command.config import config
-import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Tuple, Type
+from typing import Dict, List, Tuple, Type
 
 import jax
 import jax.numpy as jnp
 import optax
 import reverb
-import tree
-from acme.jax import utils
+import rlax
 from jax import jit
 
-import mava.components.building.adders  # To avoid circular imports
-import mava.components.training.model_updating  # To avoid circular imports
 from mava import constants
 from mava.callbacks import Callback
-from mava.components.training.advantage_estimation import GAE
-from mava.components.training.base import Batch, DQNTrainingState, TrainingState
+from mava.components.training.base import DQNTrainingState
 from mava.components.training.step import Step
 from mava.core_jax import SystemTrainer
-from mava.utils.jax_training_utils import denormalize, normalize
-import rlax
 
 
 @dataclass
@@ -71,7 +62,7 @@ class IRDQNStep(Step):
         @jit
         def sgd_step(
             states: DQNTrainingState, sample: reverb.ReplaySample
-        ) -> Tuple[TrainingState, Dict[str, jnp.ndarray]]:
+        ) -> Tuple[DQNTrainingState, Dict[str, jnp.ndarray]]:
             """Performs a minibatch SGD step.
 
             Args:
@@ -111,7 +102,7 @@ class IRDQNStep(Step):
                 discounts,
             )
 
-            metrics = {}
+            metrics: Dict[str, jnp.ndarray] = {}
             for agent_key in trainer.store.trainer_agents:
                 agent_net_key = trainer.store.trainer_agent_net_keys[agent_key]
                 # Update the policy networks and optimisers.

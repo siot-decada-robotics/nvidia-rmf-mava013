@@ -87,12 +87,9 @@ def main(_: Any) -> None:
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
         run_evaluator=True,
-        sample_batch_size=64,
         num_executors=1,
         multi_process=True,
-        # samples_per_insert=32,
         min_data_server_size=10,
-        terminal="gnome-terminal",
         sequence_length=20,
         period=10,
     )

@@ -25,10 +25,9 @@ from mava.callbacks import Callback
 from mava.components import Component
 from mava.components.building.environments import EnvironmentSpec
 from mava.components.building.networks import Networks
-from mava.components.building.optimisers import Optimisers
+from mava.components.building.optimisers import ActorCriticOptimisers, Optimisers
 from mava.components.building.system_init import BaseSystemInit
 from mava.core_jax import SystemBuilder, SystemTrainer
-from mava.utils.jax_training_utils import init_norm_params
 from mava.utils.sort_utils import sort_str_num
 
 
@@ -78,48 +77,26 @@ class BaseTrainerInit(Component):
                     matches = most_matches
                     builder.store.table_network_config[trainer_key] = sample
 
-        # TODO (Matthew): networks need to be created on the nodes instead?
         builder.store.networks = builder.store.network_factory()
 
         # Wrap opt_states in a mutable type (dict) since optax return an immutable tuple
         builder.store.policy_opt_states = {}
-        builder.store.critic_opt_states = {}
+        if builder.has(ActorCriticOptimisers):
+            builder.store.critic_opt_states = {}
+
         for net_key in builder.store.networks.keys():
             builder.store.policy_opt_states[net_key] = {
                 constants.OPT_STATE_DICT_KEY: builder.store.policy_optimiser.init(
                     builder.store.networks[net_key].policy_params
                 )
             }  # pytype: disable=attribute-error
-            builder.store.critic_opt_states[net_key] = {
-                constants.OPT_STATE_DICT_KEY: builder.store.critic_optimiser.init(
-                    builder.store.networks[net_key].critic_params
-                )
-            }  # pytype: disable=attribute-error
 
-        # Initialise observations' normalisation parameters
-        obs_norm_key = constants.OBS_NORM_STATE_DICT_KEY
-        builder.store.norm_params = {}
-        builder.store.norm_params[obs_norm_key] = {}
-        for agent in builder.store.agents:
-            obs_shape = builder.store.ma_environment_spec._agent_environment_specs[
-                agent
-            ].observations.observation.shape
-
-            if (
-                builder.store.global_config.normalize_observations
-                and len(obs_shape) > 1
-            ):
-                raise NotImplementedError(
-                    "Observations normalization only works for 1D feature spaces!"
-                )
-
-            builder.store.norm_params[obs_norm_key][agent] = init_norm_params(obs_shape)
-
-        # Initialise target values normalisation parameters here
-        values_norm_key = constants.VALUES_NORM_STATE_DICT_KEY
-        builder.store.norm_params[values_norm_key] = {}
-        for agent in builder.store.agents:
-            builder.store.norm_params[values_norm_key][agent] = init_norm_params((1,))
+            if builder.has(ActorCriticOptimisers):
+                builder.store.critic_opt_states[net_key] = {
+                    constants.OPT_STATE_DICT_KEY: builder.store.critic_optimiser.init(
+                        builder.store.networks[net_key].critic_params
+                    )
+                }  # pytype: disable=attribute-error
 
     def on_training_utility_fns(self, trainer: SystemTrainer) -> None:
         """Set up and store trainer agents.

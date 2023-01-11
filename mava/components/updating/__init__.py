@@ -17,8 +17,8 @@
 
 from mava.components.updating.checkpointer import Checkpointer
 from mava.components.updating.parameter_server import (
-    DefaultParameterServer,
     ActorCriticParameterServer,
+    DefaultParameterServer,
 )
 from mava.components.updating.terminators import (
     CountConditionTerminator,

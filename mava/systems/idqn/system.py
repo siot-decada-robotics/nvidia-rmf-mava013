@@ -14,7 +14,6 @@
 # limitations under the License.
 
 """Jax IDQN system."""
-import imp
 from typing import Any, Tuple
 
 from mava.components import building, executing, training, updating
@@ -22,13 +21,11 @@ from mava.components.building.adders import ParallelTransitionAdder
 from mava.components.building.guardrails import ComponentDependencyGuardrails
 from mava.specs import DesignSpec
 from mava.systems import System
+from mava.systems.idqn.components import building as dqn_building
+from mava.systems.idqn.components import executing as dqn_executing
+from mava.systems.idqn.components import training as dqn_training
 from mava.systems.idqn.components.building.extras_spec import DQNExtrasSpec
 from mava.systems.idqn.config import IDQNDefaultConfig
-from mava.systems.ippo.components import ExtrasLogProbSpec
-
-from mava.systems.idqn.components import executing as dqn_executing
-from mava.systems.idqn.components import building as dqn_building
-from mava.systems.idqn.components import training as dqn_training
 
 
 class IDQNSystem(System):
@@ -56,19 +53,20 @@ class IDQNSystem(System):
         # Executor
         executor_process = DesignSpec(
             executor_init=executing.ExecutorInit,
-            executor_observe=dqn_executing.FeedforwardExecutorObserve,
-            executor_select_action=dqn_executing.FeedforwardExecutorSelectAction,
+            executor_observe=dqn_executing.DQNFeedforwardExecutorObserve,
+            executor_select_action=dqn_executing.DQNFeedforwardExecutorSelectAction,
             executor_adder=ParallelTransitionAdder,
             adder_priority=building.UniformAdderPriority,
-            rate_limiter=building.reverb_components.MinSizeRateLimiter,
+            rate_limiter=building.reverb_components.SampleToInsertRateLimiter,
             executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
             networks=building.DefaultNetworks,
-            optimisers=dqn_building.Optimiser,
+            epsilon_scheduler=dqn_executing.EpsilonScheduler,
         ).get()
 
         # Trainer
         trainer_process = DesignSpec(
-            trainer_init=dqn_training.SingleTrainerInit,
+            optimisers=dqn_building.Optimiser,
+            trainer_init=training.SingleTrainerInit,
             loss=dqn_training.IDQNLoss,
             # epoch_update=training.MAPGEpochUpdate,
             sgd_step=dqn_training.IDQNStep,

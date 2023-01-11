@@ -24,6 +24,7 @@ from absl import app, flags
 from mava.systems import idqn
 from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
+from mava.utils.schedulers.linear_epsilon_scheduler import LinearEpsilonScheduler
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
@@ -42,7 +43,7 @@ flags.DEFINE_string(
     str(datetime.now()),
     "Experiment identifier that can be used to continue experiments.",
 )
-flags.DEFINE_string("base_dir", "logs", "Base dir to store experiments.")
+flags.DEFINE_string("base_dir", "~/mava", "Base dir to store experiments.")
 
 
 def main(_: Any) -> None:
@@ -84,6 +85,7 @@ def main(_: Any) -> None:
     policy_optimiser = optax.chain(
         optax.clip_by_global_norm(40.0), optax.scale_by_adam(), optax.scale(-1e-4)
     )
+    epsilon_scheduler = LinearEpsilonScheduler(1.0, 0.1, 10_000)
 
     # Create the system.
     system = idqn.IDQNSystem()
@@ -95,13 +97,12 @@ def main(_: Any) -> None:
         logger_factory=logger_factory,
         experiment_path=experiment_path,
         policy_optimiser=policy_optimiser,
+        epsilon_scheduler=epsilon_scheduler,
+        reverb_table_max_size=10_000,
         run_evaluator=True,
-        sample_batch_size=128,
+        epoch_batch_size=128,
         num_executors=1,
         multi_process=True,
-        # min_data_server_size=10,
-        # terminal="gnome-terminal",
-        trainer_parameter_update_period=5,
         samples_per_insert=32,
     )
 

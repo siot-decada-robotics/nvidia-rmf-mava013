@@ -14,10 +14,8 @@
 # limitations under the License.
 
 """Jax IPPO system networks."""
-import dataclasses
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Sequence
 
-import chex
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -28,7 +26,6 @@ from dm_env import specs as dm_specs
 
 from mava import specs as mava_specs
 from mava.systems.idrqn.idrqn_network import IDRQNNetwork
-from mava.utils.jax_training_utils import action_mask_categorical_policies
 
 Array = dm_specs.Array
 BoundedArray = dm_specs.BoundedArray
@@ -105,7 +102,7 @@ def make_discrete_network(
     base_key, network_key = jax.random.split(base_key)
 
     policy_state = initial_state_fn.apply(None)
-    policy_params = policy_fn.init(network_key, [dummy_obs, policy_state])  # type: ignore
+    policy_params = policy_fn.init(network_key, [dummy_obs, policy_state])
 
     base_key, network_key = jax.random.split(base_key)
 
@@ -180,7 +177,7 @@ def make_default_networks(
         64,
         64,
     ),
-    recurrent_layer_dim=64,
+    recurrent_layer_dim: int = 64,
     activation_function: Callable[[jnp.ndarray], jnp.ndarray] = jax.nn.relu,
 ) -> Dict[str, Any]:
     """Create default PPO networks

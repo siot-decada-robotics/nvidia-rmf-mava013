@@ -211,18 +211,18 @@ class Launcher:
                     executor_stats = executor.run_episode_and_log()
                     executor_steps += executor_stats["episode_length"]
 
-                    # print(f"Episode {episode} completed.")
+                    print(f"Episode {episode} completed.")
                     episode += 1
 
-                # if the queue has less than sample_batch_size samples in it we skip
+                # if the queue has less than epoch_batch_size samples in it we skip
                 # the trainer to ensure that the trainer won't hang
                 if (
                     data_server.server_info()["trainer_0"].current_size
-                    >= trainer.store.global_config.sample_batch_size
+                    >= trainer.store.global_config.epoch_batch_size
                     and step % self._single_process_trainer_period == 0
                 ):
                     _ = trainer.step()  # logging done in trainer
-                    # print("Performed trainer step.")
+                    print("Performed trainer step.")
                 if step % self._single_process_evaluator_period == 0:
                     _ = evaluator.run_episode_and_log()
                     print("Performed evaluator run.")

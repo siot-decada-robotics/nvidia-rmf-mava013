@@ -15,29 +15,21 @@
 
 """Execution components for system builders"""
 
-from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple, Type
+from typing import Dict, Tuple
 
 import jax
+import jax.numpy as jnp
 from acme.jax import networks as networks_lib
 from acme.jax import utils
 
 from mava.components.executing.action_selection import ExecutorSelectAction
 from mava.core_jax import SystemExecutor
-from mava.types import NestedArray
+from mava.systems.idqn.idqn_network import IDQNNetwork
 
-@dataclass
-class FeedforwardExecutorSelectActionConfig:
-    epsilon_min: float = 0.05
-    epsilon_decay_timesteps: float = 10_000
 
-# TODO (sasha): rename to IDQN....
-class FeedforwardExecutorSelectAction(ExecutorSelectAction):
-    def __init__(
-        self,
-        config: FeedforwardExecutorSelectActionConfig = FeedforwardExecutorSelectActionConfig(),
-    ):
+class DQNFeedforwardExecutorSelectAction(ExecutorSelectAction):
+    def __init__(self, config: SimpleNamespace = SimpleNamespace()):
         """Component defines hooks for the executor selecting actions.
 
         Args:
@@ -55,26 +47,30 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
             None.
         """
         # Epsilon Scheduling
-        executor.store.num_action_selections = 0.
-
+        executor.store.action_selection_step = 0
 
         networks = executor.store.networks
         agent_net_keys = executor.store.agent_net_keys
 
+        # The base executor requires this to be set, so we set it and forget it,
+        # as Q networks don't need to return log probs
+        executor.store.policies_info = None
+
         def select_action(
-            observation: NestedArray,
-            current_params: NestedArray,
-            network: Any,
-            base_key: networks_lib.PRNGKey,
-            epsilon: float
-        ) -> Tuple[NestedArray, NestedArray, networks_lib.PRNGKey]:
+            observation: networks_lib.Observation,
+            current_params: networks_lib.Params,
+            network: IDQNNetwork,
+            base_key: jax.random.KeyArray,
+            epsilon: float,
+        ) -> Tuple[jnp.ndarray, jax.random.KeyArray]:
             """Action selection across a single agent.
 
             Args:
-                observation : The observation for the current agent.
-                current_params : The parameters for current agent's network.
-                network : The network object used by the current agent.
-                key : A JAX prng key.
+                observation: The observation for the current agent.
+                current_params: The parameters for current agent's network.
+                network: The network object used by the current agent.
+                base_key: A JAX prng key.
+                epsilon: chance agent takes a random action
 
             Returns:
                 action info, policy info and new key.
@@ -93,13 +89,11 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
             return jax.numpy.squeeze(action_info), base_key
 
         def select_actions(
-            observations: Dict[str, NestedArray],
-            current_params: Dict[str, NestedArray],
+            observations: Dict[str, jnp.ndarray],
+            current_params: Dict[str, jnp.ndarray],
             base_key: networks_lib.PRNGKey,
-            epsilon: float
-        ) -> Tuple[
-            Dict[str, NestedArray], Dict[str, NestedArray], networks_lib.PRNGKey
-        ]:
+            epsilon: float,
+        ) -> Tuple[Dict[str, jnp.ndarray], jax.random.KeyArray]:
             """Select actions across all agents - this is jitted below.
 
             Args:
@@ -116,20 +110,18 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
             # long, we should vectorize this.
             for agent, observation in observations.items():
                 network = networks[agent_net_keys[agent]]
+                current_agent_params = current_params[agent_net_keys[agent]]
+
                 actions_info[agent], base_key = select_action(
                     observation=observation,
-                    # TODO (sasha): why does the PPO system not need to index 
-                    #  ["policy_network"] into this dict?
-                    current_params=current_params[agent_net_keys[agent]]["policy_network"],
+                    current_params=current_agent_params["policy_network"],
                     network=network,
                     base_key=base_key,
-                    epsilon=epsilon
+                    epsilon=epsilon,
                 )
             return actions_info, base_key
 
-        # executor.store.select_actions_fn = jax.jit(select_actions)
-        executor.store.select_actions_fn = select_actions
-
+        executor.store.select_actions_fn = jax.jit(select_actions)
 
     # Select actions
     def on_execution_select_actions(self, executor: SystemExecutor) -> None:
@@ -141,6 +133,7 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
         Returns:
             None.
         """
+        executor.store.action_selection_step += 1
 
         # Dict with params per network
         current_agent_params = {
@@ -149,20 +142,18 @@ class FeedforwardExecutorSelectAction(ExecutorSelectAction):
         }
 
         # Epsilon Scheduling
-        # TODO add epsilon to logs
-        executor.store.num_action_selections += 1.
-        epsilon = max(self.config.epsilon_min, 1. - (1. / self.config.epsilon_decay_timesteps) * executor.store.num_action_selections)
-        if executor._evaluator:
-            epsilon = 0.
-        
+        epsilon = executor.store.epsilon_scheduler(executor.store.action_selection_step)
+        if executor.store.is_evaluator:
+            epsilon = 0.0
+
         executor.store.episode_metrics["epsilon"] = epsilon
 
-        # TODO (sasha): the base executor requires this to be set, 
-        #  so maybe set it once and forget or refactor the base executor?
-        executor.store.policies_info = None  
         (
             executor.store.actions_info,
             executor.store.base_key,
         ) = executor.store.select_actions_fn(
-            executor.store.observations, current_agent_params, executor.store.base_key, epsilon
+            executor.store.observations,
+            current_agent_params,
+            executor.store.base_key,
+            epsilon,
         )

@@ -16,29 +16,27 @@
 """Execution components for system builders"""
 
 from dataclasses import dataclass
-from types import SimpleNamespace
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any, Dict, Tuple
 
 import jax
 from acme.jax import networks as networks_lib
 from acme.jax import utils
 
-from mava.components.executing.action_selection import (
-    ExecutorSelectAction,
-    RecurrentExecutorSelectAction,
-)
-from mava.systems.idqn.components.executing.action_selection import (
-    FeedforwardExecutorSelectAction,
-    FeedforwardExecutorSelectActionConfig,
-)
+from mava.components.executing.action_selection import ExecutorSelectAction
 from mava.core_jax import SystemExecutor
 from mava.types import NestedArray
+
+
+@dataclass
+class IDRQNActionSelectionConf:
+    epsilon_min: float = 0.05
+    epsilon_decay_timesteps: int = 10_000
 
 
 class IRDQNExecutorSelectAction(ExecutorSelectAction):
     def __init__(
         self,
-        config: FeedforwardExecutorSelectActionConfig = FeedforwardExecutorSelectActionConfig(),
+        config: IDRQNActionSelectionConf = IDRQNActionSelectionConf(),
     ):
         """Component defines hooks for the executor selecting actions.
 
@@ -135,8 +133,8 @@ class IRDQNExecutorSelectAction(ExecutorSelectAction):
                 )
             return actions_info, new_policy_states, base_key
 
-        # executor.store.select_actions_fn = jax.jit(select_actions)
-        executor.store.select_actions_fn = select_actions
+        executor.store.select_actions_fn = jax.jit(select_actions)
+        # executor.store.select_actions_fn = select_actions
 
     # Select actions
     def on_execution_select_actions(self, executor: SystemExecutor) -> None:
