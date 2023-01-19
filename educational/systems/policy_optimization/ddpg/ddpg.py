@@ -123,7 +123,7 @@ def make_environment(
         (env, config).
     """
 
-    return gym.make("MountainCarContinuous-v0"), config
+    return gym.make("MountainCarContinuous-v0", render_mode="human"), config
 
 
 # TODO: make DDPG network class
@@ -143,7 +143,12 @@ def make_networks(
     @hk.without_apply_rng
     @hk.transform
     def actor(obs):
-        return hk.nets.MLP([64, 64, *action_shape])(obs)
+        actor = hk.nets.MLP(
+            [64, 64, *action_shape],
+            activation=jax.nn.tanh,
+            activate_final=True,
+        )
+        return actor(obs)
 
     @hk.without_apply_rng
     @hk.transform
@@ -207,10 +212,11 @@ def main(_: Any) -> None:
         key, noise_key = jax.random.split(key)
         # action selection, step env
         prev_obs = copy.deepcopy(obs)
-        action = actor.apply(actor_params, obs)
+        action = jax.lax.stop_gradient(actor.apply(actor_params, obs))
         noise = jax.random.normal(noise_key, action.shape) * config.ac_noise_scale
         action = (noise + action).clip(action_min, action_max)
 
+        # env.render()
         obs, reward, term, trunc, info = env.step(action)
 
         episode_reward += reward
@@ -235,9 +241,11 @@ def main(_: Any) -> None:
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
             # --------------- critic updates ----------------------
-            next_actions = actor.apply(target_actor_params, batch["next_obs"])
-            next_q_values = critic.apply(
-                target_critic_params, batch["next_obs"], next_actions
+            next_actions = jax.lax.stop_gradient(
+                actor.apply(target_actor_params, batch["next_obs"])
+            )
+            next_q_values = jax.lax.stop_gradient(
+                critic.apply(target_critic_params, batch["next_obs"], next_actions)
             )
             td_target = jax.lax.stop_gradient(
                 batch["rew"] + config.gamma * next_q_values * (1 - batch["done"])
