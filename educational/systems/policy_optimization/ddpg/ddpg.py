@@ -91,9 +91,7 @@ class SystemConfig:
     batch_size: int = 32
 
     gamma: float = 0.99
-
-    ac_noise_scale: float = 0.1
-
+    ac_noise_scale: float = 0.01
     tau: float = 0.005
 
 
@@ -201,6 +199,9 @@ def main(_: Any) -> None:
     # logging.info(f"Running {FLAGS.system}")
     rb = ReplayBuffer(2, 1, 10_000)
 
+    episode_reward = 0
+    episode_length = 0
+
     obs, _ = env.reset()
     for global_step in range(config.total_steps):
         key, noise_key = jax.random.split(key)
@@ -211,8 +212,22 @@ def main(_: Any) -> None:
         action = (noise + action).clip(action_min, action_max)
 
         obs, reward, term, trunc, info = env.step(action)
+
+        episode_reward += reward
+        episode_length += 1
+
         # replay add stuff
         rb.store(prev_obs, action, reward, obs, term)
+        if term or trunc:
+            print(
+                f"""
+                episode reward: {episode_reward}
+                episode length: {episode_length}
+                ----------------------------------"""
+            )
+            episode_reward = 0
+            episode_length = 0
+            obs, _ = env.reset()
 
         # train:
         if global_step % config.train_freq == 0:
