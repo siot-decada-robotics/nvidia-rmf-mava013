@@ -92,6 +92,10 @@ class SystemConfig:
 
     gamma: float = 0.99
 
+    ac_noise_scale: float = 0.1
+
+    tau: float = 0.005
+
 
 def init(config: SystemConfig = SystemConfig()) -> SystemConfig:
     """Init system.
@@ -126,8 +130,8 @@ def make_environment(
 
 # TODO: make DDPG network class
 def make_networks(
-    key, action_size, obs_size
-) -> Tuple[hk.Transformed, hk.Transformed, jnp.ndarray, jnp.ndarray]:
+    key, action_shape: Tuple[int, ...], obs_shape: Tuple[int, ...]
+) -> Tuple[hk.Transformed, hk.Transformed, hk.Params, hk.Params]:
     """Inits and returns system/networks.
 
     Args:
@@ -141,15 +145,15 @@ def make_networks(
     @hk.without_apply_rng
     @hk.transform
     def actor(obs):
-        return hk.nets.MLP([64, 64, action_size])(obs)
+        return hk.nets.MLP([64, 64, *action_shape])(obs)
 
     @hk.without_apply_rng
     @hk.transform
     def critic(obs, action):
         return hk.nets.MLP([64, 64, 1])(jnp.concatenate([obs, action], axis=1))
 
-    dummy_obs = jnp.zeros((1, obs_size))
-    dummy_actions = jnp.zeros((1, action_size))
+    dummy_obs = jnp.zeros((1, *obs_shape))
+    dummy_actions = jnp.zeros((1, *action_shape))
     actor_params = actor.init(key, dummy_obs)
     critic_params = critic.init(key, dummy_obs, dummy_actions)
 
@@ -179,7 +183,14 @@ def main(_: Any) -> None:
     # env_spec = mava_specs.MAEnvironmentSpec(env)
     key, net_key = jax.random.split(key)
     # TODO: use specs to get action and obs size
-    actor, critic, actor_params, critic_params = make_networks(net_key, 1, 2)
+    action_size = (1,)
+    obs_size = (2,)
+    action_max = 1.0
+    action_min = -1.0
+
+    actor, critic, actor_params, critic_params = make_networks(
+        net_key, action_size, obs_size
+    )
     target_actor_params = copy.deepcopy(actor_params)
     target_critic_params = copy.deepcopy(critic_params)
 
@@ -192,14 +203,16 @@ def main(_: Any) -> None:
 
     obs, _ = env.reset()
     for global_step in range(config.total_steps):
+        key, noise_key = jax.random.split(key)
         # action selection, step env
         prev_obs = copy.deepcopy(obs)
-        action = actor.apply(actor_params, jnp.expand_dims(obs, axis=0))
-        # TODO: copy previous obs
+        action = actor.apply(actor_params, obs)
+        noise = jax.random.normal(noise_key, action.shape) * config.ac_noise_scale
+        action = (noise + action).clip(action_min, action_max)
+
         obs, reward, term, trunc, info = env.step(action)
-        done = term
         # replay add stuff
-        rb.store(prev_obs, action.squeeze(), reward, obs.squeeze(), done)
+        rb.store(prev_obs, action, reward, obs, term)
 
         # train:
         if global_step % config.train_freq == 0:
@@ -233,6 +246,12 @@ def main(_: Any) -> None:
             actor_params = optax.apply_updates(actor_params, actor_updates)
 
             #  update target networks
+            target_actor_params = optax.incremental_update(
+                actor_params, target_actor_params, config.tau
+            )
+            target_critic_params = optax.incremental_update(
+                critic_params, target_critic_params, config.tau
+            )
 
 
 if __name__ == "__main__":
