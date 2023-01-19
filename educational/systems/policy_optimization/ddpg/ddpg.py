@@ -36,6 +36,7 @@ flags.DEFINE_string(
 )
 
 
+# TODO: jittable buffer?
 class ReplayBuffer:
     """
     A simple FIFO experience replay buffer for DDPG agents.
@@ -50,9 +51,7 @@ class ReplayBuffer:
         self.ptr, self.size, self.max_size = 0, 0, size
 
     def store(self, obs, act, rew, next_obs, done):
-        print(obs.shape, self.obs_buf.shape)
         self.obs_buf = self.obs_buf.at[self.ptr].set(obs)
-        print(next_obs.shape, self.next_obs_buf.shape)
         self.next_obs_buf = self.next_obs_buf.at[self.ptr].set(next_obs)
         self.act_buf = self.act_buf.at[self.ptr].set(act)
         self.rew_buf = self.rew_buf.at[self.ptr].set(rew)
@@ -72,25 +71,6 @@ class ReplayBuffer:
             done=self.done_buf[idxs],
         )
         return batch
-
-
-# class ReplayBuffer:
-#     def __init__(self, size) -> None:
-#         self.obs = jnp.zeros((size,))
-#         self.actions = jnp.zeros((size,))
-#         self.rewards = jnp.zeros((size,))
-#         self.next_obs = jnp.zeros((size,))
-#         self.dones = jnp.zeros((size,))
-#
-#     def add(self, obs, action, reward, next_obs, done):
-#         self.obs.append(obs)
-#         self.actions.append(action)
-#         self.rewards.append(reward)
-#         self.next_obs.append(next_obs)
-#         self.dones.append(done)
-#
-#     def sample(self, key, n: int):
-#         jax.random.randint()
 
 
 @dataclass
@@ -144,6 +124,7 @@ def make_environment(
     return gym.make("MountainCarContinuous-v0"), config
 
 
+# TODO: make DDPG network class
 def make_networks(
     key, action_size, obs_size
 ) -> Tuple[hk.Transformed, hk.Transformed, jnp.ndarray, jnp.ndarray]:
@@ -197,6 +178,7 @@ def main(_: Any) -> None:
     env, env_config = make_environment()
     # env_spec = mava_specs.MAEnvironmentSpec(env)
     key, net_key = jax.random.split(key)
+    # TODO: use specs to get action and obs size
     actor, critic, actor_params, critic_params = make_networks(net_key, 1, 2)
     target_actor_params = copy.deepcopy(actor_params)
     target_critic_params = copy.deepcopy(critic_params)
@@ -216,9 +198,9 @@ def main(_: Any) -> None:
         # TODO: copy previous obs
         obs, reward, term, trunc, info = env.step(action)
         done = term
+        # replay add stuff
         rb.store(prev_obs, action.squeeze(), reward, obs.squeeze(), done)
 
-        # replay add stuff
         # train:
         if global_step % config.train_freq == 0:
             #  get sample from replay buf
@@ -251,9 +233,6 @@ def main(_: Any) -> None:
             actor_params = optax.apply_updates(actor_params, actor_updates)
 
             #  update target networks
-
-    # Run system on env
-    # del env, system, env_config, system_config, init_config
 
 
 if __name__ == "__main__":
