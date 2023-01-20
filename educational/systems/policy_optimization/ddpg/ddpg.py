@@ -15,6 +15,7 @@
 import copy
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from math import prod
 from typing import Any, Dict, Tuple
 
@@ -29,6 +30,7 @@ from absl import app, flags
 
 from mava import specs as mava_specs
 from mava.utils.environments import debugging_utils
+from mava.utils.loggers import logger_utils
 
 FLAGS = flags.FLAGS
 
@@ -98,14 +100,14 @@ class SystemConfig:
     seed: int = 42
 
     total_steps: int = 50_000
-    train_freq: int = 100
-    batch_size: int = 32
+    train_freq: int = 1
+    batch_size: int = 64
     actor_lr: float = 0.001
     critic_lr: float = 0.001
 
     gamma: float = 0.99
-    ac_noise_scale: float = 0.2
-    tau: float = 0.005
+    ac_noise_scale: float = 0.1
+    tau: float = 0.01
 
 
 def init(config: SystemConfig = SystemConfig()) -> SystemConfig:
@@ -138,7 +140,7 @@ def make_environment(
 
     # return gym.make("MountainCarContinuous-v0", render_mode="human"), config
     # return gym.make("MountainCarContinuous-v0"), config
-    return gym.make("Pendulum-v1", render_mode="human"), config
+    return gym.make("Pendulum-v1"), config
 
 
 # TODO: make DDPG network class
@@ -163,7 +165,7 @@ def make_networks(
             activation=jax.nn.tanh,
             activate_final=True,
         )
-        return actor(obs) * 5  # TODO: take an action scale
+        return actor(obs) * 2  # TODO: take an action scale
 
     @hk.without_apply_rng
     @hk.transform
@@ -179,13 +181,15 @@ def make_networks(
 
 
 def critic_loss_fn(
+    critic_params: hk.Params,
     td_target: chex.Array,
     critic: hk.Transformed,
-    critic_params: hk.Params,
     obs: chex.Array,
     act: chex.Array,
 ) -> chex.Array:
-    return jnp.mean(rlax.l2_loss(td_target, critic.apply(critic_params, obs, act)))
+    q = critic.apply(critic_params, obs, act)
+    loss = jnp.mean(rlax.l2_loss(td_target, q))
+    return loss, {"mean q": jnp.mean(q), "critic loss": loss}
 
 
 def actor_loss_fn(
@@ -197,7 +201,8 @@ def actor_loss_fn(
 ) -> chex.Array:
     actions = actor.apply(actor_params, obs)
     q = critic.apply(critic_params, obs, actions)
-    return -jnp.mean(q)
+    loss = -jnp.mean(q)
+    return loss, {"policy loss": loss}
 
 
 def main(_: Any) -> None:
@@ -206,6 +211,23 @@ def main(_: Any) -> None:
     Args:
         _ : unused param - for absl.
     """
+    time_delta = 1
+    logger = logger_utils.make_logger(
+        directory="edulogs/",
+        to_terminal=True,
+        to_tensorboard=True,
+        time_stamp=str(datetime.now()) + "executor",
+        time_delta=time_delta,
+        label="random_agent",
+    )
+    trainer_logger = logger_utils.make_logger(
+        directory="edulogs/",
+        to_terminal=True,
+        to_tensorboard=True,
+        time_stamp=str(datetime.now()) + "trainer",
+        time_delta=time_delta,
+        label="random_agent",
+    )
 
     key = jax.random.PRNGKey(1)
     config = init()
@@ -215,9 +237,8 @@ def main(_: Any) -> None:
     # TODO: use specs to get action and obs size
     action_shape = env.action_space.shape
     obs_shape = env.observation_space.shape
-    action_max = env.action_space.low
-    action_min = env.action_space.high
-    # print(env.action_space)
+    action_max = env.action_space.high
+    action_min = env.action_space.low
 
     actor, critic, actor_params, critic_params = make_networks(
         net_key, action_shape, obs_shape
@@ -229,22 +250,26 @@ def main(_: Any) -> None:
     critic_opt = optax.adam(config.critic_lr)
     actor_opt_params = actor_opt.init(actor_params)
     critic_opt_params = critic_opt.init(critic_params)
-    # logging.info(f"Running {FLAGS.system}")
-    rb = ReplayBuffer(prod(obs_shape), prod(action_shape), 10_000)
+    rb = ReplayBuffer(prod(obs_shape), prod(action_shape), 100_000)
 
     episode_reward = 0
     episode_length = 0
+    episode_num = 0
+    trainer_step = 0
 
     obs, _ = env.reset()
     for global_step in range(config.total_steps):
         key, noise_key = jax.random.split(key)
         # action selection, step env
         prev_obs = copy.deepcopy(obs)
-        action = jax.lax.stop_gradient(actor.apply(actor_params, obs))
+        if global_step > 5_000:
+            action = jax.lax.stop_gradient(actor.apply(actor_params, obs))
+        else:
+            action = env.action_space.sample()
         noise = jax.random.normal(noise_key, action.shape) * config.ac_noise_scale
         action = (noise + action).clip(action_min, action_max)
 
-        obs, reward, term, trunc, info = env.step(action)
+        obs, reward, term, trunc, info = env.step(action.tolist())
 
         episode_reward += reward
         episode_length += 1
@@ -252,18 +277,21 @@ def main(_: Any) -> None:
         # replay add stuff
         rb.store(prev_obs, action, reward, obs, term)
         if term or trunc:
-            print(
-                f"""
-                episode reward: {episode_reward}
-                episode length: {episode_length}
-                ----------------------------------"""
+            episode_num += 1
+            logger.write(
+                {
+                    "episode_num": episode_num,
+                    "episode reward": episode_reward,
+                    "episode length": episode_length,
+                }
             )
             episode_reward = 0
             episode_length = 0
             obs, _ = env.reset()
 
         # train:
-        if global_step % config.train_freq == 0:
+        if global_step % config.train_freq == 0 and global_step > config.batch_size * 2:
+            trainer_step += 1
             #  get sample from replay buf
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
@@ -280,8 +308,8 @@ def main(_: Any) -> None:
             )
 
             # TODO: move critic params to first position
-            critic_grads = jax.grad(critic_loss_fn, argnums=2)(
-                td_target, critic, critic_params, batch["obs"], batch["act"]
+            critic_grads, critic_info = jax.grad(critic_loss_fn, has_aux=True)(
+                critic_params, td_target, critic, batch["obs"], batch["act"]
             )
             critic_updates, critic_opt_params = critic_opt.update(
                 critic_grads, critic_opt_params
@@ -290,7 +318,7 @@ def main(_: Any) -> None:
 
             #  ---------------------- actor updates ----------------------
             # TODO: should this be once every n critic updates?
-            actor_grads = jax.grad(actor_loss_fn)(
+            actor_grads, actor_info = jax.grad(actor_loss_fn, has_aux=True)(
                 actor_params, actor, critic_params, critic, batch["obs"]
             )
             actor_updates, actor_opt_params = actor_opt.update(
@@ -304,6 +332,9 @@ def main(_: Any) -> None:
             )
             target_critic_params = optax.incremental_update(
                 critic_params, target_critic_params, config.tau
+            )
+            trainer_logger.write(
+                {"trainer step": trainer_step, **critic_info, **actor_info}
             )
 
 
