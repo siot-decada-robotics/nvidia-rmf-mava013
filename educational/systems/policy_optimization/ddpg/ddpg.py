@@ -15,8 +15,10 @@
 import copy
 import logging
 from dataclasses import dataclass
-from typing import Any, Tuple
+from math import prod
+from typing import Any, Dict, Tuple
 
+import chex
 import gymnasium as gym
 import haiku as hk
 import jax
@@ -42,7 +44,7 @@ class ReplayBuffer:
     A simple FIFO experience replay buffer for DDPG agents.
     """
 
-    def __init__(self, obs_dim, act_dim, size):
+    def __init__(self, obs_dim: int, act_dim: int, size: int) -> None:
         self.obs_buf = jnp.zeros((size, obs_dim), dtype=jnp.float32)
         self.next_obs_buf = jnp.zeros((size, obs_dim), dtype=jnp.float32)
         self.act_buf = jnp.zeros((size, act_dim), dtype=jnp.float32)
@@ -50,7 +52,14 @@ class ReplayBuffer:
         self.done_buf = jnp.zeros(size, dtype=jnp.float32)
         self.ptr, self.size, self.max_size = 0, 0, size
 
-    def store(self, obs, act, rew, next_obs, done):
+    def store(
+        self,
+        obs: chex.Array,
+        act: chex.Array,
+        rew: chex.Array,
+        next_obs: chex.Array,
+        done: chex.Array,
+    ) -> None:
         self.obs_buf = self.obs_buf.at[self.ptr].set(obs)
         self.next_obs_buf = self.next_obs_buf.at[self.ptr].set(next_obs)
         self.act_buf = self.act_buf.at[self.ptr].set(act)
@@ -59,7 +68,9 @@ class ReplayBuffer:
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
-    def sample_batch(self, key, batch_size=32):
+    def sample_batch(
+        self, key: chex.PRNGKey, batch_size: int = 32
+    ) -> Dict[str, chex.Array]:
         idxs = jax.random.randint(
             key, shape=(batch_size,), minval=0, maxval=self.size - 1
         )
@@ -89,9 +100,11 @@ class SystemConfig:
     total_steps: int = 50_000
     train_freq: int = 100
     batch_size: int = 32
+    actor_lr: float = 0.001
+    critic_lr: float = 0.001
 
     gamma: float = 0.99
-    ac_noise_scale: float = 0.01
+    ac_noise_scale: float = 0.2
     tau: float = 0.005
 
 
@@ -113,7 +126,7 @@ def init(config: SystemConfig = SystemConfig()) -> SystemConfig:
 
 def make_environment(
     config: EnvironmentConfig = EnvironmentConfig(),
-) -> Tuple[Any, EnvironmentConfig]:
+) -> Tuple[gym.Env, EnvironmentConfig]:
     """Init and return environment or wrapper.
 
     Args:
@@ -123,12 +136,14 @@ def make_environment(
         (env, config).
     """
 
-    return gym.make("MountainCarContinuous-v0", render_mode="human"), config
+    # return gym.make("MountainCarContinuous-v0", render_mode="human"), config
+    # return gym.make("MountainCarContinuous-v0"), config
+    return gym.make("Pendulum-v1", render_mode="human"), config
 
 
 # TODO: make DDPG network class
 def make_networks(
-    key, action_shape: Tuple[int, ...], obs_shape: Tuple[int, ...]
+    key: chex.PRNGKey, action_shape: Tuple[int, ...], obs_shape: Tuple[int, ...]
 ) -> Tuple[hk.Transformed, hk.Transformed, hk.Params, hk.Params]:
     """Inits and returns system/networks.
 
@@ -142,17 +157,17 @@ def make_networks(
 
     @hk.without_apply_rng
     @hk.transform
-    def actor(obs):
+    def actor(obs: chex.Array) -> chex.Array:
         actor = hk.nets.MLP(
             [64, 64, *action_shape],
             activation=jax.nn.tanh,
             activate_final=True,
         )
-        return actor(obs)
+        return actor(obs) * 5  # TODO: take an action scale
 
     @hk.without_apply_rng
     @hk.transform
-    def critic(obs, action):
+    def critic(obs: chex.Array, action: chex.Array) -> chex.Array:
         return hk.nets.MLP([64, 64, 1])(jnp.concatenate([obs, action], axis=1))
 
     dummy_obs = jnp.zeros((1, *obs_shape))
@@ -163,11 +178,23 @@ def make_networks(
     return actor, critic, actor_params, critic_params
 
 
-def critic_loss_fn(td_target, critic, critic_params, obs, act):
+def critic_loss_fn(
+    td_target: chex.Array,
+    critic: hk.Transformed,
+    critic_params: hk.Params,
+    obs: chex.Array,
+    act: chex.Array,
+) -> chex.Array:
     return jnp.mean(rlax.l2_loss(td_target, critic.apply(critic_params, obs, act)))
 
 
-def actor_loss_fn(actor_params, actor, critic_params, critic, obs):
+def actor_loss_fn(
+    actor_params: hk.Params,
+    actor: hk.Transformed,
+    critic_params: hk.Params,
+    critic: hk.Transformed,
+    obs: chex.Array,
+) -> chex.Array:
     actions = actor.apply(actor_params, obs)
     q = critic.apply(critic_params, obs, actions)
     return -jnp.mean(q)
@@ -182,27 +209,28 @@ def main(_: Any) -> None:
 
     key = jax.random.PRNGKey(1)
     config = init()
-    env, env_config = make_environment()
+    env, _ = make_environment()
     # env_spec = mava_specs.MAEnvironmentSpec(env)
     key, net_key = jax.random.split(key)
     # TODO: use specs to get action and obs size
-    action_size = (1,)
-    obs_size = (2,)
-    action_max = 1.0
-    action_min = -1.0
+    action_shape = env.action_space.shape
+    obs_shape = env.observation_space.shape
+    action_max = env.action_space.low
+    action_min = env.action_space.high
+    # print(env.action_space)
 
     actor, critic, actor_params, critic_params = make_networks(
-        net_key, action_size, obs_size
+        net_key, action_shape, obs_shape
     )
     target_actor_params = copy.deepcopy(actor_params)
     target_critic_params = copy.deepcopy(critic_params)
 
-    actor_opt = optax.adam(0.001)  # TODO:  make this config option
-    critic_opt = optax.adam(0.001)
+    actor_opt = optax.adam(config.actor_lr)
+    critic_opt = optax.adam(config.critic_lr)
     actor_opt_params = actor_opt.init(actor_params)
     critic_opt_params = critic_opt.init(critic_params)
     # logging.info(f"Running {FLAGS.system}")
-    rb = ReplayBuffer(2, 1, 10_000)
+    rb = ReplayBuffer(prod(obs_shape), prod(action_shape), 10_000)
 
     episode_reward = 0
     episode_length = 0
@@ -216,7 +244,6 @@ def main(_: Any) -> None:
         noise = jax.random.normal(noise_key, action.shape) * config.ac_noise_scale
         action = (noise + action).clip(action_min, action_max)
 
-        # env.render()
         obs, reward, term, trunc, info = env.step(action)
 
         episode_reward += reward
@@ -241,6 +268,7 @@ def main(_: Any) -> None:
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
             # --------------- critic updates ----------------------
+            # TODO: do you need to stop grads at all of these or only the final?
             next_actions = jax.lax.stop_gradient(
                 actor.apply(target_actor_params, batch["next_obs"])
             )
@@ -251,6 +279,7 @@ def main(_: Any) -> None:
                 batch["rew"] + config.gamma * next_q_values * (1 - batch["done"])
             )
 
+            # TODO: move critic params to first position
             critic_grads = jax.grad(critic_loss_fn, argnums=2)(
                 td_target, critic, critic_params, batch["obs"], batch["act"]
             )
@@ -260,6 +289,7 @@ def main(_: Any) -> None:
             critic_params = optax.apply_updates(critic_params, critic_updates)
 
             #  ---------------------- actor updates ----------------------
+            # TODO: should this be once every n critic updates?
             actor_grads = jax.grad(actor_loss_fn)(
                 actor_params, actor, critic_params, critic, batch["obs"]
             )
