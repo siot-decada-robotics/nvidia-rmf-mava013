@@ -38,7 +38,8 @@ flags.DEFINE_string("system", "test agent", "What agent is running.")
 flags.DEFINE_string(
     "base_dir", "~/mava", "Base dir to store experiment data e.g. checkpoints."
 )
-
+# TODO: remove - getting OOM errors on 3050ti
+jax.config.update("jax_platform_name", "cpu")
 
 # TODO: jittable buffer?
 class ReplayBuffer:
@@ -140,12 +141,16 @@ def make_environment(
 
     # return gym.make("MountainCarContinuous-v0", render_mode="human"), config
     # return gym.make("MountainCarContinuous-v0"), config
-    return gym.make("Pendulum-v1"), config
+    # return gym.make("Pendulum-v1"), config
+    return gym.make("LunarLanderContinuous-v2"), config
 
 
 # TODO: make DDPG network class
 def make_networks(
-    key: chex.PRNGKey, action_shape: Tuple[int, ...], obs_shape: Tuple[int, ...]
+    key: chex.PRNGKey,
+    action_shape: Tuple[int, ...],
+    obs_shape: Tuple[int, ...],
+    action_scale: float,
 ) -> Tuple[hk.Transformed, hk.Transformed, hk.Params, hk.Params]:
     """Inits and returns system/networks.
 
@@ -162,10 +167,10 @@ def make_networks(
     def actor(obs: chex.Array) -> chex.Array:
         actor = hk.nets.MLP(
             [64, 64, *action_shape],
-            activation=jax.nn.tanh,
-            activate_final=True,
+            # activation=jax.nn.tanh,
+            # activate_final=True,
         )
-        return actor(obs) * 2  # TODO: take an action scale
+        return jax.nn.tanh(actor(obs)) * action_scale
 
     @hk.without_apply_rng
     @hk.transform
@@ -188,7 +193,8 @@ def critic_loss_fn(
     act: chex.Array,
 ) -> chex.Array:
     q = critic.apply(critic_params, obs, act)
-    loss = jnp.mean(rlax.l2_loss(td_target, q))
+    # loss = jnp.mean(rlax.l2_loss(td_target, q))
+    loss = jnp.mean(0.5 * (td_target - q) ** 2)
     return loss, {"mean q": jnp.mean(q), "critic loss": loss}
 
 
@@ -218,7 +224,7 @@ def main(_: Any) -> None:
         to_tensorboard=True,
         time_stamp=str(datetime.now()) + "executor",
         time_delta=time_delta,
-        label="random_agent",
+        label="ddpg_executor",
     )
     trainer_logger = logger_utils.make_logger(
         directory="edulogs/",
@@ -226,7 +232,7 @@ def main(_: Any) -> None:
         to_tensorboard=True,
         time_stamp=str(datetime.now()) + "trainer",
         time_delta=time_delta,
-        label="random_agent",
+        label="ddpg_trainer",
     )
 
     key = jax.random.PRNGKey(1)
@@ -241,7 +247,7 @@ def main(_: Any) -> None:
     action_min = env.action_space.low
 
     actor, critic, actor_params, critic_params = make_networks(
-        net_key, action_shape, obs_shape
+        net_key, action_shape, obs_shape, action_max
     )
     target_actor_params = copy.deepcopy(actor_params)
     target_critic_params = copy.deepcopy(critic_params)
@@ -261,21 +267,22 @@ def main(_: Any) -> None:
     for global_step in range(config.total_steps):
         key, noise_key = jax.random.split(key)
         # action selection, step env
-        prev_obs = copy.deepcopy(obs)
-        if global_step > 5_000:
+        # prev_obs = obs.copy()  # copy.deepcopy(obs)
+        if global_step > 1000:
             action = jax.lax.stop_gradient(actor.apply(actor_params, obs))
         else:
             action = env.action_space.sample()
         noise = jax.random.normal(noise_key, action.shape) * config.ac_noise_scale
         action = (noise + action).clip(action_min, action_max)
 
-        obs, reward, term, trunc, info = env.step(action.tolist())
+        nobs, reward, term, trunc, info = env.step(action.tolist())
 
         episode_reward += reward
         episode_length += 1
 
         # replay add stuff
-        rb.store(prev_obs, action, reward, obs, term)
+        rb.store(obs.copy(), action.copy(), reward, nobs.copy(), term)
+        obs = nobs.copy()
         if term or trunc:
             episode_num += 1
             logger.write(
@@ -307,7 +314,6 @@ def main(_: Any) -> None:
                 batch["rew"] + config.gamma * next_q_values * (1 - batch["done"])
             )
 
-            # TODO: move critic params to first position
             critic_grads, critic_info = jax.grad(critic_loss_fn, has_aux=True)(
                 critic_params, td_target, critic, batch["obs"], batch["act"]
             )
