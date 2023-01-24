@@ -35,12 +35,12 @@ flags.DEFINE_string(
 )
 flags.DEFINE_string(
     "env_name",
-    "simple_spread",
+    "3m",
     "Env name e.g. sinple_spread, 3m or 8m.",
 )
 flags.DEFINE_string(
     "env_type",
-    "debug",
+    "smac",
     "Env type e.g. debug or smac.",
 )
 flags.DEFINE_string(
