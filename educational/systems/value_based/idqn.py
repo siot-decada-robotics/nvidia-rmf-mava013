@@ -29,6 +29,7 @@ from mava import specs as mava_specs
 from mava.utils.environments import debugging_utils, smac_utils
 from mava.utils.loggers import logger_utils
 
+from collections import deque
 
 FLAGS = flags.FLAGS
 
@@ -150,11 +151,35 @@ def make_system(
     networks,sample_fn = make_networks()
     return networks,sample_fn
 
+class ReplayBuffer():
 
+    def __init__(self,
+        max_len = 100,):
+        self.max_len = 100
+        self.buffer = deque(maxlen = max_len)
+        self.num_items = 0
+
+    def add(self,data):
+        self.buffer.append(data)
+        self.num_items = len(self.buffer)
+
+def loss(q_params,q_networks,obs,actions,next_obs , rewards, dones,specs)  :
+    loss_grads = {}
+    for net_key, spec in specs.items(): 
+        q_next_target =  q_networks[net_key]["actor_net"].apply(q_params[net_key],next_obs[net_key])
+        q_next_target = jnp.max(q_next_target, axis = -1)
+        next_q_value  = rewards[net_key] + (1 - dones[net_key])*0.99*q_next_target
+
+        def mse_loss(params):
+            q_pred = q_networks[net_key]["actor_net"].apply(q_params[net_key],obs[net_key])
+            return ((q_pred - next_q_value)**2).mean(), q_pred
+        
+        (loss_grads[net_key],q_preds), grads = jax.value_and_grad(mse_loss,has_aux=True)(q_params[net_key])
+
+
+    return loss_grads
+    #TODO: CHANGE TO USE TARGET NETS
     
-
-
-
 def main(_: Any) -> None:
     """Template for educational system implementations.
 
@@ -167,15 +192,23 @@ def main(_: Any) -> None:
     env = make_environment()
     env_spec = mava_specs.MAEnvironmentSpec(env)
     networks, sample_fn = make_system(env_spec)
-
+    replay_buffer = ReplayBuffer()
     #run system on env
     episodes = 10
+     
     for episode in range(episodes):
         timestep = env.reset()
+        counter  =0
         while not timestep.last():
             #get action
             actions = sample_fn(timestep.observation,networks)
-            timestep = env.step(actions)
+            new_timestep = env.step(actions)
+
+            replay_tuple = [actions,timestep.observation,new_timestep.observation,new_timestep.reward,timestep.last()]
+            replay_buffer.add(replay_tuple)
+            timestep = new_timestep
+            counter += 1
+            #print(counter)
 
 if __name__ == "__main__":
     app.run(main)
