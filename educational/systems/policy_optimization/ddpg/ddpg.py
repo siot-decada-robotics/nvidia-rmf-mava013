@@ -16,6 +16,7 @@ import copy
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from math import prod
 from typing import Any, Dict, Tuple
 
@@ -39,7 +40,7 @@ flags.DEFINE_string(
     "base_dir", "~/mava", "Base dir to store experiment data e.g. checkpoints."
 )
 # TODO: remove - getting OOM errors on 3050ti
-# jax.config.update("jax_platform_name", "cpu")
+jax.config.update("jax_platform_name", "cpu")
 
 # TODO: jittable buffer?
 class ReplayBuffer:
@@ -191,6 +192,7 @@ def make_networks(
     )
 
 
+@partial(jax.jit, static_argnames=["critic"])
 def critic_loss_fn(
     critic_params: hk.Params,
     td_target: chex.Array,
@@ -198,12 +200,13 @@ def critic_loss_fn(
     obs: chex.Array,
     act: chex.Array,
 ) -> chex.Array:
-    q = critic.apply(critic_params, obs, act)
+    q = critic.apply(critic_params, obs, act).squeeze()
     # loss = jnp.mean(rlax.l2_loss(td_target, q))
     loss = jnp.mean((td_target - q) ** 2)
     return loss, {"mean q": jnp.mean(q), "critic loss": loss}
 
 
+@partial(jax.jit, static_argnames=["actor", "critic"])
 def actor_loss_fn(
     actor_params: hk.Params,
     actor: hk.Transformed,
@@ -253,7 +256,9 @@ def main(_: Any) -> None:
     action_min = env.action_space.low
 
     action_scale = (action_max - action_min) / 2
+    # TODO: action bias
 
+    # TODO: dataclass to hold params
     (
         actor,
         critic,
@@ -276,13 +281,13 @@ def main(_: Any) -> None:
     episode_num = 0
     trainer_step = 0
 
-    learning_starts = 25e3
+    learning_starts = 1000  # TODO: config
 
     obs, _ = env.reset()
     for global_step in range(config.total_steps):
         key, noise_key = jax.random.split(key)
+        # TODO: jit action selection
         # action selection, step env
-        # prev_obs = obs.copy()  # copy.deepcopy(obs)
         if global_step > learning_starts:
             action = actor.apply(actor_params, obs)
         else:
@@ -318,16 +323,16 @@ def main(_: Any) -> None:
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
             # --------------- critic updates ----------------------
-            # TODO: do you need to stop grads at all of these or only the final?
             next_actions = actor.apply(target_actor_params, batch["next_obs"]).clip(
-                -1, 1
+                action_min, action_max
             )
             next_q_values = critic.apply(
                 target_critic_params, batch["next_obs"], next_actions
-            )
+            ).squeeze()
 
-            td_target = batch["rew"] + config.gamma * next_q_values * (
-                1 - batch["done"]
+            # TODO: stop grad?
+            td_target = batch["rew"] + (
+                config.gamma * next_q_values * (1 - batch["done"]).squeeze()
             )
 
             critic_grads, critic_info = jax.grad(critic_loss_fn, has_aux=True)(
@@ -339,6 +344,7 @@ def main(_: Any) -> None:
             critic_params = optax.apply_updates(critic_params, critic_updates)
 
             #  ---------------------- actor updates ----------------------
+            # TODO: make an update method
             # TODO: should this be once every n critic updates?
             actor_grads, actor_info = jax.grad(actor_loss_fn, has_aux=True)(
                 actor_params, actor, critic_params, critic, batch["obs"]
@@ -348,7 +354,8 @@ def main(_: Any) -> None:
             )
             actor_params = optax.apply_updates(actor_params, actor_updates)
 
-            #  update target networks
+            # ---------------------- update target networks ----------------------
+            # TODO: method
             target_actor_params = optax.incremental_update(
                 actor_params, target_actor_params, config.tau
             )
