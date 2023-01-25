@@ -1,17 +1,4 @@
-# python3
-# Copyright 2022 InstaDeep Ltd. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+from functools import partial
 import copy
 import logging
 from dataclasses import dataclass
@@ -24,6 +11,7 @@ import gymnasium as gym
 import haiku as hk
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 import rlax
 from absl import app, flags
@@ -217,6 +205,81 @@ def actor_loss_fn(
     return loss, {"policy loss": loss}
 
 
+@partial(jax.jit, static_argnames=["actor", "critic", "critic_opt"])
+def update_critic(
+    actor,
+    critic,
+    target_actor_params,
+    critic_params,
+    target_critic_params,
+    critic_opt,
+    critic_opt_state,
+    observations: np.ndarray,
+    actions: np.ndarray,
+    next_observations: np.ndarray,
+    rewards: np.ndarray,
+    dones: np.ndarray,
+    gamma,
+):
+    next_state_actions = (actor.apply(target_actor_params, next_observations)).clip(
+        -1, 1
+    )  # TODO: proper clip
+
+    qf1_next_target = critic.apply(
+        target_critic_params, next_observations, next_state_actions
+    ).reshape(-1)
+    next_q_value = (rewards + (1 - dones) * gamma * (qf1_next_target)).reshape(-1)
+
+    def mse_loss(params):
+        qf1_a_values = critic.apply(params, observations, actions).squeeze()
+        return ((qf1_a_values - next_q_value) ** 2).mean(), qf1_a_values.mean()
+
+    (qf1_loss_value, qf1_a_values), grads = jax.value_and_grad(mse_loss, has_aux=True)(
+        critic_params
+    )
+
+    updates, new_opt_state = critic_opt.update(grads, critic_opt_state, critic_params)
+    new_params = optax.apply_updates(critic_params, updates)
+    return new_params, new_opt_state, qf1_loss_value, qf1_a_values
+
+
+@partial(jax.jit, static_argnames=["actor", "critic", "actor_opt"])
+def update_actor(
+    actor,
+    critic,
+    actor_params,
+    critic_params,
+    actor_opt,
+    actor_opt_state,
+    observations: jnp.ndarray,
+):
+    def actor_loss(params):
+        return -critic.apply(
+            critic_params, observations, actor.apply(params, observations)
+        ).mean()
+
+    actor_loss_value, grads = jax.value_and_grad(actor_loss)(actor_params)
+    updates, new_opt_state = actor_opt.update(grads, actor_opt_state, actor_params)
+    new_params = optax.apply_updates(actor_params, updates)
+
+    return new_params, new_opt_state, actor_loss_value
+
+
+@jax.jit
+def update_target_params(
+    actor_params, critic_params, actor_target_params, critic_target_params, tau
+):
+    actor_target_params = optax.incremental_update(
+        actor_params, actor_target_params, tau
+    )
+
+    critic_target_params = optax.incremental_update(
+        critic_params, critic_target_params, tau
+    )
+
+    return actor_target_params, critic_target_params
+
+
 def main(_: Any) -> None:
     """Template for educational system implementations.
 
@@ -276,7 +339,7 @@ def main(_: Any) -> None:
     episode_num = 0
     trainer_step = 0
 
-    learning_starts = 25e3
+    learning_starts = 300  # 25e3
 
     obs, _ = env.reset()
     for global_step in range(config.total_steps):
@@ -317,46 +380,37 @@ def main(_: Any) -> None:
             #  get sample from replay buf
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
-            # --------------- critic updates ----------------------
-            # TODO: do you need to stop grads at all of these or only the final?
-            next_actions = actor.apply(target_actor_params, batch["next_obs"]).clip(
-                -1, 1
-            )
-            next_q_values = critic.apply(
-                target_critic_params, batch["next_obs"], next_actions
-            )
 
-            td_target = batch["rew"] + config.gamma * next_q_values * (
-                1 - batch["done"]
+            critic_params, critic_opt_params, critic_loss, q_value = update_critic(
+                actor,
+                critic,
+                target_actor_params,
+                critic_params,
+                target_critic_params,
+                critic_opt,
+                critic_opt_params,
+                batch["obs"],
+                batch["act"],
+                batch["next_obs"],
+                batch["rew"],
+                batch["done"],
+                config.gamma,
             )
-
-            critic_grads, critic_info = jax.grad(critic_loss_fn, has_aux=True)(
-                critic_params, td_target, critic, batch["obs"], batch["act"]
-            )
-            critic_updates, critic_opt_params = critic_opt.update(
-                critic_grads, critic_opt_params, critic_params
-            )
-            critic_params = optax.apply_updates(critic_params, critic_updates)
-
-            #  ---------------------- actor updates ----------------------
-            # TODO: should this be once every n critic updates?
-            actor_grads, actor_info = jax.grad(actor_loss_fn, has_aux=True)(
-                actor_params, actor, critic_params, critic, batch["obs"]
-            )
-            actor_updates, actor_opt_params = actor_opt.update(
-                actor_grads, actor_opt_params, actor_params
-            )
-            actor_params = optax.apply_updates(actor_params, actor_updates)
-
-            #  update target networks
-            target_actor_params = optax.incremental_update(
-                actor_params, target_actor_params, config.tau
-            )
-            target_critic_params = optax.incremental_update(
-                critic_params, target_critic_params, config.tau
+            actor_params, actor_opt_params, actor_loss = update_actor(
+                actor,
+                critic,
+                actor_params,
+                critic_params,
+                actor_opt_params,
+                batch["obs"],
             )
             trainer_logger.write(
-                {"trainer step": trainer_step, **critic_info, **actor_info}
+                {
+                    "trainer step": trainer_step,
+                    "critic loss": critic_loss,
+                    "q value": q_value,
+                    "actor loss": actor_loss,
+                }
             )
 
 
