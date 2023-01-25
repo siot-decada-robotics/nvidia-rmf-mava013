@@ -1,13 +1,15 @@
-from functools import partial
 import copy
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from math import prod
 from typing import Any, Dict, Tuple
 
 import chex
 import gymnasium as gym
+
+# import gym
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -27,7 +29,7 @@ flags.DEFINE_string(
     "base_dir", "~/mava", "Base dir to store experiment data e.g. checkpoints."
 )
 # TODO: remove - getting OOM errors on 3050ti
-# jax.config.update("jax_platform_name", "cpu")
+jax.config.update("jax_platform_name", "cpu")
 
 # TODO: jittable buffer?
 class ReplayBuffer:
@@ -339,7 +341,7 @@ def main(_: Any) -> None:
     episode_num = 0
     trainer_step = 0
 
-    learning_starts = 300  # 25e3
+    learning_starts = 1000  # 25e3
 
     obs, _ = env.reset()
     for global_step in range(config.total_steps):
@@ -350,10 +352,10 @@ def main(_: Any) -> None:
             action = actor.apply(actor_params, obs)
         else:
             action = env.action_space.sample()
-        noise = jax.random.normal(noise_key) * config.ac_noise_scale
+        noise = jax.random.normal(noise_key, action.shape) * config.ac_noise_scale
         action = (noise + action).clip(action_min, action_max)
 
-        nobs, reward, term, trunc, info = env.step(action.tolist())
+        nobs, reward, term, trunc, info = env.step(action)
 
         episode_reward += reward
         episode_length += 1
@@ -368,6 +370,7 @@ def main(_: Any) -> None:
                     "episode_num": episode_num,
                     "episode reward": episode_reward,
                     "episode length": episode_length,
+                    "global step": global_step,
                 }
             )
             episode_reward = 0
@@ -401,9 +404,19 @@ def main(_: Any) -> None:
                 critic,
                 actor_params,
                 critic_params,
+                actor_opt,
                 actor_opt_params,
                 batch["obs"],
             )
+
+            target_actor_params, target_critic_params = update_target_params(
+                actor_params,
+                critic_params,
+                target_actor_params,
+                target_critic_params,
+                config.tau,
+            )
+
             trainer_logger.write(
                 {
                     "trainer step": trainer_step,
