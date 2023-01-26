@@ -234,6 +234,33 @@ def actor_loss_fn(
     return loss, {"policy loss": loss}
 
 
+@partial(jax.jit, static_argnames=["actor", "sample_action"])
+def select_action(
+    key,
+    global_step,
+    actor,
+    actor_params,
+    action_min,
+    action_max,
+    sample_action,
+    obs,
+    learning_starts,
+    ac_noise_scale,
+):
+    key, noise_key = jax.random.split(key)
+
+    action = jax.lax.cond(
+        global_step > learning_starts,
+        lambda: actor.apply(actor_params, obs),
+        lambda: sample_action(),
+    )
+
+    noise = jax.random.normal(noise_key) * ac_noise_scale
+    action = (noise + action).clip(action_min, action_max)
+
+    return action, key
+
+
 def main(_: Any) -> None:
     """Template for educational system implementations.
 
@@ -286,15 +313,21 @@ def main(_: Any) -> None:
 
     obs, _ = env.reset()
     for global_step in range(config.total_steps):
-        key, noise_key = jax.random.split(key)
         # TODO: jit action selection
         # action selection, step env
-        if global_step > config.learning_starts:
-            action = network.actor.apply(network_params.actor_params, obs)
-        else:
-            action = env.action_space.sample()
-        noise = jax.random.normal(noise_key) * config.ac_noise_scale
-        action = (noise + action).clip(action_min, action_max)
+
+        action, key = select_action(
+            key,
+            global_step,
+            network.actor,
+            network_params.actor_params,
+            action_min,
+            action_max,
+            env.action_space.sample,
+            obs,
+            config.learning_starts,
+            config.ac_noise_scale,
+        )
 
         nobs, reward, term, trunc, info = env.step(action.tolist())
 
@@ -397,14 +430,12 @@ def main(_: Any) -> None:
 
         else:
             actor_info = {"policy loss": None}
-            critic_info = {
-                "critic loss": None,
-                "policy loss": None
-            }
-        
+            critic_info = {"critic loss": None, "policy loss": None}
+
         trainer_logger.write(
-                {"trainer step": trainer_step, **critic_info, **actor_info}
-            )
+            {"trainer step": trainer_step, **critic_info, **actor_info}
+        )
+
 
 if __name__ == "__main__":
     app.run(main)
