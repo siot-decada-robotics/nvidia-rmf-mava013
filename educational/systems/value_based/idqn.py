@@ -24,6 +24,7 @@ import jax.numpy as jnp
 from absl import app, flags
 
 import haiku as hk
+import optax
 
 from mava import specs as mava_specs
 from mava.utils.environments import debugging_utils, smac_utils
@@ -164,7 +165,7 @@ class ReplayBuffer():
         self.num_items = len(self.buffer)
 
 def loss(q_params,q_networks,obs,actions,next_obs , rewards, dones,specs)  :
-    loss_grads = {}
+    loss = {}
     for net_key, spec in specs.items(): 
         q_next_target =  q_networks[net_key]["actor_net"].apply(q_params[net_key],next_obs[net_key])
         q_next_target = jnp.max(q_next_target, axis = -1)
@@ -174,10 +175,11 @@ def loss(q_params,q_networks,obs,actions,next_obs , rewards, dones,specs)  :
             q_pred = q_networks[net_key]["actor_net"].apply(q_params[net_key],obs[net_key])
             return ((q_pred - next_q_value)**2).mean(), q_pred
         
-        (loss_grads[net_key],q_preds), grads = jax.value_and_grad(mse_loss,has_aux=True)(q_params[net_key])
+        (loss[net_key],q_preds), grads = jax.value_and_grad(mse_loss,has_aux=True)(q_params[net_key])
+        q_params = q_params.apply_gradients
 
 
-    return loss_grads
+    return loss
     #TODO: CHANGE TO USE TARGET NETS
     
 def main(_: Any) -> None:
