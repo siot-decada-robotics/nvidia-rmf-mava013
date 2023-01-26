@@ -112,6 +112,22 @@ class SystemConfig:
     ac_noise_scale: float = 0.1
     tau: float = 0.01
 
+@dataclass
+class Network:
+    actor: hk.Transformed
+    critic: hk.Transformed
+    actor_opt: optax.GradientTransformation
+    critic_opt: optax.GradientTransformation
+
+@dataclass
+class NetworkParams:
+    actor_params: hk.Params
+    critic_params: hk.Params
+    target_actor_params:hk.Params
+    target_critic_params:hk.Params
+    actor_opt_state: optax.OptState
+    critic_opt_state: optax.OptState
+
 
 def make_environment(
     config: EnvironmentConfig = EnvironmentConfig(),
@@ -137,7 +153,8 @@ def make_networks(
     action_shape: Tuple[int, ...],
     obs_shape: Tuple[int, ...],
     action_scale: float,
-) -> Tuple[hk.Transformed, hk.Transformed, hk.Params, hk.Params, hk.Params, hk.Params]:
+    config
+) -> Tuple[Network, NetworkParams]:
     """Inits and returns system/networks.
 
     Args:
@@ -147,7 +164,6 @@ def make_networks(
     Returns:
         system.
     """
-    #To do net as var
     @hk.without_apply_rng
     @hk.transform
     def actor(obs: chex.Array) -> chex.Array:
@@ -159,21 +175,27 @@ def make_networks(
     def critic(obs: chex.Array, action: chex.Array) -> chex.Array:
         return hk.nets.MLP([256, 256, 1])(jnp.concatenate([obs, action], axis=-1))
 
+    # networks
     actor_key, critic_key = jax.random.split(key)
     dummy_obs = jnp.zeros((1, *obs_shape))
     dummy_actions = jnp.zeros((1, *action_shape))
+    
     actor_params = actor.init(actor_key, dummy_obs)
     target_actor_params = actor.init(actor_key, dummy_obs)
     critic_params = critic.init(critic_key, dummy_obs, dummy_actions)
     target_critic_params = critic.init(critic_key, dummy_obs, dummy_actions)
-    #TODO make return 2 data classes
+    
+    # optimisers
+    actor_opt = optax.adam(config.actor_lr)
+    critic_opt = optax.adam(config.critic_lr)
+    actor_opt_state = actor_opt.init(actor_params)
+    critic_opt_state = critic_opt.init(critic_params)
+    
+    network=Network(actor=actor, critic=critic,actor_opt=actor_opt, critic_opt=critic_opt)
+    network_params=NetworkParams(actor_params=actor_params, critic_params=critic_params, target_actor_params=target_actor_params, target_critic_params=target_critic_params, actor_opt_state=actor_opt_state, critic_opt_state=critic_opt_state)
+
     return (
-        actor,
-        critic,
-        actor_params,
-        critic_params,
-        target_actor_params,
-        target_critic_params,
+        network, network_params
     )
 
 
@@ -221,7 +243,7 @@ def main(_: Any) -> None:
         time_delta=time_delta,
         label="ddpg_executor",
     )
-    
+
     trainer_logger = logger_utils.make_logger(
         directory="edulogs/",
         to_terminal=True,
@@ -244,21 +266,11 @@ def main(_: Any) -> None:
     action_scale = (action_max - action_min) / 2
     # TODO: action bias
 
-    # TODO: dataclass to hold params
     (
-        actor,
-        critic,
-        actor_params,
-        critic_params,
-        target_actor_params,
-        target_critic_params,
-    ) = make_networks(net_key, action_shape, obs_shape, action_scale)
-
-    # TODO: put opts in dataclass
-    actor_opt = optax.adam(config.actor_lr)
-    critic_opt = optax.adam(config.critic_lr)
-    actor_opt_params = actor_opt.init(actor_params)
-    critic_opt_params = critic_opt.init(critic_params)
+        network, network_params
+    ) = make_networks(net_key, action_shape, obs_shape, action_scale, config)
+    
+    
     rb = ReplayBuffer(prod(obs_shape), prod(action_shape), int(1e6))
 
     episode_reward = episode_reward_log = 0
@@ -274,7 +286,7 @@ def main(_: Any) -> None:
         # TODO: jit action selection
         # action selection, step env
         if global_step > learning_starts:
-            action = actor.apply(actor_params, obs)
+            action = network.actor.apply(network_params.actor_params, obs)
         else:
             action = env.action_space.sample()
         noise = jax.random.normal(noise_key) * config.ac_noise_scale
@@ -296,7 +308,7 @@ def main(_: Any) -> None:
                 "episode length": episode_length_log,
                 "time step": global_step,
                 "raw reward": reward,
-            }, 
+            },
         )
         if term or trunc:
             episode_num += 1
@@ -305,21 +317,20 @@ def main(_: Any) -> None:
             episode_reward = 0
             episode_length = 0
             obs, _ = env.reset()
-            
 
         # train:
         if global_step > learning_starts:
-            
+
             trainer_step += 1
             #  get sample from replay buf
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
             # --------------- critic updates ----------------------
-            next_actions = actor.apply(target_actor_params, batch["next_obs"]).clip(
+            next_actions = network.actor.apply(network_params.target_actor_params, batch["next_obs"]).clip(
                 action_min, action_max
             )
-            next_q_values = critic.apply(
-                target_critic_params, batch["next_obs"], next_actions
+            next_q_values = network.critic.apply(
+                network_params.target_critic_params, batch["next_obs"], next_actions
             ).squeeze()
 
             # TODO: stop grad?
@@ -328,36 +339,35 @@ def main(_: Any) -> None:
             )
 
             critic_grads, critic_info = jax.grad(critic_loss_fn, has_aux=True)(
-                critic_params, td_target, critic, batch["obs"], batch["act"]
+                network_params.critic_params, td_target, network.critic, batch["obs"], batch["act"]
             )
-            critic_updates, critic_opt_params = critic_opt.update(
-                critic_grads, critic_opt_params, critic_params
+            critic_updates, network_params.critic_opt_state = network.critic_opt.update(
+                critic_grads, network_params.critic_opt_state, network_params.critic_params
             )
-            critic_params = optax.apply_updates(critic_params, critic_updates)
+            network_params.critic_params = optax.apply_updates(network_params.critic_params, critic_updates)
 
             #  ---------------------- actor updates ----------------------
             # TODO: make an update method
             # TODO: should this be once every n critic updates?
             actor_grads, actor_info = jax.grad(actor_loss_fn, has_aux=True)(
-                actor_params, actor, critic_params, critic, batch["obs"]
+                network_params.actor_params, network.actor, network_params.critic_params, network.critic, batch["obs"]
             )
-            actor_updates, actor_opt_params = actor_opt.update(
-                actor_grads, actor_opt_params, actor_params
+            actor_updates, network_params.actor_opt_state = network.actor_opt.update(
+                actor_grads, network_params.actor_opt_state, network_params.actor_params
             )
-            actor_params = optax.apply_updates(actor_params, actor_updates)
+            network_params.actor_params = optax.apply_updates(network_params.actor_params, actor_updates)
 
             # ---------------------- update target networks ----------------------
             # TODO: method
-            target_actor_params = optax.incremental_update(
-                actor_params, target_actor_params, config.tau
+            network_params.target_actor_params = optax.incremental_update(
+                network_params.actor_params, network_params.target_actor_params, config.tau
             )
-            target_critic_params = optax.incremental_update(
-                critic_params, target_critic_params, config.tau
+            network_params.target_critic_params = optax.incremental_update(
+                network_params.critic_params, network_params.target_critic_params, config.tau
             )
             trainer_logger.write(
                 {"trainer step": trainer_step, **critic_info, **actor_info}
             )
-
 
 
 if __name__ == "__main__":
