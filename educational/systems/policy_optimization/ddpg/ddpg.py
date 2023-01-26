@@ -88,6 +88,7 @@ class ReplayBuffer:
         return batch
 
 
+# TODO: use this
 @dataclass
 class EnvironmentConfig:
     env_name: str = "simple_spread"
@@ -110,22 +111,6 @@ class SystemConfig:
     gamma: float = 0.99
     ac_noise_scale: float = 0.1
     tau: float = 0.01
-
-
-def init(config: SystemConfig = SystemConfig()) -> SystemConfig:
-    """Init system.
-
-    This would handle thing to be done upon system once in the beginning of a run,
-    e.g. set random seeds.
-
-    Args:
-        config : init config.
-
-    Returns:
-        config.
-    """
-
-    return config
 
 
 def make_environment(
@@ -162,7 +147,7 @@ def make_networks(
     Returns:
         system.
     """
-
+    #To do net as var
     @hk.without_apply_rng
     @hk.transform
     def actor(obs: chex.Array) -> chex.Array:
@@ -181,7 +166,7 @@ def make_networks(
     target_actor_params = actor.init(actor_key, dummy_obs)
     critic_params = critic.init(critic_key, dummy_obs, dummy_actions)
     target_critic_params = critic.init(critic_key, dummy_obs, dummy_actions)
-
+    #TODO make return 2 data classes
     return (
         actor,
         critic,
@@ -227,6 +212,7 @@ def main(_: Any) -> None:
         _ : unused param - for absl.
     """
     time_delta = 1
+    # TODO: Fix loggers!
     logger = logger_utils.make_logger(
         directory="edulogs/",
         to_terminal=True,
@@ -235,6 +221,7 @@ def main(_: Any) -> None:
         time_delta=time_delta,
         label="ddpg_executor",
     )
+    
     trainer_logger = logger_utils.make_logger(
         directory="edulogs/",
         to_terminal=True,
@@ -245,16 +232,15 @@ def main(_: Any) -> None:
     )
 
     key = jax.random.PRNGKey(42)
-    config = init()
+    config = SystemConfig()
     env, _ = make_environment()
     # env_spec = mava_specs.MAEnvironmentSpec(env)
     key, net_key = jax.random.split(key)
-    # TODO: use specs to get action and obs size
+
     action_shape = env.action_space.shape
     obs_shape = env.observation_space.shape
     action_max = env.action_space.high
     action_min = env.action_space.low
-
     action_scale = (action_max - action_min) / 2
     # TODO: action bias
 
@@ -267,17 +253,16 @@ def main(_: Any) -> None:
         target_actor_params,
         target_critic_params,
     ) = make_networks(net_key, action_shape, obs_shape, action_scale)
-    # target_actor_params = copy.deepcopy(actor_params)
-    # target_critic_params = copy.deepcopy(critic_params)
 
+    # TODO: put opts in dataclass
     actor_opt = optax.adam(config.actor_lr)
     critic_opt = optax.adam(config.critic_lr)
     actor_opt_params = actor_opt.init(actor_params)
     critic_opt_params = critic_opt.init(critic_params)
     rb = ReplayBuffer(prod(obs_shape), prod(action_shape), int(1e6))
 
-    episode_reward = 0
-    episode_length = 0
+    episode_reward = episode_reward_log = 0
+    episode_length = episode_length_log = 0
     episode_num = 0
     trainer_step = 0
 
@@ -303,21 +288,28 @@ def main(_: Any) -> None:
         # replay add stuff
         rb.store(obs.copy(), action.copy(), reward, nobs.copy(), term)
         obs = nobs.copy()
+
+        logger.write(  # TODO: fix logging (in mava!)
+            {
+                "episode": episode_num,
+                "episode reward": episode_reward_log,
+                "episode length": episode_length_log,
+                "time step": global_step,
+                "raw reward": reward,
+            }, 
+        )
         if term or trunc:
             episode_num += 1
-            logger.write(
-                {
-                    "episode_num": episode_num,
-                    "episode reward": episode_reward,
-                    "episode length": episode_length,
-                }
-            )
+            episode_reward_log = episode_reward
+            episode_length_log = episode_length
             episode_reward = 0
             episode_length = 0
             obs, _ = env.reset()
+            
 
         # train:
         if global_step > learning_starts:
+            
             trainer_step += 1
             #  get sample from replay buf
             key, batch_key = jax.random.split(key)
@@ -365,6 +357,7 @@ def main(_: Any) -> None:
             trainer_logger.write(
                 {"trainer step": trainer_step, **critic_info, **actor_info}
             )
+
 
 
 if __name__ == "__main__":
