@@ -102,7 +102,7 @@ class SystemConfig:
     seed: int = 42  # TODO: there are two seeds
 
     total_steps: int = 100_000
-    learning_starts: int = 1000
+    learning_starts: int = 100
     actor_train_freq: int = 2
     batch_size: int = 256
     actor_lr: float = 3e-4
@@ -232,97 +232,6 @@ def actor_loss_fn(
     return loss, {"policy loss": loss}
 
 
-@partial(jax.jit, static_argnames=["actor", "sample_action"])
-def select_action(
-    key,
-    global_step,
-    actor,
-    actor_params,
-    action_min,
-    action_max,
-    sample_action,
-    obs,
-    config,
-):
-    key, noise_key = jax.random.split(key)
-
-    action = jax.lax.cond(
-        global_step > config.learning_starts,
-        lambda: actor.apply(actor_params, obs),
-        lambda: sample_action(),
-    )
-
-    noise = jax.random.normal(noise_key) * config.ac_noise_scale
-    action = (noise + action).clip(action_min, action_max)
-
-    return action, key
-
-
-def critic_update(network, network_params, batch, action_min, action_max, config):
-    next_actions = network.actor.apply(
-        network_params.target_actor_params, batch["next_obs"]
-    ).clip(action_min, action_max)
-    next_q_values = network.critic.apply(
-        network_params.target_critic_params, batch["next_obs"], next_actions
-    ).squeeze()
-    # TODO: stop grad?
-    td_target = batch["rew"] + (
-        config.gamma * next_q_values * (1 - batch["done"]).squeeze()
-    )
-    critic_grads, critic_info = jax.grad(critic_loss_fn, has_aux=True)(
-        network_params.critic_params,
-        td_target,
-        network.critic,
-        batch["obs"],
-        batch["act"],
-    )
-    critic_updates, network_params.critic_opt_state = network.critic_opt.update(
-        critic_grads,
-        network_params.critic_opt_state,
-        network_params.critic_params,
-    )
-    network_params.critic_params = optax.apply_updates(
-        network_params.critic_params, critic_updates
-    )
-
-    return network, network_params, critic_info
-
-
-# @partial(jax.jit, static_argnames=["actor","critic", "actor_opt"])
-def actor_update(actor, critic, actor_opt, network_params, batch):
-    actor_grads, actor_info = jax.grad(actor_loss_fn, has_aux=True)(
-        network_params.actor_params,
-        actor,
-        network_params.critic_params,
-        critic,
-        batch["obs"],
-    )
-    (actor_updates, network_params.actor_opt_state,) = actor_opt.update(
-        actor_grads,
-        network_params.actor_opt_state,
-        network_params.actor_params,
-    )
-    network_params.actor_params = optax.apply_updates(
-        network_params.actor_params, actor_updates
-    )
-    return actor, actor_opt, network_params, actor_info
-
-
-@jax.jit
-def target_update(network_params, tau):
-    network_params.target_actor_params = optax.incremental_update(
-        network_params.actor_params,
-        network_params.target_actor_params,
-        tau,
-    )
-    network_params.target_critic_params = optax.incremental_update(
-        network_params.critic_params,
-        network_params.target_critic_params,
-        tau,
-    )
-    return network_params
-
-
 def main(_: Any) -> None:
     """Template for educational system implementations.
 
@@ -373,22 +282,91 @@ def main(_: Any) -> None:
     episode_num = 0
     trainer_step = 0
 
+    @partial(jax.jit, static_argnames=["actor", "sample_action"])
+    def select_action(actor, sample_action, key):
+        key, noise_key = jax.random.split(key)
+
+        action = jax.lax.cond(
+            global_step > config.learning_starts,
+            lambda: actor.apply(network_params.actor_params, obs),
+            lambda: sample_action(),
+        )
+
+        noise = jax.random.normal(noise_key) * config.ac_noise_scale
+        action = (noise + action).clip(action_min, action_max)
+
+        return action, key
+
+    @jax.jit
+    def critic_update():
+        next_actions = network.actor.apply(
+            network_params.target_actor_params, batch["next_obs"]
+        ).clip(action_min, action_max)
+        next_q_values = network.critic.apply(
+            network_params.target_critic_params, batch["next_obs"], next_actions
+        ).squeeze()
+        # TODO: stop grad?
+        td_target = batch["rew"] + (
+            config.gamma * next_q_values * (1 - batch["done"]).squeeze()
+        )
+        critic_grads, critic_info = jax.grad(critic_loss_fn, has_aux=True)(
+            network_params.critic_params,
+            td_target,
+            network.critic,
+            batch["obs"],
+            batch["act"],
+        )
+        critic_updates, network_params.critic_opt_state = network.critic_opt.update(
+            critic_grads,
+            network_params.critic_opt_state,
+            network_params.critic_params,
+        )
+        network_params.critic_params = optax.apply_updates(
+            network_params.critic_params, critic_updates
+        )
+
+        return critic_info
+
+    @partial(jax.jit, static_argnames=["actor", "critic", "actor_opt"])
+    def actor_update(actor, critic, actor_opt):
+        actor_grads, actor_info = jax.grad(actor_loss_fn, has_aux=True)(
+            network_params.actor_params,
+            actor,
+            network_params.critic_params,
+            critic,
+            batch["obs"],
+        )
+        (actor_updates, network_params.actor_opt_state,) = actor_opt.update(
+            actor_grads,
+            network_params.actor_opt_state,
+            network_params.actor_params,
+        )
+        network_params.actor_params = optax.apply_updates(
+            network_params.actor_params, actor_updates
+        )
+        network.actor, network.actor_opt = actor, actor_opt
+        return actor_info
+
+    @jax.jit
+    def target_update(network_params, tau):
+        network_params.target_actor_params = optax.incremental_update(
+            network_params.actor_params,
+            network_params.target_actor_params,
+            tau,
+        )
+        network_params.target_critic_params = optax.incremental_update(
+            network_params.critic_params,
+            network_params.target_critic_params,
+            tau,
+        )
+        return network_params
+
     obs, _ = env.reset()
     for global_step in range(config.total_steps):
         # TODO: jit action selection
         # action selection, step env
 
-        action, key = select_action(
-            key,
-            global_step,
-            network.actor,
-            network_params.actor_params,
-            action_min,
-            action_max,
-            env.action_space.sample,
-            obs,
-            config,
-        )
+        action, key = select_action(network.actor, env.action_space.sample, key)
 
         nobs, reward, term, trunc, info = env.step(action.tolist())
 
@@ -424,25 +402,16 @@ def main(_: Any) -> None:
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
             # --------------- critic updates ----------------------
-            network, network_params, critic_info = critic_update(
-                network, network_params, batch, action_min, action_max, config
-            )
+            critic_info = critic_update()
 
             if global_step % config.actor_train_freq == 0:
                 #  ---------------------- actor updates ----------------------
                 # TODO: make an update method
                 # TODO: should this be once every n critic updates?
-                (
-                    network.actor,
-                    network.actor_opt,
-                    network_params,
-                    actor_info,
-                ) = actor_update(
+                actor_info = actor_update(
                     network.actor,
                     network.critic,
                     network.actor_opt,
-                    network_params,
-                    batch,
                 )
                 # ---------------------- update target networks ----------------------
                 # TODO: method
