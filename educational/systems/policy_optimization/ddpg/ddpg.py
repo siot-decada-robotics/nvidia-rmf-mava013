@@ -102,7 +102,7 @@ class SystemConfig:
     seed: int = 42  # TODO: there are two seeds
 
     total_steps: int = 100_000
-    learning_starts: int = 100
+    learning_starts: int = 1000
     actor_train_freq: int = 2
     batch_size: int = 256
     actor_lr: float = 3e-4
@@ -283,12 +283,22 @@ def main(_: Any) -> None:
     trainer_step = 0
 
     @partial(jax.jit, static_argnames=["actor", "sample_action"])
-    def select_action(actor, sample_action, key):
+    def select_action(
+        key,
+        global_step,
+        actor,
+        actor_params,
+        action_min,
+        action_max,
+        sample_action,
+        obs,
+        config,
+    ):
         key, noise_key = jax.random.split(key)
 
         action = jax.lax.cond(
             global_step > config.learning_starts,
-            lambda: actor.apply(network_params.actor_params, obs),
+            lambda: actor.apply(actor_params, obs),
             lambda: sample_action(),
         )
 
@@ -297,12 +307,14 @@ def main(_: Any) -> None:
 
         return action, key
 
-    @jax.jit
-    def critic_update():
-        next_actions = network.actor.apply(
+    @partial(jax.jit, static_argnames=["actor", "critic", "critic_opt"])
+    def critic_update(
+        actor, critic, critic_opt, network_params, batch, action_min, action_max, config
+    ):
+        next_actions = actor.apply(
             network_params.target_actor_params, batch["next_obs"]
         ).clip(action_min, action_max)
-        next_q_values = network.critic.apply(
+        next_q_values = critic.apply(
             network_params.target_critic_params, batch["next_obs"], next_actions
         ).squeeze()
         # TODO: stop grad?
@@ -312,11 +324,11 @@ def main(_: Any) -> None:
         critic_grads, critic_info = jax.grad(critic_loss_fn, has_aux=True)(
             network_params.critic_params,
             td_target,
-            network.critic,
+            critic,
             batch["obs"],
             batch["act"],
         )
-        critic_updates, network_params.critic_opt_state = network.critic_opt.update(
+        critic_updates, network_params.critic_opt_state = critic_opt.update(
             critic_grads,
             network_params.critic_opt_state,
             network_params.critic_params,
@@ -324,11 +336,11 @@ def main(_: Any) -> None:
         network_params.critic_params = optax.apply_updates(
             network_params.critic_params, critic_updates
         )
-
-        return critic_info
+        network.critic, network.critic_opt = critic, critic_opt
+        return network_params, critic_info
 
     @partial(jax.jit, static_argnames=["actor", "critic", "actor_opt"])
-    def actor_update(actor, critic, actor_opt):
+    def actor_update(actor, critic, actor_opt, network_params, batch):
         actor_grads, actor_info = jax.grad(actor_loss_fn, has_aux=True)(
             network_params.actor_params,
             actor,
@@ -345,7 +357,7 @@ def main(_: Any) -> None:
             network_params.actor_params, actor_updates
         )
         network.actor, network.actor_opt = actor, actor_opt
-        return actor_info
+        return network_params, actor_info
 
     @jax.jit
     def target_update(network_params, tau):
@@ -366,7 +378,17 @@ def main(_: Any) -> None:
         # TODO: jit action selection
         # action selection, step env
 
-        action, key = select_action(network.actor, env.action_space.sample, key)
+        action, key = select_action(
+            key,
+            global_step,
+            network.actor,
+            network_params.actor_params,
+            action_min,
+            action_max,
+            env.action_space.sample,
+            obs,
+            config,
+        )
 
         nobs, reward, term, trunc, info = env.step(action.tolist())
 
@@ -402,16 +424,27 @@ def main(_: Any) -> None:
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
             # --------------- critic updates ----------------------
-            critic_info = critic_update()
+            network_params, critic_info = critic_update(
+                network.actor,
+                network.critic,
+                network.critic_opt,
+                network_params,
+                batch,
+                action_min,
+                action_max,
+                config,
+            )
 
             if global_step % config.actor_train_freq == 0:
                 #  ---------------------- actor updates ----------------------
                 # TODO: make an update method
                 # TODO: should this be once every n critic updates?
-                actor_info = actor_update(
+                network_params, actor_info = actor_update(
                     network.actor,
                     network.critic,
                     network.actor_opt,
+                    network_params,
+                    batch,
                 )
                 # ---------------------- update target networks ----------------------
                 # TODO: method
