@@ -24,6 +24,8 @@ from absl import app, flags
 from mava import specs as mava_specs
 from mava.utils.environments import debugging_utils
 
+import rlax 
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("system", "test agent", "What agent is running.")
@@ -117,7 +119,7 @@ def make_system(
     prng = jax.random.PRNGKey(config.seed)
 
     (
-        new_key,
+        prng,
         actor_prng,
         critic_prng,
     ) = jax.random.split(prng, 3)
@@ -157,8 +159,12 @@ def make_system(
             networks[net_key]["actor_net"] = actor_net
             networks[net_key]["critic_net"] = critic_net
 
-        def sample_fn(obserservation, networks):
+        def sample_fn(obserservation, networks, key):
             action = {}
+            log_prob = {}
+            entropy = {}
+            value = {}
+
             for agent_key, agent_olt in obserservation.items():
 
                 actor_net = networks[agent_key]["actor_net"]
@@ -168,15 +174,60 @@ def make_system(
 
                 dist = tfd.Categorical(logits=logits)  # , dtype=self._dtype)
                 # TODO - FIX THIS
-                action[agent_key] = dist.sample(seed=jax.random.PRNGKey(42))
-            return action
+                action[agent_key] = dist.sample(seed=key)
+                log_prob[agent_key] = dist.log_prob(action[agent_key])
+                entropy[agent_key] = dist.entropy()
+
+                critic_net = networks[agent_key]["critic_net"]
+                critic_params = networks[agent_key]["critic_params"]
+
+                value[agent_key] = jnp.squeeze(critic_net.apply(critic_params, agent_obserservation))
+            
+            return action, log_prob, entropy, value
 
         networks["sample_fn"] = sample_fn
         return networks
 
     networks = make_networks()
 
-    return networks, config
+
+    def epoch_function(buffer, key, networks):
+
+        # sample_idxs = jax.random.permutation(key=key, x=len(buffer))
+
+        for i, episode in buffer.items(): 
+            
+            advantages = {}
+            new_log_probs = {}
+
+            # TODO the 0 is just get access to agent names. 
+            for agent in episode["observations"][0].keys():
+                
+                rewards_ = [agent_dict[agent] for agent_dict in episode["rewards"]]
+                values_ = [agent_dict[agent] for agent_dict in episode["values"]]
+                
+
+                advantage = rlax.truncated_generalized_advantage_estimation(
+
+                    r_t = jnp.array(rewards_[1:]), 
+                    # TODO: Max episode horizon value here 
+                    discount_t = jnp.ones(49) * 0.99, 
+                    lambda_ = 0.95, 
+                    values =  jnp.array(values_)
+                )
+
+                advantages[agent] = advantage
+
+                observations = [agent_dict[agent].observation for agent_dict in episode["observations"]]
+
+                # Next steps compute log(a|s_t) for loss ratios
+
+
+
+
+
+
+    return networks, config, prng, epoch_function
     # del environment_spec
 
     # class System:
@@ -194,24 +245,44 @@ def main(_: Any) -> None:
         _ : unused param - for absl.
     """
 
+    # TODO: Set some nice way to pad episodes. 
+
     init_config = init()
     env, env_config = make_environment()
     env_spec = mava_specs.MAEnvironmentSpec(env)
-    networks, system_config = make_system(env_spec)
+    networks, system_config, prng, epoch_function = make_system(env_spec)
     logging.info(f"Running {FLAGS.system}")
 
+    simple_buffer = {}
+
     # Run system on env
-    episodes = 100
+    episodes = 1
     for episode in range(episodes):
+        simple_buffer[episode] = {}
+        simple_buffer[episode]["observations"] = []
+        simple_buffer[episode]["actions"] = []
+        simple_buffer[episode]["rewards"] = []
+        simple_buffer[episode]["values"] = []
+        simple_buffer[episode]["log_probs"] = []
+        simple_buffer[episode]["entropy"] = []
+
         timestep = env.reset()
         while not timestep.last():
             # get action
-            action = networks["sample_fn"](timestep.observation, networks)
+            prng, action_key = jax.random.split(prng)
+            action, log_prob, entropy, value = networks["sample_fn"](timestep.observation, networks, action_key)
             timestep = env.step(action)
-            # print(action, timestep, timestep.reward)
-            print(timestep.reward)
+            
             # take step
+            
+            simple_buffer[episode]["observations"].append(timestep.observation) 
+            simple_buffer[episode]["actions"].append(action)
+            simple_buffer[episode]["rewards"].append(timestep.reward)
+            simple_buffer[episode]["values"].append(value)
+            simple_buffer[episode]["log_probs"].append(log_prob)
+            simple_buffer[episode]["entropy"].append(entropy)
 
+    epoch_function(simple_buffer, prng, networks)
 
 if __name__ == "__main__":
     app.run(main)
