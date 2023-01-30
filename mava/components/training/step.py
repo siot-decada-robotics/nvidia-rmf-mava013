@@ -15,6 +15,7 @@
 
 """Trainer components for gradient step calculations."""
 import abc
+import copy
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple, Type
@@ -220,7 +221,7 @@ class MAPGWithTrustRegionStep(Step):
             # Extract the data.
             data = sample.data
 
-            observations, actions, rewards, termination, extras = (
+            observations, actions, rewards, discounts, extras = (
                 data.observations,
                 data.actions,
                 data.rewards,
@@ -242,8 +243,13 @@ class MAPGWithTrustRegionStep(Step):
                         observation_stats[key], observations[key]
                     )
 
+            death_masks = {}
+            for agent in observations.keys():
+                death_masks[agent] = observations[agent].agent_mask
+                death_masks[agent] = death_masks[agent].reshape(discounts[agent].shape)
+
             discounts = tree.map_structure(
-                lambda x: x * self.config.discount, termination
+                lambda x: x * self.config.discount, discounts
             )
 
             behavior_log_probs = extras["policy_info"]
@@ -324,9 +330,17 @@ class MAPGWithTrustRegionStep(Step):
                 behavior_log_probs,
                 behavior_values,
                 masks,
+                death_masks,
             ) = jax.tree_util.tree_map(
                 lambda x: x[:, :-1],
-                (observations, actions, behavior_log_probs, behavior_values, masks),
+                (
+                    observations,
+                    actions,
+                    behavior_log_probs,
+                    behavior_values,
+                    masks,
+                    death_masks,
+                ),
             )
 
             actions = jax.tree_util.tree_map(lambda x, m: x * m, actions, masks)
@@ -361,7 +375,8 @@ class MAPGWithTrustRegionStep(Step):
                 behavior_log_probs=behavior_log_probs,
                 target_values=target_values,
                 behavior_values=behavior_values,
-                masks=masks,
+                padding_masks=masks,
+                death_masks=death_masks,
             )
 
             agent_0_t_vals = list(target_values.values())[0]

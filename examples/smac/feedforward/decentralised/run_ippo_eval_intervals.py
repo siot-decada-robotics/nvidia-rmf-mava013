@@ -97,6 +97,8 @@ def main(_: Any) -> None:
         multi_process=True,
         evaluation_interval={"executor_steps": 10000},
         evaluation_duration={"evaluator_episodes": 32},
+        loss_death_masking=True,
+        # mask_padded_sequence=True
     )
 
     # Launch the system.
