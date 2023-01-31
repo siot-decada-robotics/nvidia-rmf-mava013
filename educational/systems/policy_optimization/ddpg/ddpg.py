@@ -42,19 +42,101 @@ flags.DEFINE_string(
 # TODO: remove - getting OOM errors on 3050ti
 jax.config.update("jax_platform_name", "cpu")
 
+
+"""Wraper for Cooperative Pettingzoo environments."""
+from typing import Any, Dict, List, Union
+
+import dm_env
+import matplotlib.pyplot as plt
+import numpy as np
+from acme import specs
+from acme.wrappers.gym_wrapper import _convert_to_spec
+from pettingzoo.mpe import simple_spread_v2
+
+from mava import types
+from mava.utils.wrapper_utils import parameterized_restart
+
+
+class MPE:
+    """Environment wrapper for PettingZoo MARL environments."""
+
+    def __init__(self):
+        """Constructor for parallel PZ wrapper."""
+
+        self.environment = simple_spread_v2.parallel_env(continuous_actions=True)
+        self.possible_agents = self.environment.possible_agents
+        self.num_agents = len(self.possible_agents)
+        self.observation_space = list(self.environment.observation_spaces.values())[0]
+        self.action_space = list(self.environment.action_spaces.values())[0]
+
+    def arrayify(self, d: dict, shape: tuple, dtype: str):
+        arr = []
+        for agent in self.possible_agents:
+            if agent in d:
+                arr.append(jnp.array(d[agent], dtype))
+            else:
+                arr.append(jnp.zeros(shape, dtype))
+
+        return jnp.array(arr)
+
+    def reset(self):
+        """Resets the env.
+
+        Returns:
+            obs [N, obs]:
+        """
+        # Reset the environment
+        observations = self.environment.reset()
+        return self.arrayify(
+            observations, self.observation_space.shape, self.observation_space.dtype
+        )
+
+    def step(self, actions):
+        """Steps in env.
+
+        Args:
+            actions: [N, act]
+
+        Returns:
+            observations, rewards, terminations, truncations, infos
+        """
+        actions_dict = {}
+        for i, agent in enumerate(self.possible_agents):
+            if agent not in self.environment.agents:
+                continue
+            actions_dict[agent] = actions[i]
+
+        # Step the environment
+        next_observations, rewards, dones, _ = self.environment.step(actions_dict)
+
+        # Add zeros to missing agents
+        next_observations = self.arrayify(
+            next_observations,
+            self.observation_space.shape,
+            self.observation_space.dtype,
+        )
+        rewards = self.arrayify(rewards, (1,), float)
+        dones = self.arrayify(dones, (1,), bool)
+
+        infos = {}  # TODO
+
+        return next_observations, rewards, dones, infos
+
+
 # TODO: jittable buffer?
 class ReplayBuffer:
     """
     A simple FIFO experience replay buffer for DDPG agents.
     """
 
-    def __init__(self, obs_dim: int, act_dim: int, size: int) -> None:
-        self.obs_buf = jnp.zeros((size, obs_dim), dtype=jnp.float32)
-        self.next_obs_buf = jnp.zeros((size, obs_dim), dtype=jnp.float32)
-        self.act_buf = jnp.zeros((size, act_dim), dtype=jnp.float32)
-        self.rew_buf = jnp.zeros(size, dtype=jnp.float32)
-        self.done_buf = jnp.zeros(size, dtype=jnp.float32)
+    def __init__(self, obs_dim: int, act_dim: int, size: int, num_agents: int) -> None:
+        self.obs_buf = jnp.zeros((size, num_agents, obs_dim), dtype=jnp.float32)
+        self.next_obs_buf = jnp.zeros((size, num_agents, obs_dim), dtype=jnp.float32)
+        self.act_buf = jnp.zeros((size, num_agents, act_dim), dtype=jnp.float32)
+        self.rew_buf = jnp.zeros((size, num_agents), dtype=jnp.float32)
+        self.done_buf = jnp.zeros((size, num_agents), dtype=jnp.float32)
         self.ptr, self.size, self.max_size = 0, 0, size
+        self.num_agents = num_agents
 
     def store(
         self,
@@ -102,7 +184,7 @@ class SystemConfig:
     seed: int = 1  # TODO: there are two seeds
 
     total_steps: int = 100_000
-    learning_starts: int = 1000
+    learning_starts: int = 100
     actor_train_freq: int = 2
     batch_size: int = 256
     actor_lr: float = 3e-4
@@ -142,7 +224,7 @@ def make_environment(
     Returns:
         (env, config).
     """
-    return gym.make(config.env_name), config
+    return MPE(), config
 
 
 # TODO: make DDPG network class
@@ -274,12 +356,11 @@ def main(_: Any) -> None:
     action_min = env.action_space.low
     action_scale = (action_max - action_min) / 2
     # TODO: action bias
-
     network, network_params = make_networks(
         net_key, action_shape, obs_shape, action_scale, config
     )
 
-    rb = ReplayBuffer(prod(obs_shape), prod(action_shape), int(1e6))
+    rb = ReplayBuffer(prod(obs_shape), prod(action_shape), int(1e6), env.num_agents)
 
     episode_reward = episode_reward_log = 0
     episode_length = episode_length_log = 0
@@ -295,7 +376,10 @@ def main(_: Any) -> None:
             lambda: network.actor.apply(actor_params, obs),
             # env.action_space.sample(),
             lambda: jax.random.uniform(
-                ac_key, env.action_space.shape, minval=action_min, maxval=action_max
+                ac_key,
+                (env.num_agents, *env.action_space.shape),
+                minval=action_min,
+                maxval=action_max,
             ),
         )
 
@@ -366,7 +450,7 @@ def main(_: Any) -> None:
         )
         return network_params
 
-    obs, _ = env.reset()
+    obs = env.reset()
     for global_step in range(config.total_steps):
         # TODO: jit action selection
         # action selection, step env
@@ -378,31 +462,31 @@ def main(_: Any) -> None:
             obs,
         )
 
-        nobs, reward, term, trunc, info = env.step(action.tolist())
+        nobs, reward, done, info = env.step(action.tolist())
 
         episode_reward += reward
         episode_length += 1
 
         # replay add stuff
-        rb.store(obs.copy(), action.copy(), reward, nobs.copy(), term)
+        rb.store(obs.copy(), action.copy(), reward, nobs.copy(), done)
         obs = nobs.copy()
 
         logger.write(  # TODO: fix logging (in mava!)
             {
                 "episode": episode_num,
-                "episode reward": episode_reward_log,
+                "episode reward": jnp.mean(episode_reward_log),
                 "episode length": episode_length_log,
                 "time step": global_step,
                 "raw reward": reward,
             },
         )
-        if term or trunc:
+        if done.all():
             episode_num += 1
             episode_reward_log = episode_reward
             episode_length_log = episode_length
             episode_reward = 0
             episode_length = 0
-            obs, _ = env.reset()
+            obs = env.reset()
 
         # train:
         if global_step > config.learning_starts:
@@ -411,6 +495,8 @@ def main(_: Any) -> None:
             #  get sample from replay buf
             key, batch_key = jax.random.split(key)
             batch = rb.sample_batch(batch_key, config.batch_size)
+            batch = {k: v.reshape(-1, *v.shape[2:]) for k, v in batch.items()}
+            # batch = jax.tree_map(lambda x: x.reshape((-1, *x.shape[2:])), batch)
             # --------------- critic updates ----------------------
             network_params, critic_info = critic_update(network_params, batch)
 
