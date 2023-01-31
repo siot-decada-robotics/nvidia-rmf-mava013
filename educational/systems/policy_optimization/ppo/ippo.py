@@ -24,7 +24,10 @@ from absl import app, flags
 from mava import specs as mava_specs
 from mava.utils.environments import debugging_utils
 
+from mava.types import OLT
+
 import rlax 
+import optax
 
 FLAGS = flags.FLAGS
 
@@ -159,12 +162,15 @@ def make_system(
             networks[net_key]["actor_net"] = actor_net
             networks[net_key]["critic_net"] = critic_net
 
-        def sample_fn(obserservation, networks, key):
+        return networks
+
+    def sample_fn(obserservation, networks, key):
             action = {}
             log_prob = {}
             entropy = {}
             value = {}
 
+            
             for agent_key, agent_olt in obserservation.items():
 
                 actor_net = networks[agent_key]["actor_net"]
@@ -185,13 +191,86 @@ def make_system(
             
             return action, log_prob, entropy, value
 
-        networks["sample_fn"] = sample_fn
-        return networks
-
     networks = make_networks()
 
+    def make_optimisers():
 
-    def epoch_function(buffer, key, networks):
+        optimisers = {}
+
+        for net_key in agent_specs.keys():
+            
+            # TODO LR NEEDS TO COME FROM CONFIG. 
+            actor_optim = optax.adam(0.0005)
+            critic_optim = optax.adam(0.0005)
+
+            actor_state = actor_optim.init(networks[net_key]["actor_params"])
+            critic_state = critic_optim.init(networks[net_key]["critic_params"])
+
+            optimisers[net_key] = {}
+            optimisers[net_key]["actor_state"] = actor_state
+            optimisers[net_key]["critic_state"] = critic_state
+            optimisers[net_key]["actor_optim"] = actor_optim
+            optimisers[net_key]["critic_optim"] = critic_optim
+
+        return optimisers
+
+    optimisers = make_optimisers()
+
+
+    # WON't WORK BECAUSE DIFFERENT NETWORKS
+    def ppo_loss(old_log_probs, new_log_probs, advantages, old_values, new_values, entropy): 
+        
+        log_ratio = new_log_probs - old_log_probs
+        ratio = jnp.exp(log_ratio)
+
+        policy_term_1 = advantages * ratio
+        policy_term_2 = advantages * jnp.clip(ratio, 1. - 0.2, 1. + 0.2)
+        policy_loss = -jnp.mean(jnp.minimum(policy_term_1, policy_term_2))
+
+        value_loss = jnp.mean( (old_values - new_values)**2 )
+
+        # TODO the coefficients need to come from the config. 
+        total_loss = policy_loss + 0.5 * value_loss - 0.001 * jnp.mean(entropy)
+
+        return total_loss
+
+    def policy_loss(
+        policy_params, 
+        observations, 
+        actions, 
+        old_log_probs, 
+        advantages, 
+        actor_apply_fn):
+
+        logits = actor_apply_fn(policy_params, observations)
+
+        dist = tfd.Categorical(logits=logits)
+        new_log_probs = dist.log_prob(actions)
+
+        log_ratio = new_log_probs - old_log_probs
+        ratio = jnp.exp(log_ratio)
+
+        policy_term_1 = advantages * ratio
+        policy_term_2 = advantages * jnp.clip(ratio, 1. - 0.2, 1. + 0.2)
+        loss = -jnp.mean(jnp.minimum(policy_term_1, policy_term_2))
+
+        return loss 
+
+
+    def critic_loss(
+        critic_params, 
+        observations, 
+        returns,
+        critic_apply_fn): 
+
+        new_values = critic_apply_fn(critic_params, observations)
+        new_values = jnp.squeeze(new_values)
+
+        loss = 0.5 * jnp.mean( (new_values - returns)**2 )
+
+        return loss
+
+    def epoch_function(buffer, key, networks, optimisers):
 
         # sample_idxs = jax.random.permutation(key=key, x=len(buffer))
 
@@ -205,29 +284,74 @@ def make_system(
                 
                 rewards_ = [agent_dict[agent] for agent_dict in episode["rewards"]]
                 values_ = [agent_dict[agent] for agent_dict in episode["values"]]
-                
+                old_log_probs = [agent_dict[agent] for agent_dict in episode["log_probs"]]
+                actions = [agent_dict[agent] for agent_dict in episode["actions"]]
 
                 advantage = rlax.truncated_generalized_advantage_estimation(
 
                     r_t = jnp.array(rewards_[1:]), 
-                    # TODO: Max episode horizon value here 
+                    # TODO: Max episode horizon value here, also won't always be 1s. 
                     discount_t = jnp.ones(49) * 0.99, 
                     lambda_ = 0.95, 
                     values =  jnp.array(values_)
                 )
 
-                advantages[agent] = advantage
+                returns = advantage + jnp.array(values_)[:-1]
 
                 observations = [agent_dict[agent].observation for agent_dict in episode["observations"]]
+                legal_actions = [agent_dict[agent].legal_actions for agent_dict in episode["observations"]]
+                terminals = [agent_dict[agent].terminal for agent_dict in episode["observations"]]
+                
+                observations = jnp.array(observations)
+                legal_actions = jnp.array(legal_actions)
+                terminals = jnp.array(terminals)
 
                 # Next steps compute log(a|s_t) for loss ratios
 
+                actor_net = networks[agent]["actor_net"]
+                actor_net_apply_fn = actor_net.apply
+                actor_params = networks[agent]["actor_params"]
+                observations = jnp.array(observations)
+
+                # TODO Change names to all be actor and not policy!! 
+                policy_grads = jax.grad(policy_loss)(
+                    actor_params, 
+                    observations[:-1], 
+                    jnp.array(actions)[:-1], 
+                    jnp.array(old_log_probs)[:-1], 
+                    advantage, 
+                    actor_net_apply_fn)
+
+                updates, new_policy_optimiser_state = optimisers[agent]["actor_optim"].update(
+                    policy_grads, optimisers[agent]["actor_state"])
+                new_policy_params = optax.apply_updates(actor_params, updates)
+
+                # Update params 
+                networks[agent]["actor_params"] = new_policy_params
+                optimisers[agent]["actor_state"] = new_policy_optimiser_state
+
+                critic_net = networks[agent]["critic_net"]
+                critic_net_apply_fn = critic_net.apply
+                critic_params = networks[agent]["critic_params"]
+
+                critic_grads = jax.grad(critic_loss)(
+                    critic_params, 
+                    observations[:-1], 
+                    returns, 
+                    critic_net_apply_fn)
+                
+                updates, new_critic_optimiser_state = optimisers[agent]["critic_optim"].update(
+                    critic_grads, optimisers[agent]["critic_state"])
+                new_critic_params = optax.apply_updates(critic_params, updates)
+
+                # Update params 
+                networks[agent]["critic_params"] = new_critic_params
+                optimisers[agent]["critic_state"] = new_critic_optimiser_state
+
+        return key, networks, optimisers
 
 
-
-
-
-    return networks, config, prng, epoch_function
+    return networks, config, prng, epoch_function, sample_fn, optimisers
     # del environment_spec
 
     # class System:
@@ -250,7 +374,7 @@ def main(_: Any) -> None:
     init_config = init()
     env, env_config = make_environment()
     env_spec = mava_specs.MAEnvironmentSpec(env)
-    networks, system_config, prng, epoch_function = make_system(env_spec)
+    networks, system_config, prng, epoch_function, sample_function, optimisers = make_system(env_spec)
     logging.info(f"Running {FLAGS.system}")
 
     simple_buffer = {}
@@ -270,7 +394,7 @@ def main(_: Any) -> None:
         while not timestep.last():
             # get action
             prng, action_key = jax.random.split(prng)
-            action, log_prob, entropy, value = networks["sample_fn"](timestep.observation, networks, action_key)
+            action, log_prob, entropy, value = sample_function(timestep.observation, networks, action_key)
             timestep = env.step(action)
             
             # take step
@@ -282,7 +406,10 @@ def main(_: Any) -> None:
             simple_buffer[episode]["log_probs"].append(log_prob)
             simple_buffer[episode]["entropy"].append(entropy)
 
-    epoch_function(simple_buffer, prng, networks)
+    # Can update an amount of episodes! 
+    prng, networks, optimisers = epoch_function(simple_buffer, prng, networks, optimisers)
+
+    # Next steps: Is it training?? / Nice way to log results. 
 
 if __name__ == "__main__":
     app.run(main)
