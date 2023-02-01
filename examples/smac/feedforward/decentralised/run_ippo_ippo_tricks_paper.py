@@ -29,7 +29,7 @@ from mava.utils.loggers import logger_utils
 FLAGS = flags.FLAGS
 flags.DEFINE_string(
     "map_name",
-    "3m",
+    "8m",
     "Starcraft 2 micromanagement map name (str).",
 )
 
@@ -100,7 +100,8 @@ def main(_: Any) -> None:
         policy_optimiser=policy_optimiser,
         critic_optimiser=critic_optimiser,
         run_evaluator=True,
-        epoch_batch_size=5,
+        epoch_batch_size=3200,  # n_rollout_threads * episode_length * num_agents = 1 * 400 * 8
+        max_queue_size=6400,
         num_epochs=15,
         num_executors=1,
         multi_process=True,
