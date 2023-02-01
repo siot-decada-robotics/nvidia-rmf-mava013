@@ -63,18 +63,27 @@ def make_network(
             FeedForwardNetwork class
         """
         # Add the observation network and an MLP network.
-        value_network = []
+        feature_layers = []
         if observation_network is not None:
-            value_network.append(observation_network)
+            feature_layers.append(observation_network)
 
-        value_network.append(
+        feature_layers.append(
             hk.nets.MLP(
-                (*policy_layer_sizes, num_actions),
+                policy_layer_sizes,
                 activation=activation_function,
             ),
         )
+        feature_network: hk.Module = hk.Sequential(feature_layers)
 
-        return hk.Sequential(value_network)(inputs)
+        # Deuling DQN
+        value_head = hk.nets.MLP((1,), activation=activation_function)
+        advantage_head = hk.nets.MLP((num_actions,), activation=activation_function)
+
+        features = feature_network(inputs)
+        values = value_head(features)
+        advantages = advantage_head(features)
+
+        return values + (advantages - advantages.mean())
 
     dummy_obs = utils.zeros_like(environment_spec.observations.observation)
     dummy_obs = utils.add_batch_dim(dummy_obs)  # Dummy 'sequence' dim.
