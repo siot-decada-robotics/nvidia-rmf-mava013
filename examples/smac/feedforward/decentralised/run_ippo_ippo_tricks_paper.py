@@ -104,7 +104,7 @@ def main(_: Any) -> None:
         num_epochs=15,
         num_executors=1,
         multi_process=True,
-        evaluation_interval={"evaluator_episodes": 25},
+        evaluation_interval={"executor_episodes": 25},
         evaluation_duration={"evaluator_episodes": 32},
         loss_death_masking=True,
         mask_padded_sequence=True,
