@@ -59,7 +59,7 @@ class InitConfig:
     seed: int = 42
     learning_rate: float = 5e-4
     buffer_size: int = 1000
-    warm_up_steps: int = 320
+    warm_up_steps: int = 200
     min_epsilon: float = 0.1
     max_epsilon: float = 0.9
     total_num_steps: int = 10000
@@ -228,43 +228,6 @@ class ReplayBuffer():
     def size(self):
         return self.num_items
 
-
-def update(state: TrainingState, q_networks: Any, batch: TransitionBatch, optimisers: Any):
-    
-    loss = {}
-    q_preds_dict = {}
-    q_params_dict = {}
-    opt_state_dict = {}
-    
-    (actions, obs, next_obs, rewards, dones) = (
-        batch.actions, batch.observation, batch.next_observation, batch.reward, batch.done
-        )
-
-    agents = list(dones.keys())
-
-    for net_key in agents: 
-        q_params = state.params[net_key]
-        q_params_target = q_networks[net_key]["actor_params"]
-        q_next_target =  q_networks[net_key]["actor_net"].apply(q_params_target, next_obs[net_key])
-        q_next_target = jnp.max(q_next_target, axis = -1, keepdims=True)
-        next_q_value  = rewards[net_key] + (1 - dones[net_key])*0.99*q_next_target
-
-        def mse_loss(params):
-            q_pred = q_networks[net_key]["actor_net"].apply(params, obs[net_key])
-            q_pred_value = jnp.take_along_axis(q_pred, actions[net_key], axis=-1)
-            return ((q_pred_value - next_q_value)**2).mean(), q_pred_value.squeeze()
-        
-        (loss[net_key], q_preds_dict[net_key]), grads = jax.value_and_grad(mse_loss,has_aux=True)(q_params)
-        
-        updates, opt_state_dict[net_key] = optimisers[net_key].update(grads, state.opt_state[net_key])
-        q_params_dict[net_key] = optax.apply_updates(q_params, updates)
-        
-    state = TrainingState(q_params_dict,  opt_state_dict)
-
-    return loss, q_preds_dict, state
-    #TODO: CHANGE TO USE TARGET NETS
-
-
     
 def main(_: Any) -> None:
     """Template for educational system implementations.
@@ -281,7 +244,7 @@ def main(_: Any) -> None:
     networks, sample_fn = make_system(env_spec)
     replay_buffer = ReplayBuffer(config.buffer_size)
     #run system on env
-    episodes = 10
+    episodes = 100
 
     # Initialise optimisers states and params
     optimisers = {}
@@ -298,12 +261,49 @@ def main(_: Any) -> None:
     global_num_steps = 0
     total_num_steps = config.total_num_steps
     min_epsilon, max_epsilon =  config.min_epsilon, config.max_epsilon 
+
+    @jax.jit
+    def update(state: TrainingState, batch: TransitionBatch):
     
+        loss = {}
+        q_preds_dict = {}
+        q_params_dict = {}
+        opt_state_dict = {}
+        
+        (actions, obs, next_obs, rewards, dones) = (
+            batch.actions, batch.observation, batch.next_observation, batch.reward, batch.done
+            )
+
+        agents = list(dones.keys())
+
+        for net_key in agents: 
+            q_params = state.params[net_key]
+            q_params_target = networks[net_key]["actor_params"]
+            q_next_target =  networks[net_key]["actor_net"].apply(q_params_target, next_obs[net_key])
+            q_next_target = jnp.max(q_next_target, axis = -1, keepdims=True)
+            next_q_value  = rewards[net_key] + (1 - dones[net_key])*0.99*q_next_target
+
+            def mse_loss(params):
+                q_pred = networks[net_key]["actor_net"].apply(params, obs[net_key])
+                q_pred_value = jnp.take_along_axis(q_pred, actions[net_key], axis=-1)
+                return ((q_pred_value - next_q_value)**2).mean(), q_pred_value.squeeze()
+            
+            (loss[net_key], q_preds_dict[net_key]), grads = jax.value_and_grad(mse_loss,has_aux=True)(q_params)
+            
+            updates, opt_state_dict[net_key] = optimisers[net_key].update(grads, state.opt_state[net_key])
+            q_params_dict[net_key] = optax.apply_updates(q_params, updates)
+            
+        state = TrainingState(q_params_dict,  opt_state_dict)
+
+        return loss, q_preds_dict, state
+    
+    agent_rewards = {agent:0 for agent in agent_specs.keys()}
     for episode in range(episodes):
+        episode_count = 0
         timestep = env.reset()
         while not timestep.last():
             #get action
-            epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (global_num_steps/ (0.4 * total_num_steps)))
+            epsilon = 0.2 #max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (global_num_steps/ (0.4 * total_num_steps)))
 
             if random.random() < epsilon:
                 actions = {agent: env.action_spaces[agent].sample() for agent in agent_specs.keys()}
@@ -319,11 +319,14 @@ def main(_: Any) -> None:
             timestep = new_timestep
             
             global_num_steps += 1
+            episode_count += 1
+            for agent in agent_specs.keys():
+                agent_rewards[agent] += new_timestep.reward[agent]
             
             # train if time to train
             if replay_buffer.size > config.warm_up_steps:
                 batch = replay_buffer.sample(config.batch_size)
-                loss, q_values, state = update(state, networks, batch, optimisers)
+                loss, q_values, state = update(state, batch)
 
                 # Do some logging here
                 # if global_step % logging_frequency == 0:
@@ -337,10 +340,12 @@ def main(_: Any) -> None:
                     for net_key, _ in agent_specs.items():
                         networks[net_key]["actor_params"] = optax.incremental_update(
                             state.params[net_key], networks[net_key]["actor_params"], config.tau)
-                
-        
-        print(f"number of steps {global_num_steps}")
-       
+
+        avg_rewards = np.mean(np.array(list(agent_rewards.values())))
+        print(f"number of steps {global_num_steps}, rewards {avg_rewards}")
+        for agent in agent_specs.keys():
+            agent_rewards[agent] = 0
+    
 
 if __name__ == "__main__":
     app.run(main)
