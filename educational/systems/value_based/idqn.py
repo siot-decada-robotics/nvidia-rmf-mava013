@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple, Union
-
+import matplotlib as plt
 import chex
 import jax
 import jax.numpy as jnp
@@ -27,7 +27,7 @@ import haiku as hk
 import optax
 
 from mava import specs as mava_specs
-from mava.utils.environments import debugging_utils, smac_utils
+from mava.utils.environments import debugging_utils#, smac_utils
 from mava.utils.loggers import logger_utils
 
 from collections import deque
@@ -61,10 +61,10 @@ class InitConfig:
     buffer_size: int = 1000
     warm_up_steps: int = 200
     min_epsilon: float = 0.1
-    max_epsilon: float = 0.9
+    max_epsilon: float = 1.0
     total_num_steps: int = 10000
     batch_size: int = 32
-    update_frequency: int = 10
+    update_frequency: int = 1
     tau: float = 1.
     logging_frequency: int = 100
 
@@ -244,7 +244,7 @@ def main(_: Any) -> None:
     networks, sample_fn = make_system(env_spec)
     replay_buffer = ReplayBuffer(config.buffer_size)
     #run system on env
-    episodes = 100
+    episodes = 500
 
     # Initialise optimisers states and params
     optimisers = {}
@@ -298,12 +298,17 @@ def main(_: Any) -> None:
         return loss, q_preds_dict, state
     
     agent_rewards = {agent:0 for agent in agent_specs.keys()}
+    epsilon = 1
+    episode_count = 0
+    reward_list = []
     for episode in range(episodes):
-        episode_count = 0
         timestep = env.reset()
+        episode_count += 1
+        epsilon = epsilon * 0.95
         while not timestep.last():
             #get action
-            epsilon = 0.2 #max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (global_num_steps/ (0.4 * total_num_steps)))
+            #epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (global_num_steps/ (0.4 * total_num_steps)))
+            
 
             if random.random() < epsilon:
                 actions = {agent: env.action_spaces[agent].sample() for agent in agent_specs.keys()}
@@ -319,33 +324,36 @@ def main(_: Any) -> None:
             timestep = new_timestep
             
             global_num_steps += 1
-            episode_count += 1
+            
             for agent in agent_specs.keys():
                 agent_rewards[agent] += new_timestep.reward[agent]
             
-            # train if time to train
-            if replay_buffer.size > config.warm_up_steps:
-                batch = replay_buffer.sample(config.batch_size)
-                loss, q_values, state = update(state, batch)
+        # train if time to train
+        if replay_buffer.size > config.warm_up_steps:
+            batch = replay_buffer.sample(config.batch_size)
+            loss, q_values, state = update(state, batch)
 
-                # Do some logging here
-                # if global_step % logging_frequency == 0:
-                #     writer.add_scalar("losses/td_loss", jax.device_get(loss), global_step)
-                #     writer.add_scalar("losses/q_values", jax.device_get(old_val).mean(), global_step)
-                #     print("SPS:", int(global_step / (time.time() - start_time)))
-                #     writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+            # Do some logging here
+            # if global_step % logging_frequency == 0:
+            #     writer.add_scalar("losses/td_loss", jax.device_get(loss), global_step)
+            #     writer.add_scalar("losses/q_values", jax.device_get(old_val).mean(), global_step)
+            #     print("SPS:", int(global_step / (time.time() - start_time)))
+            #     writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
 
-                # update the network
-                if global_num_steps % config.update_frequency == 0:
-                    for net_key, _ in agent_specs.items():
-                        networks[net_key]["actor_params"] = optax.incremental_update(
-                            state.params[net_key], networks[net_key]["actor_params"], config.tau)
+            # update the network
+            if global_num_steps % config.update_frequency == 0:
+                for net_key, _ in agent_specs.items():
+                    networks[net_key]["actor_params"] = optax.incremental_update(
+                        state.params[net_key], networks[net_key]["actor_params"], config.tau)
 
         avg_rewards = np.mean(np.array(list(agent_rewards.values())))
-        print(f"number of steps {global_num_steps}, rewards {avg_rewards}")
+        reward_list.append(avg_rewards)
+        if episode_count%5 ==0:
+            print(f"number of steps {global_num_steps}, rewards {avg_rewards}")
         for agent in agent_specs.keys():
             agent_rewards[agent] = 0
-    
+    plt.pyplot.plot(reward_list)
+    plt.pyplot.savefig('myfig')
 
 if __name__ == "__main__":
     app.run(main)
