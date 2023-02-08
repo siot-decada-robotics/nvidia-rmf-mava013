@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import logging
 import time
 from dataclasses import dataclass
@@ -34,37 +35,37 @@ from collections import deque
 from typing import Iterator, NamedTuple
 import random
 
+from dataclasses import field
+import numpy as np
+
+import tensorflow as tf
+
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("system", "test agent", "What agent is running.")
 flags.DEFINE_string(
-    "base_dir", "~/mava", "Base dir to store experiment data e.g. checkpoints."
+    "base_dir", os.path.expanduser("~")+"/mava", "Base dir to store experiment data e.g. checkpoints."
 )
 
+# TODO: clean up alot of these stuffs we are not using
 
-from collections import deque
-from dataclasses import field
-import random
+# Array = chex.Array
+# ArrayNumpy = chex.ArrayNumpy
+# Numeric = chex.Numeric
 
-import chex
-import jax
-import numpy as np
-
-Array = chex.Array
-ArrayNumpy = chex.ArrayNumpy
-Numeric = chex.Numeric
 
 @dataclass
 class InitConfig:
     seed: int = 42
     learning_rate: float = 5e-4
-    buffer_size: int = 1000
-    warm_up_steps: int = 200
+    buffer_size: int = 50000
+    warm_up_steps: int = 2000
     min_epsilon: float = 0.1
     max_epsilon: float = 0.9
-    total_num_steps: int = 10000
+    total_num_steps: int = 1500000
     batch_size: int = 32
-    update_frequency: int = 10
+    update_frequency: int = 20
+    training_frequency: int = 10
     tau: float = 1.
     logging_frequency: int = 100
 
@@ -75,7 +76,6 @@ class EnvironmentConfig:
     seed: int = 42
     type: str = "debug"
     action_space: str = "discrete"
-
 
 
 @dataclass
@@ -89,6 +89,7 @@ class RandomSystemState:
 
 class TrainingState(NamedTuple):
   params: Dict[str, hk.Params]
+  target_params: Dict[str, hk.Params]
   opt_state: Dict[str, optax.OptState]
 
 class TransitionBatch(NamedTuple):
@@ -164,21 +165,22 @@ def make_system(
         system.
     """
     prng = jax.random.PRNGKey(42)
-    q_key,key = jax.random.split(prng)
+    q_key, _ = jax.random.split(prng)
     agent_specs = environment_spec.get_agent_environment_specs()
 
-    def make_q_net(hidden_layer_size, num_actions): 
+    # add more options to this
+    def make_q_net(hidden_layer_sizes): 
         def make_actor(x):
-            return hk.nets.MLP([hidden_layer_size, num_actions])(x)
+            return hk.nets.MLP(hidden_layer_sizes)(x)
 
         return hk.without_apply_rng(hk.transform(make_actor))
 
     def make_networks():
         networks = {}
-        hidden_layer_size = 32
+        
         for net_key, spec in agent_specs.items():
             num_actions = spec.actions.num_values
-            q_net = make_q_net(hidden_layer_size, num_actions)
+            q_net = make_q_net([32, 32, num_actions])
             obs_dim = spec.observations.observation.shape
             obs_type = spec.observations.observation.dtype
             dummy_obs = jnp.ones(shape=obs_dim,dtype=obs_type)
@@ -188,16 +190,18 @@ def make_system(
             networks[net_key]["actor_params"] = q_network_params
             networks[net_key]["actor_net"] = q_net
         
-
-        def sample_fn(observation,networks):
+        # TODO: make this function jitable by removing networks and
+        # using the store approach as in mava
+        def sample_fn(observation, networks, q_params):
             action = {}
 
             for agent_key, agent_olt in observation.items():
 
                 q_network = networks[agent_key]["actor_net"]
-                q_params = networks[agent_key]["actor_params"]
+                params = q_params[agent_key]
                 agent_observation = agent_olt.observation
-                q_values = q_network.apply(q_params,agent_observation)
+                q_network_apply = jax.jit(q_network.apply)
+                q_values = q_network_apply(params,agent_observation)
                 action[agent_key] = q_values.argmax(axis=-1)
                 
             return action
@@ -211,7 +215,7 @@ class ReplayBuffer():
 
     def __init__(self,
         max_len = 100, seed = 0):
-        self.max_len = 100
+
         self.buffer = deque(maxlen = max_len)
         self.num_items = 0
         random.seed(seed)
@@ -227,8 +231,8 @@ class ReplayBuffer():
     @property
     def size(self):
         return self.num_items
-
     
+
 def main(_: Any) -> None:
     """Template for educational system implementations.
 
@@ -236,15 +240,17 @@ def main(_: Any) -> None:
         _ : unused param - for absl.
     """
 
+    # Setup TensorBoard logging
+    summary_writer = tf.summary.create_file_writer(f"{FLAGS.base_dir}/tensorboard-idqn-smac")
+
     # Init env and system.
     config = init()
     env = make_environment()
+    test_env = make_environment()
     env_spec = mava_specs.MAEnvironmentSpec(env)
     agent_specs = env_spec.get_agent_environment_specs()
     networks, sample_fn = make_system(env_spec)
     replay_buffer = ReplayBuffer(config.buffer_size)
-    #run system on env
-    episodes = 100
 
     # Initialise optimisers states and params
     optimisers = {}
@@ -252,15 +258,18 @@ def main(_: Any) -> None:
     initial_opt_state = {}
     
     for net_key, _ in agent_specs.items():
-        optimisers[net_key] = optax.adam(-config.learning_rate)
+        optimisers[net_key] = optax.chain(optax.scale_by_adam(), optax.scale(-config.learning_rate))
         initial_params[net_key] = networks[net_key]["actor_params"]
         initial_opt_state[net_key] = optimisers[net_key].init(initial_params[net_key])
     
-    state = TrainingState(initial_params, initial_opt_state)
+    state = TrainingState(initial_params, initial_params, initial_opt_state)
     
     global_num_steps = 0
     total_num_steps = config.total_num_steps
     min_epsilon, max_epsilon =  config.min_epsilon, config.max_epsilon 
+    episodes = total_num_steps//50 # because each epsiode is 50 steps for this environment
+    test_episodes = 10
+    num_agents = len(agent_specs)
 
     @jax.jit
     def update(state: TrainingState, batch: TransitionBatch):
@@ -278,7 +287,7 @@ def main(_: Any) -> None:
 
         for net_key in agents: 
             q_params = state.params[net_key]
-            q_params_target = networks[net_key]["actor_params"]
+            q_params_target = state.target_params[net_key]
             q_next_target =  networks[net_key]["actor_net"].apply(q_params_target, next_obs[net_key])
             q_next_target = jnp.max(q_next_target, axis = -1, keepdims=True)
             next_q_value  = rewards[net_key] + (1 - dones[net_key])*0.99*q_next_target
@@ -293,22 +302,36 @@ def main(_: Any) -> None:
             updates, opt_state_dict[net_key] = optimisers[net_key].update(grads, state.opt_state[net_key])
             q_params_dict[net_key] = optax.apply_updates(q_params, updates)
             
-        state = TrainingState(q_params_dict,  opt_state_dict)
+        state = TrainingState(q_params_dict, state.target_params, opt_state_dict)
 
         return loss, q_preds_dict, state
-    
-    agent_rewards = {agent:0 for agent in agent_specs.keys()}
-    for episode in range(episodes):
-        episode_count = 0
-        timestep = env.reset()
-        while not timestep.last():
-            #get action
-            epsilon = 0.2 #max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (global_num_steps/ (0.4 * total_num_steps)))
 
-            if random.random() < epsilon:
+    def test(env, num_episodes, networks, q_params):
+        score = np.zeros(num_agents)
+        for _ in range(num_episodes):
+            timestep = env.reset()
+            while not timestep.last():
+                actions = sample_fn(timestep.observation, networks, q_params)
+                timestep = env.step(actions)
+                score += np.array(list(timestep.reward.values()))
+
+        return sum(score / num_episodes)
+    
+    rng_key = jax.random.PRNGKey(config.seed)
+    score = np.zeros(num_agents)
+    for episode in range(episodes):
+        epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode / (0.4 * episodes)))
+        rng_key, episode_key = jax.random.split(rng_key)
+        
+        timestep = env.reset()
+
+        while not timestep.last():
+            
+            episode_key, action_key = jax.random.split(episode_key)
+            if jax.random.uniform (action_key) < epsilon:
                 actions = {agent: env.action_spaces[agent].sample() for agent in agent_specs.keys()}
             else:
-                actions = sample_fn(timestep.observation,networks)
+                actions = sample_fn(timestep.observation, networks, state.params)
             
             new_timestep = env.step(actions)
 
@@ -316,35 +339,43 @@ def main(_: Any) -> None:
                                 new_timestep.reward,timestep.last())
             
             replay_buffer.add(transition_data)
+            
             timestep = new_timestep
             
+            score += np.array(list(new_timestep.reward.values()))
             global_num_steps += 1
-            episode_count += 1
-            for agent in agent_specs.keys():
-                agent_rewards[agent] += new_timestep.reward[agent]
+                
+        # train if time to train
+        if global_num_steps > config.warm_up_steps:
             
-            # train if time to train
-            if replay_buffer.size > config.warm_up_steps:
+            # train for a certain number of iterations
+            for _ in range(config.training_frequency):
                 batch = replay_buffer.sample(config.batch_size)
                 loss, q_values, state = update(state, batch)
+            
+            if global_num_steps % config.logging_frequency == 0:
+                with summary_writer.as_default():
+                    for agent in agent_specs.keys():
+                        tf.summary.scalar(f"losses/td_loss-{agent}", jax.device_get(loss[agent]), step=global_num_steps)
+                        tf.summary.scalar(f"losses/q_values-{agent}", jax.device_get(q_values[agent]).mean(), global_num_steps)
+            
+                    tf.summary.scalar(f"epsilon", epsilon, global_num_steps)
+            
+            # update the network
+            if episode % config.update_frequency == 0 and episode!=0:
+                for net_key, _ in agent_specs.items():
+                    state = state._replace(target_params = optax.incremental_update(state.params, state.target_params, config.tau))
+            
+                test_score = test(test_env, test_episodes, networks, state.params)
+                print("#{:<10}/{} episodes , avg train score : {:.1f}, test score: {:.1f} n_buffer : {}, eps : {:.1f}"
+                    .format(episode, episodes, sum(score /config.update_frequency), test_score, replay_buffer.size, epsilon))
+                
+                with summary_writer.as_default():
+                    tf.summary.scalar(f"rewards/avg_train-reward", sum(score /config.update_frequency), step=global_num_steps)
+                    tf.summary.scalar(f"rewards/avg_test-reward", test_score, step=global_num_steps)
 
-                # Do some logging here
-                # if global_step % logging_frequency == 0:
-                #     writer.add_scalar("losses/td_loss", jax.device_get(loss), global_step)
-                #     writer.add_scalar("losses/q_values", jax.device_get(old_val).mean(), global_step)
-                #     print("SPS:", int(global_step / (time.time() - start_time)))
-                #     writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+                score = np.zeros(num_agents)
 
-                # update the network
-                if global_num_steps % config.update_frequency == 0:
-                    for net_key, _ in agent_specs.items():
-                        networks[net_key]["actor_params"] = optax.incremental_update(
-                            state.params[net_key], networks[net_key]["actor_params"], config.tau)
-
-        avg_rewards = np.mean(np.array(list(agent_rewards.values())))
-        print(f"number of steps {global_num_steps}, rewards {avg_rewards}")
-        for agent in agent_specs.keys():
-            agent_rewards[agent] = 0
     
 
 if __name__ == "__main__":
