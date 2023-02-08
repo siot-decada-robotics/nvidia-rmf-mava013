@@ -61,18 +61,11 @@ class InitConfig:
     buffer_size: int = 50000
     warm_up_steps: int = 2000
     min_epsilon: float = 0.1
-<<<<<<< HEAD
     max_epsilon: float = 0.9
     total_num_steps: int = 1500000
     batch_size: int = 32
     update_frequency: int = 20
     training_frequency: int = 10
-=======
-    max_epsilon: float = 1.0
-    total_num_steps: int = 10000
-    batch_size: int = 32
-    update_frequency: int = 1
->>>>>>> origin/feature/idqn-single-file
     tau: float = 1.
     logging_frequency: int = 100
 
@@ -258,11 +251,6 @@ def main(_: Any) -> None:
     agent_specs = env_spec.get_agent_environment_specs()
     networks, sample_fn = make_system(env_spec)
     replay_buffer = ReplayBuffer(config.buffer_size)
-<<<<<<< HEAD
-=======
-    #run system on env
-    episodes = 500
->>>>>>> origin/feature/idqn-single-file
 
     # Initialise optimisers states and params
     optimisers = {}
@@ -317,22 +305,6 @@ def main(_: Any) -> None:
         state = TrainingState(q_params_dict, state.target_params, opt_state_dict)
 
         return loss, q_preds_dict, state
-<<<<<<< HEAD
-=======
-    
-    agent_rewards = {agent:0 for agent in agent_specs.keys()}
-    epsilon = 1
-    episode_count = 0
-    reward_list = []
-    for episode in range(episodes):
-        timestep = env.reset()
-        episode_count += 1
-        epsilon = epsilon * 0.95
-        while not timestep.last():
-            #get action
-            #epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (global_num_steps/ (0.4 * total_num_steps)))
-            
->>>>>>> origin/feature/idqn-single-file
 
     def test(env, num_episodes, networks, q_params):
         score = np.zeros(num_agents)
@@ -372,7 +344,6 @@ def main(_: Any) -> None:
             
             score += np.array(list(new_timestep.reward.values()))
             global_num_steps += 1
-<<<<<<< HEAD
                 
         # train if time to train
         if global_num_steps > config.warm_up_steps:
@@ -406,38 +377,6 @@ def main(_: Any) -> None:
                 score = np.zeros(num_agents)
 
     
-=======
-            
-            for agent in agent_specs.keys():
-                agent_rewards[agent] += new_timestep.reward[agent]
-            
-        # train if time to train
-        if replay_buffer.size > config.warm_up_steps:
-            batch = replay_buffer.sample(config.batch_size)
-            loss, q_values, state = update(state, batch)
-
-            # Do some logging here
-            # if global_step % logging_frequency == 0:
-            #     writer.add_scalar("losses/td_loss", jax.device_get(loss), global_step)
-            #     writer.add_scalar("losses/q_values", jax.device_get(old_val).mean(), global_step)
-            #     print("SPS:", int(global_step / (time.time() - start_time)))
-            #     writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
-
-            # update the network
-            if global_num_steps % config.update_frequency == 0:
-                for net_key, _ in agent_specs.items():
-                    networks[net_key]["actor_params"] = optax.incremental_update(
-                        state.params[net_key], networks[net_key]["actor_params"], config.tau)
-
-        avg_rewards = np.mean(np.array(list(agent_rewards.values())))
-        reward_list.append(avg_rewards)
-        if episode_count%5 ==0:
-            print(f"number of steps {global_num_steps}, rewards {avg_rewards}")
-        for agent in agent_specs.keys():
-            agent_rewards[agent] = 0
-    plt.pyplot.plot(reward_list)
-    plt.pyplot.savefig('myfig')
->>>>>>> origin/feature/idqn-single-file
 
 if __name__ == "__main__":
     app.run(main)
