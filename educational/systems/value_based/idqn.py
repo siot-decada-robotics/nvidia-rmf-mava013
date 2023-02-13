@@ -28,7 +28,7 @@ import haiku as hk
 import optax
 
 from mava import specs as mava_specs
-from mava.utils.environments import debugging_utils#, smac_utils
+from mava.utils.environments import debugging_utils
 from mava.utils.loggers import logger_utils
 
 from collections import deque
@@ -38,7 +38,6 @@ import random
 from dataclasses import field
 import numpy as np
 
-import tensorflow as tf
 
 FLAGS = flags.FLAGS
 
@@ -48,10 +47,6 @@ flags.DEFINE_string(
 )
 
 # TODO: clean up alot of these stuffs we are not using
-
-# Array = chex.Array
-# ArrayNumpy = chex.ArrayNumpy
-# Numeric = chex.Numeric
 
 
 @dataclass
@@ -68,6 +63,7 @@ class InitConfig:
     training_frequency: int = 10
     tau: float = 1.
     logging_frequency: int = 100
+    exp_name: str =  str(datetime.now())
 
 
 @dataclass
@@ -83,9 +79,6 @@ class SystemConfig:
     name: str = "random"
     seed: int = 42
 
-@chex.dataclass(frozen=True, mappable_dataclass=False)
-class RandomSystemState:
-    rng: jnp.ndarray
 
 class TrainingState(NamedTuple):
   params: Dict[str, hk.Params]
@@ -190,26 +183,9 @@ def make_system(
             networks[net_key]["actor_params"] = q_network_params
             networks[net_key]["actor_net"] = q_net
         
-        # TODO: make this function jitable by removing networks and
-        # using the store approach as in mava
-        def sample_fn(observation, networks, q_params):
-            action = {}
-
-            for agent_key, agent_olt in observation.items():
-
-                q_network = networks[agent_key]["actor_net"]
-                params = q_params[agent_key]
-                agent_observation = agent_olt.observation
-                q_network_apply = jax.jit(q_network.apply)
-                q_values = q_network_apply(params,agent_observation)
-                action[agent_key] = q_values.argmax(axis=-1)
-                
-            return action
-
-        return networks,sample_fn
+        return networks 
     
-    networks, sample_fn = make_networks()
-    return networks, sample_fn
+    return make_networks()
 
 class ReplayBuffer():
 
@@ -240,17 +216,26 @@ def main(_: Any) -> None:
         _ : unused param - for absl.
     """
 
-    # Setup TensorBoard logging
-    summary_writer = tf.summary.create_file_writer(f"{FLAGS.base_dir}/tensorboard-idqn-smac")
-
     # Init env and system.
     config = init()
     env = make_environment()
     test_env = make_environment()
     env_spec = mava_specs.MAEnvironmentSpec(env)
     agent_specs = env_spec.get_agent_environment_specs()
-    networks, sample_fn = make_system(env_spec)
+    networks = make_system(env_spec)
     replay_buffer = ReplayBuffer(config.buffer_size)
+
+    # set up logger
+    
+    time_delta = 1
+    logger = logger_utils.make_logger(
+        directory=f"{FLAGS.base_dir}/{config.exp_name}",
+        to_terminal=True,
+        to_tensorboard=True,
+        time_stamp=str(datetime.now()),
+        time_delta=time_delta,
+        label="iqdn_system",
+    )
 
     # Initialise optimisers states and params
     optimisers = {}
@@ -270,6 +255,20 @@ def main(_: Any) -> None:
     episodes = total_num_steps//50 # because each epsiode is 50 steps for this environment
     test_episodes = 10
     num_agents = len(agent_specs)
+
+    @jax.jit
+    def sample_fn(observation, q_params):
+        action = {}
+
+        for agent_key, agent_olt in observation.items():
+
+            q_network = networks[agent_key]["actor_net"]
+            params = q_params[agent_key]
+            agent_observation = agent_olt.observation
+            q_values = q_network.apply(params,agent_observation)
+            action[agent_key] = q_values.argmax(axis=-1)
+            
+        return action
 
     @jax.jit
     def update(state: TrainingState, batch: TransitionBatch):
@@ -306,12 +305,12 @@ def main(_: Any) -> None:
 
         return loss, q_preds_dict, state
 
-    def test(env, num_episodes, networks, q_params):
+    def test(env, num_episodes, q_params):
         score = np.zeros(num_agents)
         for _ in range(num_episodes):
             timestep = env.reset()
             while not timestep.last():
-                actions = sample_fn(timestep.observation, networks, q_params)
+                actions = sample_fn(timestep.observation, q_params)
                 timestep = env.step(actions)
                 score += np.array(list(timestep.reward.values()))
 
@@ -331,7 +330,7 @@ def main(_: Any) -> None:
             if jax.random.uniform (action_key) < epsilon:
                 actions = {agent: env.action_spaces[agent].sample() for agent in agent_specs.keys()}
             else:
-                actions = sample_fn(timestep.observation, networks, state.params)
+                actions = sample_fn(timestep.observation, state.params)
             
             new_timestep = env.step(actions)
 
@@ -354,25 +353,31 @@ def main(_: Any) -> None:
                 loss, q_values, state = update(state, batch)
             
             if global_num_steps % config.logging_frequency == 0:
-                with summary_writer.as_default():
-                    for agent in agent_specs.keys():
-                        tf.summary.scalar(f"losses/td_loss-{agent}", jax.device_get(loss[agent]), step=global_num_steps)
-                        tf.summary.scalar(f"losses/q_values-{agent}", jax.device_get(q_values[agent]).mean(), global_num_steps)
-            
-                    tf.summary.scalar(f"epsilon", epsilon, global_num_steps)
+                loss_dict = {f"losses/td_loss-{agent}": jax.device_get(loss[agent]) for agent in agent_specs.keys()}
+                qvalues_dict = {f"losses/q_values-{agent}": jax.device_get(q_values[agent]).mean() for agent in agent_specs.keys()}
+                
+                write_dict = loss_dict | qvalues_dict
+                logger.write(
+                    write_dict
+                )
+                
             
             # update the network
             if episode % config.update_frequency == 0 and episode!=0:
                 for net_key, _ in agent_specs.items():
                     state = state._replace(target_params = optax.incremental_update(state.params, state.target_params, config.tau))
             
-                test_score = test(test_env, test_episodes, networks, state.params)
-                print("#{:<10}/{} episodes , avg train score : {:.1f}, test score: {:.1f} n_buffer : {}, eps : {:.1f}"
-                    .format(episode, episodes, sum(score /config.update_frequency), test_score, replay_buffer.size, epsilon))
+                test_score = test(test_env, test_episodes, state.params)
+                # print("#{:<10}/{} episodes , avg train score : {:.1f}, test score: {:.1f} n_buffer : {}, eps : {:.1f}"
+                #     .format(episode, episodes, sum(score /config.update_frequency), test_score, replay_buffer.size, epsilon))
                 
-                with summary_writer.as_default():
-                    tf.summary.scalar(f"rewards/avg_train-reward", sum(score /config.update_frequency), step=global_num_steps)
-                    tf.summary.scalar(f"rewards/avg_test-reward", test_score, step=global_num_steps)
+                logger.write(
+                    {
+                        f"rewards/avg_train-reward": sum(score /config.update_frequency),
+                        f"rewards/avg_test-reward": test_score,
+                        f"epsilon": epsilon
+                    }
+                )
 
                 score = np.zeros(num_agents)
 
