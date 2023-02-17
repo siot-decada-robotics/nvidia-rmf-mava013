@@ -23,14 +23,14 @@ import rlax
 
 from mava.components.training.losses import Loss
 from mava.core_jax import SystemTrainer
-
+from mava.systems.idqn.components.training.loss import IDQNLoss, IDQNLossConfig
 
 @dataclass
 class C51_IDQNLossConfig:
     gamma: float = 0.99
 
 
-class C51_IDQNLoss(Loss):
+class C51_IDQNLoss(IDQNLoss):
     def __init__(
         self,
         config: C51_IDQNLossConfig = C51_IDQNLossConfig(),
