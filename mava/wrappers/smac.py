@@ -19,19 +19,20 @@ from typing import Any, Dict, List, Optional, Union
 import dm_env
 import numpy as np
 from acme import specs
-from smac.env import StarCraft2Env
+#from smac.env import An
 
 from mava import types
 from mava.utils.wrapper_utils import convert_np_type, parameterized_restart
 from mava.wrappers.env_wrappers import ParallelEnvWrapper
 
-
+from gym.spaces import Discrete
+from gym.spaces.box import Box
 class SMACWrapper(ParallelEnvWrapper):
     """Environment wrapper for PettingZoo MARL environments."""
 
     def __init__(
         self,
-        environment: StarCraft2Env,
+        environment: Any,
         return_state_info: bool = True,
         death_masking: bool = False,
     ):
@@ -48,7 +49,7 @@ class SMACWrapper(ParallelEnvWrapper):
         self._environment = environment
 
         self._return_state_info = return_state_info
-        self._agents = [f"agent_{n}" for n in range(self._environment.n_agents)]
+        self._agents = [f"agent_{n}" for n in range(2)]
 
         # This prevents resetting SMAC if it is already in the reset state. SMAC has a bug
         # where the max returns become less than 20 if reset is called more than once directly
@@ -67,6 +68,7 @@ class SMACWrapper(ParallelEnvWrapper):
         Returns:
             dm_env.TimeStep: dm timestep.
         """
+        #print("RESET")
         # Reset the environment
         if not self._is_reset:
             self._environment.reset()
@@ -114,6 +116,8 @@ class SMACWrapper(ParallelEnvWrapper):
         Returns:
             dm_env.TimeStep: dm timestep
         """
+        #print("STEP")
+        #exit()
         # Convert dict of actions to list for SMAC
         smac_actions = [actions[agent] for agent in self._agents]
 
@@ -137,7 +141,6 @@ class SMACWrapper(ParallelEnvWrapper):
             extras = {"s_t": state}
         else:
             extras = {}
-
         if self._done:
             self._step_type = dm_env.StepType.LAST
 
@@ -248,15 +251,15 @@ class SMACWrapper(ParallelEnvWrapper):
             self._environment.reset()
             self._is_reset = True
 
-        observations = self._environment.get_obs()
-        legal_actions = self._get_legal_actions()
+        observations = self._environment.observation_space
+        legal_actions = [1,1]#self._get_legal_actions()
 
         observation_specs = {}
         for i, agent in enumerate(self._agents):
 
             observation_specs[agent] = types.OLT(
-                observation=observations[i],
-                legal_actions=legal_actions[i],
+                observation=observations,#[i],
+                legal_actions=[1,1],#legal_actions[i],
                 terminal=np.asarray([True], dtype=np.float32),
             )
 
@@ -361,7 +364,7 @@ class SMACWrapper(ParallelEnvWrapper):
         return masked_agents
 
     @property
-    def environment(self) -> StarCraft2Env:
+    def environment(self) -> Any:
         """Returns the wrapped environment.
 
         Returns:

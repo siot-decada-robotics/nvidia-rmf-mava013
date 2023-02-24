@@ -38,6 +38,7 @@ from mava.types import OLT
 
 import rlax
 import optax
+from mava.utils.environments import smac_utils #import make_environment
 
 FLAGS = flags.FLAGS
 
@@ -46,6 +47,7 @@ flags.DEFINE_string(
     "base_dir", "~/mava", "Base dir to store experiment data e.g. checkpoints."
 )
 
+from matrix_game import mat_game as mat
 
 @dataclass
 class InitConfig:
@@ -95,10 +97,17 @@ def make_environment(
     """
 
     if config.type == "debug":
+        """
         env, _ = debugging_utils.make_environment(
             env_name=config.env_name,
             action_space=config.action_space,
             random_seed=config.seed,
+        )
+        """
+        env, _ = smac_utils.make_environment(
+            #env_name=config.env_name,
+            #action_space=config.action_space,
+            #random_seed=config.seed,
         )
     return env, config
 
@@ -164,8 +173,7 @@ def make_system(
             obs_dim = spec.observations.observation.shape
             obs_type = spec.observations.observation.dtype
             dummy_obs = jnp.ones(shape=obs_dim, dtype=obs_type)
-
-            actor_params = actor_net.init(actor_prng, dummy_obs)
+            actor_params = actor_net.init(actor_prng, jnp.array(dummy_obs))
             critic_params = critic_net.init(critic_prng, dummy_obs)
 
             networks[net_key] = {}
@@ -213,10 +221,10 @@ def make_system(
         for net_key in agent_specs.keys():
 
             # TODO LR NEEDS TO COME FROM CONFIG.
-            actor_optim = optax.sgd(0.01)
-            critic_optim = optax.sgd(0.01)
-            # actor_optim = optax.adam(0.005)
-            # critic_optim = optax.adam(0.005)
+            #actor_optim = optax.sgd(0.01)
+            #critic_optim = optax.sgd(0.01)
+            actor_optim = optax.adam(0.005)
+            critic_optim = optax.adam(0.005)
 
             actor_state = actor_optim.init(networks[net_key]["actor_params"])
             critic_state = critic_optim.init(networks[net_key]["critic_params"])
@@ -290,7 +298,8 @@ def make_system(
         new_log_probs = {}
 
         # TODO the 0 is just get access to agent names.
-
+        #print(buffer)
+        #exit()
         for agent in buffer["observations"][0].keys():
 
             rewards_ = [agent_dict[agent] for agent_dict in buffer["rewards"]]
@@ -300,6 +309,9 @@ def make_system(
 
             # values_ = jax.lax.stop_gradient(values_)
 
+            #print(rewards_)
+            #print(values_)
+            #exit()
             # entropy = [agent_dict[agent] for agent_dict in buffer["entropy"]]
             advantage = rlax.truncated_generalized_advantage_estimation(
                 r_t=jnp.array(rewards_[:-1]),
@@ -404,6 +416,7 @@ def main(_: Any) -> None:
 
     init_config = init()
     env, env_config = make_environment()
+    
     env_spec = mava_specs.MAEnvironmentSpec(env)
     (
         networks,
@@ -418,7 +431,7 @@ def main(_: Any) -> None:
     simple_buffer = {}
 
     # Run system on env
-    episodes = 500
+    episodes = 20
     test_buffer = {}
     for episode in range(episodes):
 
@@ -430,28 +443,36 @@ def main(_: Any) -> None:
         simple_buffer["log_probs"] = []
         simple_buffer["entropy"] = []
         ep_return = 0
-        timestep = env.reset()
+        timestep,_ = env.reset()
+        step = 0
         while not timestep.last():
             # get action
             prng, action_key = jax.random.split(prng)
             action, log_prob, entropy, value = sample_function(
                 timestep.observation, networks, action_key
             )
-            timestep = env.step(action)
-
-            # take step
+            timestep,_ = env.step(action)
+            #print(action)
+            #print(timestep.observation)
+            #print(timestep.reward)
+            #print(action)
+            #print(value)
+            #exit()
             simple_buffer["observations"].append(timestep.observation)
             simple_buffer["actions"].append(action)
             simple_buffer["rewards"].append(timestep.reward)
             simple_buffer["values"].append(value)
             simple_buffer["log_probs"].append(log_prob)
             simple_buffer["entropy"].append(entropy)
-
             team_reward = 0
+
             for reward in timestep.reward.values():
                 team_reward += reward
-            team_reward /= 3
+            team_reward /= 2
             ep_return += team_reward
+            step += 1
+        
+        #exit()
         print(f"{episode}: {ep_return}")
         if episode == 0:
             test_buffer = simple_buffer.copy()

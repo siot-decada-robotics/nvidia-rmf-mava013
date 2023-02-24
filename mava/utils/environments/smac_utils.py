@@ -18,12 +18,8 @@ from typing import Any, Dict, Optional, Tuple
 
 from mava.utils.jax_training_utils import set_jax_double_precision
 
-try:
-    from smac.env import StarCraft2Env
+from matrix_game import mat_game as mat
 
-    _found_smac = True
-except ModuleNotFoundError:
-    _found_smac = False
 
 from mava.wrappers import SMACWrapper
 from mava.wrappers.env_preprocess_wrappers import (
@@ -32,7 +28,7 @@ from mava.wrappers.env_preprocess_wrappers import (
     StackObservations,
 )
 
-if _found_smac:
+if 1==1:
 
     def make_environment(
         map_name: str = "3m",
@@ -42,7 +38,7 @@ if _found_smac:
         random_seed: Optional[int] = None,
         death_masking: bool = False,
         stack_frames: int = 1,
-        return_state_info: bool = True,
+        return_state_info: bool = False,
     ) -> Tuple[Any, Dict[str, str]]:
         """Make a SMAC enviroment.
 
@@ -60,7 +56,7 @@ if _found_smac:
         set_jax_double_precision()
 
         env: Any
-        env = StarCraft2Env(map_name=map_name, seed=random_seed)
+        env = mat()
 
         env = SMACWrapper(
             env, death_masking=death_masking, return_state_info=return_state_info

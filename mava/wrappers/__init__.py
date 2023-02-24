@@ -29,12 +29,7 @@ try:
 except ModuleNotFoundError:
     pass
 
-try:
-    # The user might not have installed SMAC
-    from mava.wrappers.smac import SMACWrapper
-except ModuleNotFoundError:
-    pass
-
+from mava.wrappers.smac import SMACWrapper
 from mava.wrappers.saveable import SaveableWrapper
 from mava.wrappers.system_trainer_statistics import (
     DetailedTrainerStatistics,
