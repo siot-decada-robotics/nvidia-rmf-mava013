@@ -17,7 +17,6 @@ import logging
 
 logger = logging.getLogger()
 
-
 class CheckTypesFilter(logging.Filter):
     def filter(self, record):
         return "check_types" not in record.getMessage()
@@ -97,18 +96,18 @@ def make_environment(
     """
 
     if config.type == "debug":
-        """
+        
         env, _ = debugging_utils.make_environment(
             env_name=config.env_name,
             action_space=config.action_space,
             random_seed=config.seed,
         )
-        """
-        env, _ = smac_utils.make_environment(
-            #env_name=config.env_name,
-            #action_space=config.action_space,
-            #random_seed=config.seed,
-        )
+        
+        # env, _ = smac_utils.make_environment(
+        #     #env_name=config.env_name,
+        #     #action_space=config.action_space,
+        #     #random_seed=config.seed,
+        # )
     return env, config
 
 
@@ -122,6 +121,17 @@ tfp = tensorflow_probability.substrates.jax
 tfd = tfp.distributions
 tfb = tfp.bijectors
 
+def compute_gae(next_value: float, rewards, masks, values: list, gamma=0.99, tau=0.95):
+    values = values + [next_value]
+    gae = 0
+    returns = []
+    advantages = []
+    for step in reversed(range(len(rewards))):
+        delta = rewards[step] + gamma * values[step + 1] * masks[step] - values[step]
+        gae = delta + gamma * tau * masks[step] * gae
+        returns.insert(0, gae + values[step])
+        advantages.insert(0, gae)
+    return returns, advantages
 
 def make_system(
     environment_spec: mava_specs.MAEnvironmentSpec,
@@ -276,6 +286,8 @@ def make_system(
         policy_loss = rlax.clipped_surrogate_pg_loss(ratio, advantages, 0.2)
         loss = -jnp.mean(policy_loss)
 
+        # loss = -jnp.mean(new_log_probs * advantages)
+
         return loss, loss
 
     def critic_loss(critic_params, observations, returns, critic_apply_fn):
@@ -313,21 +325,34 @@ def make_system(
             #print(values_)
             #exit()
             # entropy = [agent_dict[agent] for agent_dict in buffer["entropy"]]
-            advantage = rlax.truncated_generalized_advantage_estimation(
-                r_t=jnp.array(rewards_[:-1]),
+            rlax_advantage = rlax.truncated_generalized_advantage_estimation(
+                r_t=jnp.array(rewards_[1:]),
                 # TODO: Max episode horizon value here, also won't always be 1s.
-                discount_t=jnp.ones(49) * 0.99,
+                discount_t=jnp.ones_like(jnp.array(values_[1:])) * 0.99,
                 lambda_=0.95,
                 values=jnp.array(values_),
             )
 
-            advantage = jax.lax.stop_gradient(advantage)
+            manual_advantage, manual_return = compute_gae(
+                next_value=values_[-1], 
+                rewards=rewards_[:-1],
+                masks=jnp.ones_like(jnp.array(values_[1:])),
+                values=values_[:-1], 
+            )
 
-            returns = advantage + jnp.array(values_)[:-1]
+            values_ = jax.lax.stop_gradient(values_)
+            # advantage = jax.lax.stop_gradient(advantage)
 
-            print(f"Ret: {optax.global_norm(returns)}")
+            # targets = jnp.array(rewards_[:-1]) + 0.99 * jnp.array(values_[1: ]) 
+            # advantage, returns = jax.lax.stop_gradient(targets - jnp.array(values_[:-1])), jax.lax.stop_gradient(targets)
 
-            returns = jax.lax.stop_gradient(returns)
+            advantage, returns = jax.lax.stop_gradient(jnp.array(manual_advantage)), jax.lax.stop_gradient(jnp.array(manual_return))
+            
+            # returns = advantage + jnp.array(values_)[:-1]
+            
+            # print(f"Ret: {optax.global_norm(returns)}")
+
+            # returns = jax.lax.stop_gradient(returns)
 
             observations = [
                 agent_dict[agent].observation for agent_dict in buffer["observations"]
@@ -364,7 +389,7 @@ def make_system(
                 "actor_optim"
             ].update(policy_grads, optimisers[agent]["actor_state"])
             print(
-                f"policy_loss {p_loss} {optax.global_norm(policy_grads)} {optax.global_norm(updates)}"
+                f"policy_loss: {jnp.round(p_loss, 2)} grads: {jnp.round(optax.global_norm(policy_grads), 2)} norm: {jnp.round(optax.global_norm(updates), 2)}"
             )
             new_policy_params = optax.apply_updates(actor_params, updates)
 
@@ -384,7 +409,7 @@ def make_system(
                 "critic_optim"
             ].update(critic_grads, optimisers[agent]["critic_state"])
             print(
-                f"critic_loss {c_loss} {optax.global_norm(critic_grads)} {optax.global_norm(updates)}"
+                f"critic_loss {c_loss} grads: {jnp.round(optax.global_norm(critic_grads), 2)} norm: {jnp.round(optax.global_norm(updates), 2)}"
             )
             new_critic_params = optax.apply_updates(critic_params, updates)
 
@@ -431,7 +456,7 @@ def main(_: Any) -> None:
     simple_buffer = {}
 
     # Run system on env
-    episodes = 20
+    episodes = 200
     test_buffer = {}
     for episode in range(episodes):
 
@@ -443,7 +468,7 @@ def main(_: Any) -> None:
         simple_buffer["log_probs"] = []
         simple_buffer["entropy"] = []
         ep_return = 0
-        timestep,_ = env.reset()
+        timestep = env.reset()
         step = 0
         while not timestep.last():
             # get action
@@ -451,7 +476,7 @@ def main(_: Any) -> None:
             action, log_prob, entropy, value = sample_function(
                 timestep.observation, networks, action_key
             )
-            timestep,_ = env.step(action)
+            timestep = env.step(action)
             #print(action)
             #print(timestep.observation)
             #print(timestep.reward)
@@ -468,12 +493,14 @@ def main(_: Any) -> None:
 
             for reward in timestep.reward.values():
                 team_reward += reward
-            team_reward /= 2
+            team_reward /= 3
             ep_return += team_reward
             step += 1
         
         #exit()
-        print(f"{episode}: {ep_return}")
+        print("")
+        print(f"EPISODE {episode} RETURN: {ep_return}")
+        print("")
         if episode == 0:
             test_buffer = simple_buffer.copy()
         # Can update an amount of episodes!
