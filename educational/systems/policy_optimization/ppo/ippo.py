@@ -38,6 +38,7 @@ from mava.types import OLT
 import rlax
 import optax
 from mava.utils.environments import smac_utils #import make_environment
+import numpy as np 
 
 FLAGS = flags.FLAGS
 
@@ -47,6 +48,8 @@ flags.DEFINE_string(
 )
 
 from matrix_game import mat_game as mat
+
+NUM_EPOCHS = 10
 
 @dataclass
 class InitConfig:
@@ -199,8 +202,11 @@ def make_system(
         log_prob = {}
         entropy = {}
         value = {}
+        
+        num_agents = len(obserservation.items())
+        agent_prng_keys = jax.random.split(key,num_agents)
 
-        for agent_key, agent_olt in obserservation.items():
+        for index, (agent_key, agent_olt) in enumerate(obserservation.items()):
 
             actor_net = networks[agent_key]["actor_net"]
             actor_params = networks[agent_key]["actor_params"]
@@ -209,7 +215,7 @@ def make_system(
 
             dist = tfd.Categorical(logits=logits)  # , dtype=self._dtype)
             # TODO - FIX THIS
-            action[agent_key] = dist.sample(seed=key)
+            action[agent_key] = dist.sample(seed=agent_prng_keys[index])
             log_prob[agent_key] = dist.log_prob(action[agent_key])
             entropy[agent_key] = dist.entropy()
 
@@ -318,6 +324,7 @@ def make_system(
             values_ = [agent_dict[agent] for agent_dict in buffer["values"]]
             old_log_probs = [agent_dict[agent] for agent_dict in buffer["log_probs"]]
             actions = [agent_dict[agent] for agent_dict in buffer["actions"]]
+            dones = [agent_dict[agent] for agent_dict in buffer["dones"]]
 
             # values_ = jax.lax.stop_gradient(values_)
 
@@ -325,34 +332,58 @@ def make_system(
             #print(values_)
             #exit()
             # entropy = [agent_dict[agent] for agent_dict in buffer["entropy"]]
+
+            # TODO: Investigate this. 
             rlax_advantage = rlax.truncated_generalized_advantage_estimation(
                 r_t=jnp.array(rewards_[1:]),
                 # TODO: Max episode horizon value here, also won't always be 1s.
-                discount_t=jnp.ones_like(jnp.array(values_[1:])) * 0.99,
-                lambda_=0.95,
+                # discount_t=jnp.ones_like(jnp.array(values_[1:])) * 0.99,
+                # discounts are 1 if 
+                discount_t = jnp.array(dones)[1:] * 0.99, 
+                # lambda_=0.95,
+                lambda_=0.95, 
                 values=jnp.array(values_),
             )
 
             manual_advantage, manual_return = compute_gae(
                 next_value=values_[-1], 
                 rewards=rewards_[:-1],
-                masks=jnp.ones_like(jnp.array(values_[1:])),
+                masks=jnp.array(dones)[1:],
                 values=values_[:-1], 
+                tau=0.95, 
             )
 
+
+            num_timesteps = len(dones)
+            clean_rl_advantage = np.zeros_like(np.array(dones))
+            lastgaelam = 0
+            for t in reversed(range(num_timesteps-1)):
+                if t == num_timesteps - 2:
+                    nextnonterminal = dones[t]
+                    nextvalues = values_[t+1]
+                else:
+                    nextnonterminal = dones[t + 1]
+                    nextvalues = values_[t+1]
+                delta = rewards_[t] + 0.99 * nextvalues * nextnonterminal - values_[t]
+                clean_rl_advantage[t] = lastgaelam = delta + 0.99 * 0.95 * nextnonterminal * lastgaelam
+
             values_ = jax.lax.stop_gradient(values_)
-            # advantage = jax.lax.stop_gradient(advantage)
+            # advantage = jax.lax.stop_gradient(rlax_advantage)
+            advantage = clean_rl_advantage[:-1]
+            # returns = advantage + values_[1:]
 
             # targets = jnp.array(rewards_[:-1]) + 0.99 * jnp.array(values_[1: ]) 
             # advantage, returns = jax.lax.stop_gradient(targets - jnp.array(values_[:-1])), jax.lax.stop_gradient(targets)
 
-            advantage, returns = jax.lax.stop_gradient(jnp.array(manual_advantage)), jax.lax.stop_gradient(jnp.array(manual_return))
+            # advantage, returns = jax.lax.stop_gradient(jnp.array(manual_advantage)), jax.lax.stop_gradient(jnp.array(manual_return))
             
-            # returns = advantage + jnp.array(values_)[:-1]
+
+
+            returns = advantage + jnp.array(values_)[:-1]
             
             # print(f"Ret: {optax.global_norm(returns)}")
 
-            # returns = jax.lax.stop_gradient(returns)
+            returns = jax.lax.stop_gradient(returns)
 
             observations = [
                 agent_dict[agent].observation for agent_dict in buffer["observations"]
@@ -457,16 +488,23 @@ def main(_: Any) -> None:
 
     # Run system on env
     episodes = 200
+    horizon = 200
+    global_step = 0 
     test_buffer = {}
-    for episode in range(episodes):
+    episode = 0
 
-        simple_buffer = {}
-        simple_buffer["observations"] = []
-        simple_buffer["actions"] = []
-        simple_buffer["rewards"] = []
-        simple_buffer["values"] = []
-        simple_buffer["log_probs"] = []
-        simple_buffer["entropy"] = []
+    simple_buffer = {}
+    simple_buffer["observations"] = []
+    simple_buffer["actions"] = []
+    simple_buffer["rewards"] = []
+    simple_buffer["values"] = []
+    simple_buffer["log_probs"] = []
+    simple_buffer["entropy"] = []
+    simple_buffer["dones"] = []
+
+    for step in range(horizon):
+
+
         ep_return = 0
         timestep = env.reset()
         step = 0
@@ -489,13 +527,38 @@ def main(_: Any) -> None:
             simple_buffer["values"].append(value)
             simple_buffer["log_probs"].append(log_prob)
             simple_buffer["entropy"].append(entropy)
-            team_reward = 0
 
+            if timestep.last():
+                simple_buffer["dones"].append({'agent_0': 0.0, 'agent_1': 0.0, 'agent_2': 0.0})
+            else: 
+                simple_buffer["dones"].append(timestep.discount)
+            
+            team_reward = 0
             for reward in timestep.reward.values():
                 team_reward += reward
             team_reward /= 3
             ep_return += team_reward
             step += 1
+            global_step += 1
+
+            if timestep.last(): 
+
+                x = 0 
+
+            if global_step % horizon == 0: 
+
+                for _ in range(NUM_EPOCHS):
+                    networks, optimisers = epoch_function(simple_buffer, networks, optimisers)
+
+                simple_buffer["observations"] = []
+                simple_buffer["actions"] = []
+                simple_buffer["rewards"] = []
+                simple_buffer["values"] = []
+                simple_buffer["log_probs"] = []
+                simple_buffer["entropy"] = []
+                simple_buffer["dones"] = []
+
+        episode += 1
         
         #exit()
         print("")
@@ -507,7 +570,6 @@ def main(_: Any) -> None:
         # print(
         #     f"b: {[optax.global_norm(networks[a]['actor_params']) for a in networks.keys()]} {[optax.global_norm(networks[a]['critic_params']) for a in networks.keys()]} "
         # )
-        networks, optimisers = epoch_function(simple_buffer, networks, optimisers)
         # print(
         #     f"a: {[optax.global_norm(networks[a]['actor_params']) for a in networks.keys()]} {[optax.global_norm(networks[a]['critic_params']) for a in networks.keys()]} "
         # )
