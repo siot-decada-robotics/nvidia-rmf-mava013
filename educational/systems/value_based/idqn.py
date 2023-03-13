@@ -13,37 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import os
-import logging
-import time
+import random
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple, Union
-import matplotlib as plt
-import chex
-import jax
-import jax.numpy as jnp
-from absl import app, flags
+from typing import Any, Dict, NamedTuple, Tuple
 
 import haiku as hk
+import jax
+import jax.numpy as jnp
+import numpy as np
 import optax
+from absl import app, flags
 
 from mava import specs as mava_specs
-from mava.utils.environments import debugging_utils
+from mava.utils.environments import debugging_utils, smac_utils
 from mava.utils.loggers import logger_utils
-
-from collections import deque
-from typing import Iterator, NamedTuple
-import random
-
-from dataclasses import field
-import numpy as np
-
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string("system", "test agent", "What agent is running.")
 flags.DEFINE_string(
-    "base_dir", os.path.expanduser("~")+"/mava", "Base dir to store experiment data e.g. checkpoints."
+    "base_dir",
+    os.path.expanduser("~") + "/mava",
+    "Base dir to store experiment data e.g. checkpoints.",
 )
 
 # TODO: clean up alot of these stuffs we are not using
@@ -61,9 +54,9 @@ class InitConfig:
     batch_size: int = 32
     update_frequency: int = 20
     training_frequency: int = 10
-    tau: float = 1.
+    tau: float = 1.0
     logging_frequency: int = 100
-    exp_name: str =  str(datetime.now())
+    exp_name: str = str(datetime.now())
 
 
 @dataclass
@@ -81,27 +74,27 @@ class SystemConfig:
 
 
 class TrainingState(NamedTuple):
-  params: Dict[str, hk.Params]
-  target_params: Dict[str, hk.Params]
-  opt_state: Dict[str, optax.OptState]
+    params: Dict[str, hk.Params]
+    target_params: Dict[str, hk.Params]
+    opt_state: Dict[str, optax.OptState]
+
 
 class TransitionBatch(NamedTuple):
     """A batch of data; all shapes are expected to be [B, ...]."""
-    actions: Any
-    observation: Any 
-    next_observation: Any
-    reward: Any 
-    done: Any
-    
-def from_singles(
-    action, obs, next_obs, reward, done
-) -> TransitionBatch:
 
+    actions: Any
+    observation: Any
+    next_observation: Any
+    reward: Any
+    done: Any
+
+
+def from_singles(action, obs, next_obs, reward, done) -> TransitionBatch:
 
     agents = action.keys()
     actions = {agent: jnp.array([action[agent]]) for agent in agents}
     rewards = {agent: jnp.array([reward[agent]]) for agent in agents}
-    dones =   {agent: jnp.array([done], dtype=bool) for agent in agents}
+    dones = {agent: jnp.array([done], dtype=bool) for agent in agents}
     obs_ = {agent: obs[agent].observation for agent in agents}
     next_obs_ = {agent: next_obs[agent].observation for agent in agents}
 
@@ -110,7 +103,7 @@ def from_singles(
         observation=obs_,
         next_observation=next_obs_,
         reward=rewards,
-        done=dones
+        done=dones,
     )
 
 
@@ -127,7 +120,7 @@ def init(config: InitConfig = InitConfig()) -> InitConfig:
 
 
 def make_environment(
-    config: EnvironmentConfig = EnvironmentConfig()
+    config: EnvironmentConfig = EnvironmentConfig(),
 ) -> Tuple[Any, EnvironmentConfig]:
     """Init and return environment or wrapper.
 
@@ -143,7 +136,11 @@ def make_environment(
             action_space=config.action_space,
             random_seed=config.seed,
         )
-    return env#, config
+    elif config.type == "smac":
+        env, _ = smac_utils.make_environment(map_name=config.env_name)
+    else:
+        raise ValueError(f"Config type {config.type} not yet supported.")
+    return env  # , config
 
 
 def make_system(
@@ -162,7 +159,7 @@ def make_system(
     agent_specs = environment_spec.get_agent_environment_specs()
 
     # add more options to this
-    def make_q_net(hidden_layer_sizes): 
+    def make_q_net(hidden_layer_sizes):
         def make_actor(x):
             return hk.nets.MLP(hidden_layer_sizes)(x)
 
@@ -170,36 +167,35 @@ def make_system(
 
     def make_networks():
         networks = {}
-        
+
         for net_key, spec in agent_specs.items():
             num_actions = spec.actions.num_values
             q_net = make_q_net([32, 32, num_actions])
             obs_dim = spec.observations.observation.shape
             obs_type = spec.observations.observation.dtype
-            dummy_obs = jnp.ones(shape=obs_dim,dtype=obs_type)
+            dummy_obs = jnp.ones(shape=obs_dim, dtype=obs_type)
 
-            q_network_params = q_net.init(q_key,dummy_obs)
+            q_network_params = q_net.init(q_key, dummy_obs)
             networks[net_key] = {}
             networks[net_key]["actor_params"] = q_network_params
             networks[net_key]["actor_net"] = q_net
-        
-        return networks 
-    
+
+        return networks
+
     return make_networks()
 
-class ReplayBuffer():
 
-    def __init__(self,
-        max_len = 100, seed = 0):
+class ReplayBuffer:
+    def __init__(self, max_len=100, seed=0):
 
-        self.buffer = deque(maxlen = max_len)
+        self.buffer = deque(maxlen=max_len)
         self.num_items = 0
         random.seed(seed)
 
-    def add(self,data):
+    def add(self, data):
         self.buffer.extend([data])
         self.num_items = len(self.buffer)
-    
+
     def sample(self, batch_size: int) -> TransitionBatch:
         transitions = random.sample(self.buffer, batch_size)
         return jax.tree_util.tree_map(lambda *leaves: jnp.stack(leaves), *transitions)
@@ -207,7 +203,12 @@ class ReplayBuffer():
     @property
     def size(self):
         return self.num_items
-    
+
+
+def linear_schedule(start_e: float, end_e: float, duration: int, t: int):
+    slope = (end_e - start_e) / duration
+    return max(slope * t + start_e, end_e)
+
 
 def main(_: Any) -> None:
     """Template for educational system implementations.
@@ -226,7 +227,7 @@ def main(_: Any) -> None:
     replay_buffer = ReplayBuffer(config.buffer_size)
 
     # set up logger
-    
+
     time_delta = 1
     logger = logger_utils.make_logger(
         directory=f"{FLAGS.base_dir}/{config.exp_name}",
@@ -241,19 +242,20 @@ def main(_: Any) -> None:
     optimisers = {}
     initial_params = {}
     initial_opt_state = {}
-    
+
     for net_key, _ in agent_specs.items():
-        optimisers[net_key] = optax.chain(optax.scale_by_adam(), optax.scale(-config.learning_rate))
+        optimisers[net_key] = optax.chain(
+            optax.scale_by_adam(), optax.scale(-config.learning_rate)
+        )
         initial_params[net_key] = networks[net_key]["actor_params"]
         initial_opt_state[net_key] = optimisers[net_key].init(initial_params[net_key])
-    
+
     state = TrainingState(initial_params, initial_params, initial_opt_state)
-    
-    global_num_steps = 0
+
     total_num_steps = config.total_num_steps
-    min_epsilon, max_epsilon =  config.min_epsilon, config.max_epsilon 
-    episodes = total_num_steps//50 # because each epsiode is 50 steps for this environment
-    test_episodes = 10
+    min_epsilon, max_epsilon = config.min_epsilon, config.max_epsilon
+    episode = 0
+    test_episodes = config.update_frequency
     num_agents = len(agent_specs)
 
     @jax.jit
@@ -265,42 +267,56 @@ def main(_: Any) -> None:
             q_network = networks[agent_key]["actor_net"]
             params = q_params[agent_key]
             agent_observation = agent_olt.observation
-            q_values = q_network.apply(params,agent_observation)
+            q_values = q_network.apply(params, agent_observation)
             action[agent_key] = q_values.argmax(axis=-1)
-            
+
         return action
 
     @jax.jit
     def update(state: TrainingState, batch: TransitionBatch):
-    
+
         loss = {}
         q_preds_dict = {}
         q_params_dict = {}
         opt_state_dict = {}
-        
+
         (actions, obs, next_obs, rewards, dones) = (
-            batch.actions, batch.observation, batch.next_observation, batch.reward, batch.done
-            )
+            batch.actions,
+            batch.observation,
+            batch.next_observation,
+            batch.reward,
+            batch.done,
+        )
 
         agents = list(dones.keys())
 
-        for net_key in agents: 
+        for net_key in agents:
             q_params = state.params[net_key]
             q_params_target = state.target_params[net_key]
-            q_next_target =  networks[net_key]["actor_net"].apply(q_params_target, next_obs[net_key])
-            q_next_target = jnp.max(q_next_target, axis = -1, keepdims=True)
-            next_q_value  = rewards[net_key] + (1 - dones[net_key])*0.99*q_next_target
+            q_next_target = networks[net_key]["actor_net"].apply(
+                q_params_target, next_obs[net_key]
+            )
+            q_next_target = jnp.max(q_next_target, axis=-1, keepdims=True)
+            next_q_value = (
+                rewards[net_key] + (1 - dones[net_key]) * 0.99 * q_next_target
+            )
 
             def mse_loss(params):
                 q_pred = networks[net_key]["actor_net"].apply(params, obs[net_key])
                 q_pred_value = jnp.take_along_axis(q_pred, actions[net_key], axis=-1)
-                return ((q_pred_value - next_q_value)**2).mean(), q_pred_value.squeeze()
-            
-            (loss[net_key], q_preds_dict[net_key]), grads = jax.value_and_grad(mse_loss,has_aux=True)(q_params)
-            
-            updates, opt_state_dict[net_key] = optimisers[net_key].update(grads, state.opt_state[net_key])
+                return (
+                    (q_pred_value - next_q_value) ** 2
+                ).mean(), q_pred_value.squeeze()
+
+            (loss[net_key], q_preds_dict[net_key]), grads = jax.value_and_grad(
+                mse_loss, has_aux=True
+            )(q_params)
+
+            updates, opt_state_dict[net_key] = optimisers[net_key].update(
+                grads, state.opt_state[net_key]
+            )
             q_params_dict[net_key] = optax.apply_updates(q_params, updates)
-            
+
         state = TrainingState(q_params_dict, state.target_params, opt_state_dict)
 
         return loss, q_preds_dict, state
@@ -309,79 +325,108 @@ def main(_: Any) -> None:
         score = np.zeros(num_agents)
         for _ in range(num_episodes):
             timestep = env.reset()
+            if type(timestep) == tuple:
+                timestep, _ = timestep
             while not timestep.last():
                 actions = sample_fn(timestep.observation, q_params)
                 timestep = env.step(actions)
+                if type(timestep) == tuple:
+                    timestep, _ = timestep
                 score += np.array(list(timestep.reward.values()))
 
         return sum(score / num_episodes)
-    
+
     rng_key = jax.random.PRNGKey(config.seed)
     score = np.zeros(num_agents)
-    for episode in range(episodes):
-        epsilon = max(min_epsilon, max_epsilon - (max_epsilon - min_epsilon) * (episode / (0.4 * episodes)))
+    global_num_steps = 0
+    while global_num_steps < total_num_steps:
+
+        epsilon = linear_schedule(
+            max_epsilon, min_epsilon, 0.1 * total_num_steps, global_num_steps
+        )
         rng_key, episode_key = jax.random.split(rng_key)
-        
+
         timestep = env.reset()
+        if type(timestep) == tuple:
+            timestep, _ = timestep
 
         while not timestep.last():
-            
+
             episode_key, action_key = jax.random.split(episode_key)
-            if jax.random.uniform (action_key) < epsilon:
-                actions = {agent: env.action_spaces[agent].sample() for agent in agent_specs.keys()}
+            if jax.random.uniform(action_key) < epsilon:
+                actions = {
+                    agent: env.action_spaces[agent].sample()
+                    for agent in agent_specs.keys()
+                }
             else:
                 actions = sample_fn(timestep.observation, state.params)
-            
-            new_timestep = env.step(actions)
 
-            transition_data = from_singles(actions, timestep.observation, new_timestep.observation, 
-                                new_timestep.reward,timestep.last())
-            
+            new_timestep = env.step(actions)
+            if type(new_timestep) == tuple:
+                new_timestep, _ = new_timestep
+
+            transition_data = from_singles(
+                actions,
+                timestep.observation,
+                new_timestep.observation,
+                new_timestep.reward,
+                timestep.last(),
+            )
+
             replay_buffer.add(transition_data)
-            
+
             timestep = new_timestep
-            
+
             score += np.array(list(new_timestep.reward.values()))
             global_num_steps += 1
-                
+
         # train if time to train
         if global_num_steps > config.warm_up_steps:
-            
+
             # train for a certain number of iterations
             for _ in range(config.training_frequency):
                 batch = replay_buffer.sample(config.batch_size)
                 loss, q_values, state = update(state, batch)
-            
+
             if global_num_steps % config.logging_frequency == 0:
-                loss_dict = {f"losses/td_loss-{agent}": jax.device_get(loss[agent]) for agent in agent_specs.keys()}
-                qvalues_dict = {f"losses/q_values-{agent}": jax.device_get(q_values[agent]).mean() for agent in agent_specs.keys()}
-                
+                loss_dict = {
+                    f"losses/td_loss-{agent}": jax.device_get(loss[agent])
+                    for agent in agent_specs.keys()
+                }
+                qvalues_dict = {
+                    f"losses/q_values-{agent}": jax.device_get(q_values[agent]).mean()
+                    for agent in agent_specs.keys()
+                }
+
                 write_dict = loss_dict | qvalues_dict
-                logger.write(
-                    write_dict
-                )
-                
-            
-            # update the network
-            if episode % config.update_frequency == 0 and episode!=0:
-                for net_key, _ in agent_specs.items():
-                    state = state._replace(target_params = optax.incremental_update(state.params, state.target_params, config.tau))
-            
-                test_score = test(test_env, test_episodes, state.params)
-                # print("#{:<10}/{} episodes , avg train score : {:.1f}, test score: {:.1f} n_buffer : {}, eps : {:.1f}"
-                #     .format(episode, episodes, sum(score /config.update_frequency), test_score, replay_buffer.size, epsilon))
-                
-                logger.write(
-                    {
-                        f"rewards/avg_train-reward": sum(score /config.update_frequency),
-                        f"rewards/avg_test-reward": test_score,
-                        f"epsilon": epsilon
-                    }
+                logger.write(write_dict)
+
+        # update the network
+        if episode % config.update_frequency == 0 and episode != 0:
+            for net_key, _ in agent_specs.items():
+                state = state._replace(
+                    target_params=optax.incremental_update(
+                        state.params, state.target_params, config.tau
+                    )
                 )
 
-                score = np.zeros(num_agents)
+            test_score = test(test_env, test_episodes, state.params)
+            # print("#{:<10}/{} episodes , avg train score : {:.1f}, test score: {:.1f} n_buffer : {}, eps : {:.1f}"
+            #     .format(episode, episodes, sum(score /config.update_frequency), test_score, replay_buffer.size, epsilon))
 
-    
+            logger.write(
+                {
+                    f"rewards/avg_train-reward": sum(score / config.update_frequency),
+                    f"rewards/avg_test-reward": test_score,
+                    f"epsilon": epsilon,
+                }
+            )
+
+            score = np.zeros(num_agents)
+
+        # update the episode count
+        episode += 1
+
 
 if __name__ == "__main__":
     app.run(main)
