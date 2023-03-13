@@ -55,7 +55,7 @@ class IPPOSystem(System):
             adder_priority=building.UniformAdderPriority,
             executor_environment_loop=building.ParallelExecutorEnvironmentLoop,
             networks=building.DefaultNetworks,
-            optimisers=building.DefaultOptimisers,
+            optimisers=building.ActorCriticOptimisers,
             observation_normalisation=normalisation.ObservationNormalisation,
         ).get()
 
@@ -82,9 +82,9 @@ class IPPOSystem(System):
 
         # Parameter Server
         parameter_server_process = DesignSpec(
-            parameter_server=updating.DefaultParameterServer,
-            executor_parameter_client=building.ExecutorParameterClient,
-            trainer_parameter_client=building.TrainerParameterClient,
+            parameter_server=updating.ActorCriticParameterServer,
+            executor_parameter_client=building.ActorCriticExecutorParameterClient,
+            trainer_parameter_client=building.ActorCriticTrainerParameterClient,
             termination_condition=updating.CountConditionTerminator,
             checkpointer=updating.Checkpointer,
             best_checkpointer=building.BestCheckpointer,
