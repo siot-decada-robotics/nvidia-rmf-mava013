@@ -292,17 +292,17 @@ def make_system(
                 n_step
             )
 
-            updates, new_policy_optimiser_state = optimisers[agent][
+            updates, new_policy_optimiser_state = optimisers['agent_0'][
                 "actor_optim"
-            ].update(policy_grads, optimisers[agent]["actor_state"])
+            ].update(policy_grads, optimisers['agent_0']["actor_state"])
             print(
                 f"policy_loss {p_loss} {optax.global_norm(policy_grads)} {optax.global_norm(updates)}"
             )
             new_policy_params = optax.apply_updates(actor_params, updates)
 
             # Update params
-            networks[agent]["actor_params"] = new_policy_params
-            optimisers[agent]["actor_state"] = new_policy_optimiser_state
+            networks['agent_0']["actor_params"] = new_policy_params
+            optimisers['agent_0']["actor_state"] = new_policy_optimiser_state
         return networks, optimisers
 
     return networks, config, prng, epoch_function, sample_fn, optimisers
