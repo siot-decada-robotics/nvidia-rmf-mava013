@@ -14,10 +14,10 @@
 # limitations under the License.
 
 import logging
-
+import numpy as np
 logger = logging.getLogger()
 
-
+import matplotlib.pyplot as plt
 class CheckTypesFilter(logging.Filter):
     def filter(self, record):
         return "check_types" not in record.getMessage()
@@ -189,7 +189,8 @@ def make_system(
 
             dist = tfd.Categorical(logits=logits)  # , dtype=self._dtype)
             # TODO - FIX THIS
-            action[agent_key] = dist.sample(seed=key)
+            key, sub_key = jax.random.split(key)
+            action[agent_key] = dist.sample(seed=sub_key)
             log_prob[agent_key] = dist.log_prob(action[agent_key])
             entropy[agent_key] = dist.entropy()
 
@@ -229,6 +230,7 @@ def make_system(
         dist = tfd.Categorical(logits=logits)
         log_probs = dist.log_prob(actions)
 
+        #n_step = n_step - n_step.mean()
         loss = -(n_step*log_probs).mean()
         return loss, loss
 
@@ -243,6 +245,12 @@ def make_system(
             
             #Calculate discounted rewards
             discounted_rewards = []
+            rewards = np.array(rewards)
+            #normalise
+            #rewards = (rewards - rewards.min())/(rewards.max() - rewards.min() + 0.00005)
+            #rewards = (rewards-rewards.mean())/rewards.std()
+            #print(rewards)
+            #rewards = rewards
             for t in range(len(rewards)):
                 Gt = 0 
                 pw = 0
@@ -268,9 +276,11 @@ def make_system(
 
             # Next steps compute log(a|s_t) for loss ratios
 
-            actor_net = networks[agent]["actor_net"]
+            #actor_net = networks[agent]["actor_net"]
+            actor_net = networks['agent_0']["actor_net"]
             actor_net_apply_fn = actor_net.apply
-            actor_params = networks[agent]["actor_params"]
+            #actor_params = networks[agent]["actor_params"]
+            actor_params = networks['agent_0']["actor_params"]
             observations = jnp.array(observations)
 
             # TODO Change names to all be actor and not policy!!
@@ -296,7 +306,6 @@ def make_system(
         return networks, optimisers
 
     return networks, config, prng, epoch_function, sample_fn, optimisers
-
 
 
 def main(_: Any) -> None:
@@ -325,8 +334,10 @@ def main(_: Any) -> None:
     simple_buffer = {}
 
     # Run system on env
-    episodes = 50
+    episodes =100
     test_buffer = {}
+    all_reward  = []
+    ave_rewards = []
     for episode in range(episodes):
 
         simple_buffer = {}
@@ -362,12 +373,33 @@ def main(_: Any) -> None:
 
             for reward in timestep.reward.values():
                 team_reward += reward
-            team_reward /= 2
+            team_reward /= 3
             ep_return += team_reward
             step += 1
         
         #exit()
         print(f"{episode}: {ep_return}")
+        all_reward.append(ep_return)
+        ave_rewards.append(np.mean(all_reward))
+
+        plt.figure()
+        plt.ylim([0, 105])
+        plt.cla()
+        plt.subplot(2, 1, 1)
+        plt.plot(all_reward)
+        plt.xlabel("Training iterations")
+        plt.ylabel("absolute reward")
+
+        plt.subplot(2, 1, 2)
+        plt.plot(ave_rewards)
+        plt.xlabel("Training iterations")
+        plt.ylabel("average reward")
+        plt.savefig('test')
+        #plt.figure()
+
+        plt.close
+        #import numpy as np
+        #np.save("~/Documents/data",all_reward)
         if episode == 0:
             test_buffer = simple_buffer.copy()
         # Can update an amount of episodes!
@@ -378,8 +410,9 @@ def main(_: Any) -> None:
         # print(
         #     f"a: {[optax.global_norm(networks[a]['actor_params']) for a in networks.keys()]} {[optax.global_norm(networks[a]['critic_params']) for a in networks.keys()]} "
         # )
-
+    plt.close
     # Next steps: Is it training?? / Nice way to log results.
+
 
 
 if __name__ == "__main__":
