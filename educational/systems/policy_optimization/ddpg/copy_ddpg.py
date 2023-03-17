@@ -130,11 +130,11 @@ class ReplayBuffer:
     """
 
     def __init__(self, obs_dim: int, act_dim: int, size: int, num_agents: int) -> None:
-        self.obs_buf = np.zeros((size, num_agents, obs_dim), dtype=np.float32)
-        self.next_obs_buf = np.zeros((size, num_agents, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros((size, num_agents, act_dim), dtype=np.float32)
-        self.rew_buf = np.zeros((size, num_agents), dtype=np.float32)
-        self.done_buf = np.zeros((size, num_agents), dtype=np.float32)
+        self.obs_buf = jnp.zeros((size, num_agents, obs_dim), dtype=jnp.float32)
+        self.next_obs_buf = jnp.zeros((size, num_agents, obs_dim), dtype=jnp.float32)
+        self.act_buf = jnp.zeros((size, num_agents, act_dim), dtype=jnp.float32)
+        self.rew_buf = jnp.zeros((size, num_agents), dtype=jnp.float32)
+        self.done_buf = jnp.zeros((size, num_agents), dtype=jnp.float32)
         self.ptr, self.size, self.max_size = 0, 0, size
         self.num_agents = num_agents
 
@@ -146,35 +146,26 @@ class ReplayBuffer:
         next_obs: chex.Array,
         done: chex.Array,
     ) -> None:
-        """self.obs_buf = self.obs_buf.at[self.ptr].set(obs)
+        self.obs_buf = self.obs_buf.at[self.ptr].set(obs)
         self.next_obs_buf = self.next_obs_buf.at[self.ptr].set(next_obs)
         self.act_buf = self.act_buf.at[self.ptr].set(act)
         self.rew_buf = self.rew_buf.at[self.ptr].set(rew)
         self.done_buf = self.done_buf.at[self.ptr].set(done)
-        self.ptr = (self.ptr + 1) % self.max_size
-        self.size = min(self.size + 1, self.max_size)"""
-        self.obs_buf[self.ptr] = obs
-        self.next_obs_buf[self.ptr] = next_obs
-        self.act_buf[self.ptr] = act
-        self.rew_buf[self.ptr] = rew
-        self.done_buf[self.ptr] = done
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
     def sample_batch(
         self, key: chex.PRNGKey, batch_size: int = 32
     ) -> Dict[str, chex.Array]:
-        idxs = np.random.randint(0, self.size, size=(batch_size,))
-
-        """idxs = jax.random.randint(
+        idxs = jax.random.randint(
             key, shape=(batch_size,), minval=0, maxval=self.size - 1
-        )"""
+        )
         batch = dict(
-            obs=jnp.array(self.obs_buf[idxs]),
-            next_obs=jnp.array(self.next_obs_buf[idxs]),
-            act=jnp.array(self.act_buf[idxs]),
-            rew=jnp.array(self.rew_buf[idxs]),
-            done=jnp.array(self.done_buf[idxs]),
+            obs=self.obs_buf[idxs],
+            next_obs=self.next_obs_buf[idxs],
+            act=self.act_buf[idxs],
+            rew=self.rew_buf[idxs],
+            done=self.done_buf[idxs],
         )
         return batch
 
@@ -233,7 +224,7 @@ def make_environment(
     Returns:
         (env, config).
     """
-    return MPE(), config
+    return gym.make("Pendulum-v1"), config
 
 
 # TODO: make DDPG network class
@@ -300,7 +291,6 @@ def make_networks(
 
 
 @partial(jax.jit, static_argnames=["critic"])
-@chex.assert_max_traces(n=1)
 def critic_loss_fn(
     critic_params: hk.Params,
     td_target: chex.Array,
@@ -314,7 +304,6 @@ def critic_loss_fn(
 
 
 @partial(jax.jit, static_argnames=["actor", "critic"])
-@chex.assert_max_traces(n=1)
 def actor_loss_fn(
     actor_params: hk.Params,
     actor: hk.Transformed,
@@ -371,7 +360,7 @@ def main(_: Any) -> None:
         net_key, action_shape, obs_shape, action_scale, config
     )
 
-    rb = ReplayBuffer(prod(obs_shape), prod(action_shape), int(1e6), env.num_agents)
+    rb = ReplayBuffer(prod(obs_shape), prod(action_shape), int(1e6), 1)
 
     episode_reward = 0
     episode_length = 0
@@ -379,18 +368,16 @@ def main(_: Any) -> None:
     trainer_step = 0
 
     @jax.jit
-    @chex.assert_max_traces(n=1)
     def select_action(key, global_step, actor_params, obs):
         key, noise_key, ac_key = jax.random.split(key, 3)
 
-        # todo: append agent IDs?
         action = jax.lax.cond(
             global_step > config.learning_starts,
             lambda: network.actor.apply(actor_params, obs),
             # env.action_space.sample(),
             lambda: jax.random.uniform(
                 ac_key,
-                (env.num_agents, *env.action_space.shape),
+                (*env.action_space.shape,),
                 minval=action_min,
                 maxval=action_max,
             ),
@@ -402,7 +389,6 @@ def main(_: Any) -> None:
         return action, key
 
     @jax.jit
-    @chex.assert_max_traces(n=1)
     def critic_update(network_params, batch):
         next_actions = network.actor.apply(
             network_params.target_actor_params, batch["next_obs"]
@@ -451,7 +437,6 @@ def main(_: Any) -> None:
         return network_params, actor_info
 
     @jax.jit
-    @chex.assert_max_traces(n=1)
     def target_update(network_params, tau):
         network_params.target_actor_params = optax.incremental_update(
             network_params.actor_params,
@@ -465,8 +450,11 @@ def main(_: Any) -> None:
         )
         return network_params
 
-    obs = env.reset()
+    obs, _ = env.reset()
     for global_step in range(config.total_steps):
+        # TODO: jit action selection
+        # action selection, step env
+
         action, key = select_action(
             key,
             global_step,
@@ -474,7 +462,9 @@ def main(_: Any) -> None:
             obs,
         )
 
-        nobs, reward, done, info = env.step(action.tolist())
+        # nobs, reward, done, info = env.step(action.tolist())
+        nobs, reward, trunc, term, info = env.step(action.tolist())
+        done = trunc or term
 
         episode_reward += reward
         episode_length += 1
@@ -483,7 +473,7 @@ def main(_: Any) -> None:
         rb.store(obs.copy(), action.copy(), reward, nobs.copy(), done)
         obs = nobs.copy()
 
-        if done.all():
+        if done:
             logger.write(  # TODO: fix logging (in mava!)
                 {
                     "episode": episode_num,
@@ -495,7 +485,7 @@ def main(_: Any) -> None:
             episode_num += 1
             episode_reward = 0
             episode_length = 0
-            obs = env.reset()
+            obs, _ = env.reset()
 
         # train:
         if global_step > config.learning_starts:
