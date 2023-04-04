@@ -419,9 +419,9 @@ def make_system(
 
             # Next steps compute log(a|s_t) for loss ratios
 
-            actor_net = networks[agent]["actor_net"]
+            actor_net = networks["agent_0"]["actor_net"]
             actor_net_apply_fn = actor_net.apply
-            actor_params = networks[agent]["actor_params"]
+            actor_params = networks["agent_0"]["actor_params"]
             observations = jnp.array(observations)
 
             # TODO Change names to all be actor and not policy!!
@@ -434,37 +434,43 @@ def make_system(
                 actor_net_apply_fn,
             )
 
-            updates, new_policy_optimiser_state = optimisers[agent][
+            updates, new_policy_optimiser_state = optimisers["agent_0"][
                 "actor_optim"
-            ].update(policy_grads, optimisers[agent]["actor_state"])
+            ].update(policy_grads, optimisers["agent_0"]["actor_state"])
             print(
                 f"policy_loss: {jnp.round(p_loss, 2)} grads: {jnp.round(optax.global_norm(policy_grads), 2)} norm: {jnp.round(optax.global_norm(updates), 2)}"
             )
             new_policy_params = optax.apply_updates(actor_params, updates)
 
             # Update params
-            networks[agent]["actor_params"] = new_policy_params
-            optimisers[agent]["actor_state"] = new_policy_optimiser_state
+            networks["agent_0"]["actor_params"] = new_policy_params
+            optimisers["agent_0"]["actor_state"] = new_policy_optimiser_state
 
-            critic_net = networks[agent]["critic_net"]
+            critic_net = networks["agent_0"]["critic_net"]
             critic_net_apply_fn = critic_net.apply
-            critic_params = networks[agent]["critic_params"]
+            critic_params = networks["agent_0"]["critic_params"]
 
             critic_grads, c_loss = jax.grad(critic_loss, has_aux=True)(
                 critic_params, observations[:-1], returns, critic_net_apply_fn
             )
 
-            updates, new_critic_optimiser_state = optimisers[agent][
+            updates, new_critic_optimiser_state = optimisers["agent_0"][
                 "critic_optim"
-            ].update(critic_grads, optimisers[agent]["critic_state"])
+            ].update(critic_grads, optimisers["agent_0"]["critic_state"])
             print(
                 f"critic_loss {c_loss} grads: {jnp.round(optax.global_norm(critic_grads), 2)} norm: {jnp.round(optax.global_norm(updates), 2)}"
             )
             new_critic_params = optax.apply_updates(critic_params, updates)
 
             # Update params
-            networks[agent]["critic_params"] = new_critic_params
-            optimisers[agent]["critic_state"] = new_critic_optimiser_state
+            networks["agent_0"]["critic_params"] = new_critic_params
+            optimisers["agent_0"]["critic_state"] = new_critic_optimiser_state
+
+            if agent != "agent_0":
+                networks[agent]["critic_params"] = networks["agent_0"]
+                networks[agent]["actor_params"] = networks["agent_0"]
+                optimisers[agent]["critic_state"] = optimisers["agent_0"]["critic_state"]
+                optimisers[agent]["actor_state"] = optimisers["agent_0"]["actor_state"]
 
         return networks, optimisers
 
